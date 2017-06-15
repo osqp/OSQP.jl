@@ -8,9 +8,13 @@ osqp = library_dependency("osqp", aliases=["libosqpdir"])
 # Current version
 version = "0.1.1"
 
-
-provides(Sources, URI("https://github.com/oxfordcontrol/osqp/archive/v$version.tar.gz"),
+# Using latest master to debug
+version = "master"
+provides(Sources, URI("https://github.com/oxfordcontrol/osqp/archive/master.tar.gz"),
     [osqp], unpacked_dir="osqp-$version")
+
+# provides(Sources, URI("https://github.com/oxfordcontrol/osqp/archive/v$version.tar.gz"),
+#     [osqp], unpacked_dir="osqp-$version")
 
 # Define directories locations deps/usr and deps/src
 prefix = joinpath(BinDeps.depsdir(osqp),"usr")
@@ -26,12 +30,12 @@ provides(SimpleBuild,
         GetSources(osqp)
         CreateDirectory(joinpath(prefix, "lib"))
         @build_steps begin
-            ChangeDirectory(srcdir)
+            # ChangeDirectory(srcdir)
             CreateDirectory(blddir)
             @build_steps begin
                 ChangeDirectory(blddir)
                 FileRule(joinpath(prefix, "lib", libname), @build_steps begin
-                    `cmake -G "Unix Makefiles" ..`
+                    `cmake -G "Unix Makefiles" -DCMAKE_BUILD_TYPE=Debug ..`
                     `make osqpdir`
                     `mv out/$libname $prefix/lib`
                 end)

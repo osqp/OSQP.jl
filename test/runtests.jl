@@ -1,5 +1,15 @@
 using OSQP
 using Base.Test
 
-# write your own tests here
-@test 1 == 2
+
+tests = ["simple.jl"]
+
+println("Running tests:")
+
+for curtest in tests
+    println(" Test: $(curtest)")
+    include(curtest)
+end
+
+
+# TODO: Add QP tests MathProgBase

@@ -1,3 +1,5 @@
+__precompile__()
+
 module OSQP
 
 if isfile(joinpath(dirname(@__FILE__),"..","deps","deps.jl"))
@@ -12,17 +14,8 @@ import Base.Libdl: RTLD_LAZY, RTLD_DEEPBIND, RTLD_GLOBAL, dlopen
 
 
 
-# ver
-# Returns the version of OSQP in use
-function ver()
-    ver_ptr = ccall((:ECOS_ver, ECOS.ecos), Ptr{UInt8}, ())
-    return unsafe_string(ver_ptr)
-end
-
-
-
 function __init__()
-    vnum = VersionNumber(osqp_version())
+    vnum = VersionNumber(version())
     # default binaries need access to Julia's lapack symbols
     if is_unix()
         dlopen(Base.liblapack_name, RTLD_LAZY|RTLD_DEEPBIND|RTLD_GLOBAL)
@@ -43,6 +36,7 @@ end
 
 
 include("types.jl")
-include("osqp_wrapper.jl")
+include("utils.jl")
+include("interface.jl")
 
 end # module
