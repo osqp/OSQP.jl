@@ -39,13 +39,16 @@ struct Solution
 	y::Ptr{Cdouble}
 end
 
-struct Info
+# Internal C type for info
+# N.B. This is not the one returned by the user!
+struct CInfo
 	iter::Clong
 	# We need to allocate 32 bytes for a character string, so we allocate 256 bits
 	# of integer instead
 	# TODO: Find a better way to do this
-	status1::Int128
-	status2::Int128
+	# status1::Int128
+	# status2::Int128
+	status::NTuple{32, Cchar}
 	status_val::Clong
 	status_polish::Clong
 	obj_val::Cdouble
@@ -137,7 +140,7 @@ struct Workspace
 	settings::Ptr{OSQP.Settings}
 	scaling::Ptr{Void}
 	solution::Ptr{OSQP.Solution}
-	info::Ptr{OSQP.Info}
+	info::Ptr{OSQP.CInfo}
 
 	timer::Ptr{Void}
 	first_run::Clong
@@ -146,8 +149,36 @@ struct Workspace
 end
 
 
+struct Info
+	iter::Int64
+	status::Symbol
+	status_val::Int
+	status_polish::Int
+	obj_val::Float64
+	pri_res::Float64
+	dua_res::Float64
+	setup_time::Float64
+	solve_time::Float64
+	polish_time::Float64
+	run_time::Float64
+
+	function Info(cinfo::CInfo) 
+		status = OSQP.status_map[cinfo.status_val]
+		return new(cinfo.iter, status,
+			   cinfo.status_val,
+			   cinfo.status_polish,
+			   cinfo.obj_val,
+			   cinfo.pri_res,
+			   cinfo.dua_res,
+			   cinfo.setup_time,
+			   cinfo.solve_time,
+			   cinfo.polish_time,
+			   cinfo.run_time)
+	end
+end
+
 struct Results
 	x::Vector{Float64}
 	y::Vector{Float64}
-	# info::OSQP.Info
+	info::OSQP.Info
 end

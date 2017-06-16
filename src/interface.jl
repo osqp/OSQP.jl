@@ -141,15 +141,6 @@ end
 
 
 function solve(model::OSQP.Model)
-
-	# Extract solution (from ECOS) TODO: Rewrite
-	# ecos_prob = unsafe_wrap(Array, ecos_prob_ptr, 1)[1]
-	# m.primal_sol = unsafe_wrap(Array,ecos_prob.x, m.nvar)[:]
-	# m.dual_sol_eq   = unsafe_wrap(Array,ecos_prob.y, m.neq)[:]
-	# m.dual_sol_ineq = unsafe_wrap(Array,ecos_prob.z, m.nineq)[:]
-	# m.obj_val = dot(m.c, m.primal_sol) * (m.orig_sense == :Max ? -1 : +1)
-	# cleanup(ecos_prob_ptr, 0)
-	
 	
 	# Solve problem
 	exitflag = ccall((:osqp_solve, OSQP.osqp), Clong, 
@@ -160,16 +151,23 @@ function solve(model::OSQP.Model)
 		error("Error in OSQP solution!")
 	end
 
-	# return model
 
-	# Recover solution structure
+	# Recover solution 
 	workspace = unsafe_load(model.workspace)
 	solution = unsafe_load(workspace.solution)
 	data = unsafe_load(workspace.data)
 	x = unsafe_wrap(Array, solution.x, data.n)
 	y = unsafe_wrap(Array, solution.y, data.m)
 
-	return OSQP.Results(x, y)
+	# Recover Cinfo structure
+        cinfo = unsafe_load(workspace.info)	
+
+	# Construct C structure
+	info = OSQP.Info(cinfo)
+
+	# Return results
+	return Results(x, y, info)
+
 
 end
 
@@ -185,11 +183,6 @@ function clean(model::OSQP.Model)
 		error("Error in OSQP cleanup")
 	end
 end
-
-# TODO: Continue from here
-# Write first lower level and then upper level
-
-# TODO: Remember that Julia is 1 based and C is zero based when providing index vectors from sparse matrices
 
 
 # TODO: Use get/set default settings from C to set default settings in setup
