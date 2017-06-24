@@ -106,15 +106,38 @@ struct Settings
 	warm_start::Clong
 
 
-	function Settings()
-		s = Ref{OSQP.Settings}() 
-	    ccall((:set_default_settings, OSQP.osqp), Void, 
-		  (Ref{OSQP.Settings},), s)
-
-	    # Ref Settings can be accessed using stgs = s[]
-	    return s[]
-	end
 end
+
+function Settings()
+	s = Ref{OSQP.Settings}()
+	ccall((:set_default_settings, OSQP.osqp), Void,
+	      (Ref{OSQP.Settings},), s)
+	return s[]
+end
+
+# function Settings(settings_dict::Dict{Symbol, Any})
+function Settings(settings::Array{Any, 1})
+	default_settings = OSQP.Settings()
+
+	settings_dict = Dict{Symbol, Any}()
+	if !isempty(settings)
+		for (key, value) in settings
+			settings_dict[key] = value
+		end
+	end
+
+	# Get dictionary with elements of detauls and user settings
+	settings_list = [setting in keys(settings_dict) ?
+			 convert(fieldtype(typeof(default_settings), setting), settings_dict[setting]) :
+			 getfield(default_settings, setting)
+			 for setting in fieldnames(default_settings)]
+
+	# Create new settings with new dictionary
+	s = OSQP.Settings(settings_list...)
+	return s
+	
+end
+
 
 
 struct Workspace

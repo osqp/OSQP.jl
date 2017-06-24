@@ -18,14 +18,15 @@ function general_tests()
 
 
     # DEBUG
-    println(full(A))
-    println(l)
-    println(u)
+    # println(full(A))
+    # println(l)
+    # println(u)
 
     # Create OSQP Data
     # data = OSQP.OSQPData(n, m, P, q, A, l, u)
     m = OSQP.Model()
-    OSQP.setup!(m, P, q, A, l, u)
+    # OSQP.setup!(m, P, q, A, l, u; verbose=false)
+    OSQP.setup!(m, P, q, A, l, u, verbose=true, alpha=1.8)
     results = OSQP.solve(m)
 
 

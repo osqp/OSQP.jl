@@ -129,12 +129,12 @@ function setup!(model::OSQP.Model,
 	data = OSQP.Data(n, m, P, q, A, l, u)	
 
 	# Create OSQP settings
-	settings = OSQP.Settings()
+	stgs = OSQP.Settings(settings)
 
 	# Perform setup
 	model.workspace = ccall((:osqp_setup, OSQP.osqp), 
 				Ptr{OSQP.Workspace}, (Ptr{OSQP.Data}, 
-	                        Ptr{OSQP.Settings}), &data, &settings)
+	                        Ptr{OSQP.Settings}), &data, &stgs)
 
 
 end
