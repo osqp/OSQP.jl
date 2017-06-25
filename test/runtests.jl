@@ -2,7 +2,8 @@ using OSQP
 using Base.Test
 
 
-tests = ["simple.jl"]
+# tests = ["simple.jl"]
+tests = ["basic_tests.jl"]
 
 println("Running tests:")
 

@@ -36,7 +36,7 @@ end
 
 
 include("types.jl")
-include("utils.jl")
 include("interface.jl")
+include("utils.jl")
 
 end # module

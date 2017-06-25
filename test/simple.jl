@@ -24,10 +24,24 @@ function general_tests()
 
     # Create OSQP Data
     # data = OSQP.OSQPData(n, m, P, q, A, l, u)
-    m = OSQP.Model()
+    model = OSQP.Model()
     # OSQP.setup!(m, P, q, A, l, u; verbose=false)
-    OSQP.setup!(m, P, q, A, l, u, verbose=true, alpha=1.8)
-    results = OSQP.solve(m)
+    OSQP.setup!(model, P, q, A, l, u, verbose=true, alpha=1.8)
+    results = OSQP.solve!(model)
+
+
+    # Update linear cost
+    q_new = randn(n) * 2
+    OSQP.update!(model, q=q_new)
+    results_new = OSQP.solve!(model)
+
+
+    # Update Px elements
+    nnzP = length(P.nzval)
+    Px = 10 * randn(nnzP)
+    OSQP.update!(model, Px=Px)
+    results = OSQP.solve!(model) 
+
 
 
 end
