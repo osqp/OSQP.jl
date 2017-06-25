@@ -137,6 +137,9 @@ function setup!(model::OSQP.Model,
 				Ptr{OSQP.Workspace}, (Ptr{OSQP.Data}, 
 	                        Ptr{OSQP.Settings}), &data, &stgs)
 
+	if model.workspace == C_NULL
+		error("Error in OSQP setup")
+	end
 
 end
 
@@ -152,14 +155,21 @@ function solve!(model::OSQP.Model)
 		error("Error in OSQP solution!")
 	end
 
-
 	# Recover solution 
 	workspace = unsafe_load(model.workspace)
 	solution = unsafe_load(workspace.solution)
 	data = unsafe_load(workspace.data)
-	x = unsafe_wrap(Array, solution.x, data.n)
-	y = unsafe_wrap(Array, solution.y, data.m)
 
+	# Do not use this anymore. We instead copy the solution
+	# x = unsafe_wrap(Array, solution.x, data.n)
+	# y = unsafe_wrap(Array, solution.y, data.m)
+
+	# Allocate solution vectors and copy solution
+	x = Array{Float64}(data.n)
+	y = Array{Float64}(data.m)
+	unsafe_copy!(pointer(x), solution.x, data.n)
+	unsafe_copy!(pointer(y), solution.y, data.m)
+	
 	# Recover Cinfo structure
         cinfo = unsafe_load(workspace.info)	
 

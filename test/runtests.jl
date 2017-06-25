@@ -2,8 +2,10 @@ using OSQP
 using Base.Test
 
 
-# tests = ["simple.jl"]
-tests = ["basic_tests.jl"]
+tests = ["basic.jl", 
+	 "dual_infeasibility.jl",
+	 "feasibility.jl",
+	 "polishing.jl"]
 
 println("Running tests:")
 
