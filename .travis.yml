@@ -5,7 +5,7 @@ os:
   - osx
 julia:
   - 0.6 
-  - nightly
+  # - nightly
 notifications:
   email: false
 
@@ -18,20 +18,6 @@ addons:
       - cmake-data
 script:
  - if [[ -a .git/shallow ]]; then git fetch --unshallow; fi
- # - export DEPS_DIR=${HOME}/deps
- # - mkdir ${DEPS_DIR}
- # - cd ${DEPS_DIR}
- # - |
- #   if [[ "${TRAVIS_OS_NAME}" == "linux" ]]; then
- #     export CMAKE_URL="http://www.cmake.org/files/v3.7/cmake-3.7.1-Linux-x86_64.tar.gz";
- #     mkdir cmake;
- #     wget --quiet -O - ${CMAKE_URL} | tar --strip-components=1 -xz -C cmake;
- #     export PATH=${DEPS_DIR}/cmake/bin:${PATH};
- #   else
- #     brew upgrade cmake || brew install cmake;
- #   fi
- # - cd ${TRAVIS_BUILD_DIR}
- # - cmake --version
  - julia -e 'Pkg.clone(pwd()); Pkg.build("OSQP"); Pkg.test("OSQP"; coverage=true)'
 after_success:
   # # push coverage results to Coveralls
