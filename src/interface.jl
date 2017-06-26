@@ -342,6 +342,7 @@ function update_settings!(model::OSQP.Model; kwargs...)
 	polish = get(data, :polish, nothing)
 	pol_refine_iter = get(data, :pol_refine_iter, nothing)
 	verbose = get(data, :verbose, nothing)
+	scaled_termination = get(data, :early_terminate, nothing)
 	early_terminate = get(data, :early_terminate, nothing)
 	early_terminate_interval = get(data, :early_terminate_interval, nothing)
 	warm_start = get(data, :warm_start, nothing)
@@ -396,6 +397,11 @@ function update_settings!(model::OSQP.Model; kwargs...)
 	if verbose != nothing
 		exitflag = ccall((:osqp_update_verbose, OSQP.osqp), Clong, (Ptr{OSQP.Workspace}, Clong), model.workspace, verbose) 
 		if exitflag != 0 error("Error updating verbose") end
+	end
+
+	if scaled_termination != nothing
+		exitflag = ccall((:osqp_update_scaled_termination, OSQP.osqp), Clong, (Ptr{OSQP.Workspace}, Clong), model.workspace, scaled_termination) 
+		if exitflag != 0 error("Error updating scaled_termination") end
 	end
 
 	if early_terminate != nothing

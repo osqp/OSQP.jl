@@ -101,6 +101,7 @@ struct Settings
 	pol_refine_iter::Clong
 	verbose::Clong
 	auto_rho::Clong
+	scaled_termination::Clong
 	early_terminate::Clong
 	early_terminate_interval::Clong
 	warm_start::Clong
