@@ -35,7 +35,7 @@ provides(SimpleBuild,
             @build_steps begin
                 ChangeDirectory(blddir)
                 FileRule(joinpath(prefix, "lib", libname), @build_steps begin
-                    `cmake -G "Unix Makefiles" -DCMAKE_BUILD_TYPE=Debug ..`
+                    `cmake -G "Unix Makefiles" -DUNITTESTS=OFF ..`
                     `make osqpdir`
                     `mv out/$libname $prefix/lib`
                 end)
