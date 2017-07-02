@@ -16,6 +16,9 @@ function setup()
                        :eps_rel => 1e-09,
                        :scaling => true,
                        :auto_rho => false,
+					   :early_terminate_interval => 1,
+					   :rho => 0.1,
+					   :auto_rho => false,
                        :alpha => 1.6,
                        :max_iter => 3000,
                        :polish => false,
@@ -30,9 +33,9 @@ tol = 1e-5
 
 	@testset "basic_QP" begin
 		problem, options = setup()
-		
+
 		model = OSQP.Model()
-		OSQP.setup!(model, problem[:P], problem[:q], 
+		OSQP.setup!(model, problem[:P], problem[:q],
 				   problem[:A], problem[:l], problem[:u]; options...)
 		results = OSQP.solve!(model)
 
@@ -45,11 +48,11 @@ tol = 1e-5
 
 	@testset "update_q" begin
 		problem, options = setup()
-		
+
 		model = OSQP.Model()
-		OSQP.setup!(model, problem[:P], problem[:q], 
+		OSQP.setup!(model, problem[:P], problem[:q],
 				   problem[:A], problem[:l], problem[:u]; options...)
-	
+
 		OSQP.update!(model, q=[10.; 20.])
 		results = OSQP.solve!(model)
 
@@ -61,11 +64,11 @@ tol = 1e-5
 
 	@testset "update_l" begin
 		problem, options = setup()
-		
+
 		model = OSQP.Model()
-		OSQP.setup!(model, problem[:P], problem[:q], 
+		OSQP.setup!(model, problem[:P], problem[:q],
 				   problem[:A], problem[:l], problem[:u]; options...)
-	
+
 		OSQP.update!(model, l=-100 * ones(problem[:m]))
 		results = OSQP.solve!(model)
 
@@ -77,11 +80,11 @@ tol = 1e-5
 
 	@testset "update_u" begin
 		problem, options = setup()
-		
+
 		model = OSQP.Model()
-		OSQP.setup!(model, problem[:P], problem[:q], 
+		OSQP.setup!(model, problem[:P], problem[:q],
 				   problem[:A], problem[:l], problem[:u]; options...)
-	
+
 		OSQP.update!(model, u=1000 * ones(problem[:m]))
 		results = OSQP.solve!(model)
 
@@ -94,11 +97,11 @@ tol = 1e-5
 
 	@testset "update_max_iter" begin
 		problem, options = setup()
-		
+
 		model = OSQP.Model()
-		OSQP.setup!(model, problem[:P], problem[:q], 
+		OSQP.setup!(model, problem[:P], problem[:q],
 				   problem[:A], problem[:l], problem[:u]; options...)
-	
+
 		OSQP.update_settings!(model, max_iter=80)
 		results = OSQP.solve!(model)
 
@@ -107,14 +110,37 @@ tol = 1e-5
 
 	@testset "update_early_termination" begin
 		problem, options = setup()
-		
+
 		model = OSQP.Model()
-		OSQP.setup!(model, problem[:P], problem[:q], 
+		OSQP.setup!(model, problem[:P], problem[:q],
 				   problem[:A], problem[:l], problem[:u]; options...)
-	
+
 		OSQP.update_settings!(model, early_terminate=false)
 		results = OSQP.solve!(model)
 
-		@test results.info.iter == options[:max_iter] 
+		@test results.info.iter == options[:max_iter]
+	end
+
+
+	@testset "update_rho" begin
+		problem, options = setup()
+
+		# Setup default problem
+		model = OSQP.Model()
+		OSQP.setup!(model, problem[:P], problem[:q],
+				   problem[:A], problem[:l], problem[:u]; options...)
+
+		results_default = OSQP.solve!(model)
+
+		# Setup different rho and update to same rho
+		new_opts = copy(options)
+		new_opts[:rho] = 0.7
+		model = OSQP.Model()
+		OSQP.setup!(model, problem[:P], problem[:q],
+				   problem[:A], problem[:l], problem[:u]; new_opts...)
+		OSQP.update_settings!(model, rho=options[:rho])
+		results_new_rho = OSQP.solve!(model)
+
+		@test results_default.info.iter == results_new_rho.info.iter
 	end
 end

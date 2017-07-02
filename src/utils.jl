@@ -27,7 +27,7 @@ updatable_data = [:q, :l, :u, :Px, :Px_idx, :Ax, :Ax_idx]
 
 # updatable_settings
 updatable_settings = [:max_iter, :eps_aps, :eps_rel, :eps_prim_inf, :eps_dual_inf,
-		      :alpha, :delta, :polish, :pol_refine_iter, :verbose, :early_terminate,
+		      :rho, :alpha, :delta, :polish, :pol_refine_iter, :verbose, :early_terminate,
 		      :early_terminate_interval, :warm_start]
 
 
@@ -38,7 +38,7 @@ updatable_settings = [:max_iter, :eps_aps, :eps_rel, :eps_prim_inf, :eps_dual_in
 Obtain problem dimensions from OSQP model
 """
 function dimensions(model::OSQP.Model)
-	
+
 	workspace = unsafe_load(model.workspace)
 	if workspace == C_NULL
 		error("Workspace has not been setup yet")
