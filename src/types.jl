@@ -26,9 +26,9 @@ struct Ccsc
 		# Get vectors of data, rows indices and column pointers
 		x = convert(Array{Float64, 1}, M.nzval)
 		# C is 0 indexed
-		i = convert(Array{Clong, 1}, M.rowval - 1)  
+		i = convert(Array{Clong, 1}, M.rowval - 1)
 		# C is 0 indexed
-		p = convert(Array{Clong, 1}, M.colptr - 1)  
+		p = convert(Array{Clong, 1}, M.colptr - 1)
 
 		new(length(M.nzval), m, n, pointer(p), pointer(i), pointer(x), -1)
 	end
@@ -72,14 +72,14 @@ struct Data
 	function Data(n::Int,
 			  m::Int,
 			  P::SparseMatrixCSC,
-			  q::Vector{Float64}, 
-			  A::SparseMatrixCSC, 
+			  q::Vector{Float64},
+			  A::SparseMatrixCSC,
 			  l::Vector{Float64},
 			  u::Vector{Float64})
-	
+
 		Pcsc = OSQP.Ccsc(P)
 		Acsc = OSQP.Ccsc(A)
-		new(n, m, pointer([Pcsc]), pointer([Acsc]), 
+		new(n, m, pointer([Pcsc]), pointer([Acsc]),
 		    pointer(q), pointer(l), pointer(u))
 	end
 end
@@ -96,6 +96,7 @@ struct Settings
 	eps_prim_inf::Cdouble
 	eps_dual_inf::Cdouble
 	alpha::Cdouble
+	linsys_solver::Clong
 	delta::Cdouble
 	polish::Clong
 	pol_refine_iter::Clong
@@ -136,14 +137,14 @@ function Settings(settings::Array{Any, 1})
 	# Create new settings with new dictionary
 	s = OSQP.Settings(settings_list...)
 	return s
-	
+
 end
 
 
 
 struct Workspace
 	data::Ptr{OSQP.Data}
-	priv::Ptr{Void}
+	linsys_solver::Ptr{Void}
 	pol::Ptr{Void}
 
 	x::Ptr{Cdouble}
@@ -186,7 +187,7 @@ struct Info
 	polish_time::Float64
 	run_time::Float64
 
-	function Info(cinfo::CInfo) 
+	function Info(cinfo::CInfo)
 		status = OSQP.status_map[cinfo.status_val]
 		return new(cinfo.iter, status,
 			   cinfo.status_val,
