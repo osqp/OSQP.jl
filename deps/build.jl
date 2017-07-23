@@ -9,7 +9,7 @@ osqp = library_dependency("osqp", aliases=["libosqp"])
 version = "0.1.1"
 
 # Using latest custom to debug
-version = "linear_solver_objects"
+version = "parameters_selection"
 
 
 provides(Sources, URI("https://github.com/oxfordcontrol/osqp/archive/$version.tar.gz"),

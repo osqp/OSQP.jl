@@ -20,7 +20,7 @@ function setup()
 					   :rho => 0.1,
 					   :auto_rho => false,
                        :alpha => 1.6,
-                       :max_iter => 3000,
+                       :max_iter => 10000,
                        :polish => false,
 		       :warm_start => true)
 	return problem, options

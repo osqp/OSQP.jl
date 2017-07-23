@@ -90,6 +90,7 @@ struct Settings
 	sigma::Cdouble
 	scaling::Clong
 	scaling_iter::Clong
+	scaling_norm::Clong
 	max_iter::Clong
 	eps_abs::Cdouble
 	eps_rel::Cdouble
