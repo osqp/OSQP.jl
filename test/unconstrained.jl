@@ -3,9 +3,9 @@ using OSQP, Base.Test
 
 function setup()
         options = Dict(:verbose => false,
-                       :eps_abs => 1e-05,
-                       :eps_rel => 1e-05,
-		       :eps_dual_inf => 1e-18,
+                       :eps_abs => 1e-08,
+                       :eps_rel => 1e-08,
+		               :eps_dual_inf => 1e-18,
                        :scaling => true,
                        :auto_rho => false)
 	return options
@@ -19,10 +19,10 @@ tol = 1e-5
 	@testset "unconstrained_problem" begin
 		srand(1)
 
-		n = 30 
+		n = 30
 		m = 0
-		P = spdiagm(rand(n)) + 0.2 * speye(n) 
-		q = randn(n) 
+		P = spdiagm(rand(n)) + 0.2 * speye(n)
+		q = randn(n)
 		A = spzeros(m, n)
 		u = Float64[]
 		l = Float64[]
@@ -38,7 +38,7 @@ tol = 1e-5
 
 		model = OSQP.Model()
 		OSQP.setup!(model, P, q, A, l, u; options...)
-		results = OSQP.solve!(model)	
+		results = OSQP.solve!(model)
 
 		@test isapprox(results.x, x_test, atol=tol)
 		@test isapprox(results.y, y_test, atol=tol)

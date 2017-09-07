@@ -148,6 +148,9 @@ struct Workspace
 	linsys_solver::Ptr{Void}
 	pol::Ptr{Void}
 
+	rho_vec::Ptr{Cdouble}
+	rho_inv_vec::Ptr{Cdouble}
+	constr_type::Ptr{Clong}
 	x::Ptr{Cdouble}
 	y::Ptr{Cdouble}
 	z::Ptr{Cdouble}
@@ -178,8 +181,8 @@ end
 struct Info
 	iter::Int64
 	status::Symbol
-	status_val::Int
-	status_polish::Int
+	status_val::Int64
+	status_polish::Int64
 	obj_val::Float64
 	pri_res::Float64
 	dua_res::Float64
@@ -190,16 +193,17 @@ struct Info
 
 	function Info(cinfo::CInfo)
 		status = OSQP.status_map[cinfo.status_val]
-		return new(cinfo.iter, status,
-			   cinfo.status_val,
-			   cinfo.status_polish,
-			   cinfo.obj_val,
-			   cinfo.pri_res,
-			   cinfo.dua_res,
-			   cinfo.setup_time,
-			   cinfo.solve_time,
-			   cinfo.polish_time,
-			   cinfo.run_time)
+		return new(cinfo.iter,
+		           status,
+	               cinfo.status_val,
+	               cinfo.status_polish,
+	               cinfo.obj_val,
+	               cinfo.pri_res,
+	               cinfo.dua_res,
+	               cinfo.setup_time,
+	               cinfo.solve_time,
+	               cinfo.polish_time,
+	               cinfo.run_time)
 	end
 end
 

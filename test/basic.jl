@@ -4,7 +4,7 @@ using OSQP, Base.Test
 function setup()
         # Simple QP problem
 	problem = Dict()
-        problem[:P] = sparse([11. 0.; 0. 0.])
+    problem[:P] = sparse([11. 0.; 0. 0.])
 	problem[:q] = [3.; 4]
 	problem[:A] = sparse([-1 0; 0 -1; -1 -3; 2 5; 3 4])
 	problem[:u] = [0.; 0.; -15; 100; 80]
@@ -18,7 +18,6 @@ function setup()
                        :auto_rho => false,
 					   :early_terminate_interval => 1,
 					   :rho => 0.1,
-					   :auto_rho => false,
                        :alpha => 1.6,
                        :max_iter => 10000,
                        :polish => false,

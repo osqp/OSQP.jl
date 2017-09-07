@@ -13,6 +13,9 @@ OSQP_INFTY = 1e20
 # OSQP return values
 # https://github.com/oxfordcontrol/osqp/blob/master/include/constants.h
 const status_map = Dict{Int, Symbol}(
+    4 => :Dual_Infeasible_Inaccurate,
+    3 => :Primal_Infeasible_Inaccurate,
+    2 => :Solved_Inaccurate,
     1 => :Solved,
     -2 => :Max_Iter_Reached,
     -3 => :Primal_Infeasible,

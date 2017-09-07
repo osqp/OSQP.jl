@@ -3,9 +3,10 @@ using OSQP, Base.Test
 
 function setup()
         options = Dict(:verbose => false,
+                       :polish => true,
                        :eps_abs => 1e-03,
                        :eps_rel => 1e-03,
-		       :rho => 0.01,
+		               :rho => 0.01,
                        :auto_rho => false,
                        :max_iter => 5000)
 	return options
@@ -29,8 +30,8 @@ tol = 1e-3
 		model = OSQP.Model()
 		OSQP.setup!(model, P, q, A, l, u; options...)
 		results = OSQP.solve!(model)
-		
-		
+
+
 		x_test = [9.90341e-11; 5.0]
 		y_test = [1.66667; 0.0; 1.33333; 1.20431e-14; 1.49741e-14]
 		obj_test = 20.
@@ -53,8 +54,8 @@ tol = 1e-3
 		P = spdiagm(randn(n)) + 1. * speye(n)
 		q = randn(n)
 		A = speye(n)
-		l = -200 * ones(m) 
-		u = 200 * ones(m) 
+		l = -200 * ones(m)
+		u = 200 * ones(m)
 
 		# Solve problem
 		options = setup()
@@ -62,7 +63,7 @@ tol = 1e-3
 		OSQP.setup!(model, P, q, A, l, u; options...)
 		results = OSQP.solve!(model)
 
-	
+
 		# Explicit solution
 		invP = inv(full(P))
 		x_test = - invP * q

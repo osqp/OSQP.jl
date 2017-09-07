@@ -171,7 +171,7 @@ function solve!(model::OSQP.Model)
 	unsafe_copy!(pointer(y), solution.y, data.m)
 
 	# Recover Cinfo structure
-        cinfo = unsafe_load(workspace.info)
+    cinfo = unsafe_load(workspace.info)
 
 	# Construct C structure
 	info = OSQP.Info(cinfo)
