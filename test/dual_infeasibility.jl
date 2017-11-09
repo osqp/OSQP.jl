@@ -6,11 +6,7 @@ function setup()
                        :eps_abs => 1e-05,
                        :eps_rel => 1e-05,
 		       :eps_prim_inf => 1e-18,
-                       :scaling => true,
-                       :auto_rho => false,
-                       :alpha => 1.6,
-                       :max_iter => 2500,
-		       :early_terminate_interval => 1)
+		       :check_termination => 1)
 	return options
 end
 

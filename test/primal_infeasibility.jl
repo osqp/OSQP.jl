@@ -6,8 +6,7 @@ function setup()
                        :eps_abs => 1e-05,
                        :eps_rel => 1e-05,
 		       :eps_dual_inf => 1e-18,
-                       :scaling => true,
-                       :auto_rho => false)
+                       :scaling => true)
 	return options
 end
 

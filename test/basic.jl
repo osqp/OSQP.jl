@@ -4,23 +4,18 @@ using OSQP, Base.Test
 function setup()
         # Simple QP problem
 	problem = Dict()
-    problem[:P] = sparse([11. 0.; 0. 0.])
+        problem[:P] = sparse([11. 0.; 0. 0.])
 	problem[:q] = [3.; 4]
 	problem[:A] = sparse([-1 0; 0 -1; -1 -3; 2 5; 3 4])
 	problem[:u] = [0.; 0.; -15; 100; 80]
 	problem[:l] = -Inf * ones(length(problem[:u]))
 	problem[:n] = size(problem[:P], 1)
 	problem[:m] = size(problem[:A], 1)
-        options = Dict(:verbose => false,
-                       :eps_abs => 1e-09,
-                       :eps_rel => 1e-09,
-                       :scaling => true,
-                       :auto_rho => false,
-					   :early_terminate_interval => 1,
-					   :rho => 0.1,
-                       :alpha => 1.6,
-                       :max_iter => 10000,
-                       :polish => false,
+	options = Dict(:verbose => false,
+		       :eps_abs => 1e-09,
+		       :eps_rel => 1e-09,
+		       :check_termination => 1,
+		       :polish => false,
 		       :warm_start => true)
 	return problem, options
 end
@@ -107,14 +102,14 @@ tol = 1e-5
 		@test results.info.status == :Max_Iter_Reached
 	end
 
-	@testset "update_early_termination" begin
+	@testset "update_check_termination" begin
 		problem, options = setup()
 
 		model = OSQP.Model()
 		OSQP.setup!(model, problem[:P], problem[:q],
 				   problem[:A], problem[:l], problem[:u]; options...)
 
-		OSQP.update_settings!(model, early_terminate=false)
+		OSQP.update_settings!(model, check_termination=false)
 		results = OSQP.solve!(model)
 
 		@test results.info.iter == options[:max_iter]

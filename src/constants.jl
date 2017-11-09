@@ -5,7 +5,8 @@
 #         return constant
 # end
 
-
+SUITESPARSE_LDL_SOLVER=0
+MKL_PARDISO_SOLVER=1
 
 # Define OSQP infinity constants
 OSQP_INFTY = 1e20
@@ -30,22 +31,7 @@ updatable_data = [:q, :l, :u, :Px, :Px_idx, :Ax, :Ax_idx]
 
 # updatable_settings
 updatable_settings = [:max_iter, :eps_aps, :eps_rel, :eps_prim_inf, :eps_dual_inf,
-		      :rho, :alpha, :delta, :polish, :pol_refine_iter, :verbose, :early_terminate,
-		      :early_terminate_interval, :warm_start]
+		      :rho, :alpha, :delta, :polish, :polish_refine_iter, :verbose, 
+		      :check_termination,:warm_start]
 
 
-# Auxiliary low-level functions
-"""
-    dimensions(model::OSQP.Model)
-
-Obtain problem dimensions from OSQP model
-"""
-function dimensions(model::OSQP.Model)
-
-	workspace = unsafe_load(model.workspace)
-	if workspace == C_NULL
-		error("Workspace has not been setup yet")
-	end
-	data = unsafe_load(workspace.data)
-	return data.n, data.m
-end

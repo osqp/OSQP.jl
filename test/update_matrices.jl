@@ -6,8 +6,7 @@ function setup()
                        :eps_abs => 1e-08,
                        :eps_rel => 1e-08,
                        :polish => false,
-		       :auto_rho => false,
-		       :early_terminate_interval => 1)
+		       :check_termination => 1)
 	
 	srand(1)
 

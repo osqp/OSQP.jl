@@ -6,8 +6,6 @@ function setup()
                        :polish => true,
                        :eps_abs => 1e-03,
                        :eps_rel => 1e-03,
-		               :rho => 0.01,
-                       :auto_rho => false,
                        :max_iter => 5000)
 	return options
 end

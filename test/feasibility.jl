@@ -5,7 +5,6 @@ function setup()
         options = Dict(:verbose => false,
                        :eps_abs => 1e-06,
                        :eps_rel => 1e-06,
-                       :auto_rho => false,
                        :max_iter => 5000)
 	return options
 end

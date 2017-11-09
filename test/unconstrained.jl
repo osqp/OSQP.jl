@@ -2,12 +2,10 @@ using OSQP, Base.Test
 
 
 function setup()
-        options = Dict(:verbose => false,
-                       :eps_abs => 1e-08,
-                       :eps_rel => 1e-08,
-		               :eps_dual_inf => 1e-18,
-                       :scaling => true,
-                       :auto_rho => false)
+	options = Dict(:verbose => false,
+		       :eps_abs => 1e-08,
+		       :eps_rel => 1e-08,
+		       :eps_dual_inf => 1e-18)
 	return options
 end
 

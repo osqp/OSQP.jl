@@ -2,10 +2,6 @@
 # https://github.com/oxfordcontrol/osqp/blob/master/include/types.h
 
 
-
-# export Ccsc, OSQPData, OSQPSettings  # TODO: remove
-
-
 struct Ccsc
 	nzmax::Clong
 	m::Clong
@@ -40,7 +36,7 @@ struct Solution
 end
 
 # Internal C type for info
-# N.B. This is not the one returned by the user!
+# N.B. This is not the one returned to the user!
 struct CInfo
 	iter::Clong
 	# We need to allocate 32 bytes for a character string, so we allocate 256 bits
@@ -58,6 +54,8 @@ struct CInfo
 	solve_time::Cdouble
 	polish_time::Cdouble
 	run_time::Cdouble
+	rho_updates::Clong
+	rho_estimate::Cdouble
 end
 
 struct Data
@@ -89,8 +87,10 @@ struct Settings
 	rho::Cdouble
 	sigma::Cdouble
 	scaling::Clong
-	scaling_iter::Clong
-	scaling_norm::Clong
+	adaptive_rho::Clong
+	adaptive_rho_interval::Clong
+	adaptive_rho_tolerance::Cdouble
+	adaptive_rho_fraction::Cdouble
 	max_iter::Clong
 	eps_abs::Cdouble
 	eps_rel::Cdouble
@@ -100,15 +100,11 @@ struct Settings
 	linsys_solver::Clong
 	delta::Cdouble
 	polish::Clong
-	pol_refine_iter::Clong
+	polish_refine_iter::Clong
 	verbose::Clong
-	auto_rho::Clong
 	scaled_termination::Clong
-	early_terminate::Clong
-	early_terminate_interval::Clong
+	check_termination::Clong
 	warm_start::Clong
-
-
 end
 
 function Settings()
@@ -129,7 +125,14 @@ function Settings(settings::Array{Any, 1})
 		end
 	end
 
-	# Get dictionary with elements of detauls and user settings
+       # Convert linsys solver to number
+       linsys_solver_str_to_int!(settings_dict)
+
+
+	# Get list with elements of default and user settings
+	# If setting is in the passed settings (settings_dict), 
+	# then convert type to the right type. Otherwise just take
+	# the default one
 	settings_list = [setting in keys(settings_dict) ?
 			 convert(fieldtype(typeof(default_settings), setting), settings_dict[setting]) :
 			 getfield(default_settings, setting)
@@ -151,17 +154,31 @@ struct Workspace
 	rho_vec::Ptr{Cdouble}
 	rho_inv_vec::Ptr{Cdouble}
 	constr_type::Ptr{Clong}
+
+	# Iterates
 	x::Ptr{Cdouble}
 	y::Ptr{Cdouble}
 	z::Ptr{Cdouble}
 	xz_tilde::Ptr{Cdouble}
 	x_prev::Ptr{Cdouble}
 	z_prev::Ptr{Cdouble}
+
+	# Primal and dual residuals
+	Ax::Ptr{Cdouble}
+	Px::Ptr{Cdouble}
+	Aty::Ptr{Cdouble}
+
+	# Primal infeasibility
 	delta_y::Ptr{Cdouble}
 	Atdelta_y::Ptr{Cdouble}
+
+	# Dual infeasibility
 	delta_x::Ptr{Cdouble}
 	Pdelta_x::Ptr{Cdouble}
 	Adelta_x::Ptr{Cdouble}
+
+
+	# Scaling
 	D_temp::Ptr{Cdouble}
 	D_temp_A::Ptr{Cdouble}
 	E_temp::Ptr{Cdouble}
@@ -190,6 +207,8 @@ struct Info
 	solve_time::Float64
 	polish_time::Float64
 	run_time::Float64
+	rho_updates::Int64
+	rho_estimate::Float64
 
 	function Info(cinfo::CInfo)
 		status = OSQP.status_map[cinfo.status_val]
@@ -203,7 +222,9 @@ struct Info
 	               cinfo.setup_time,
 	               cinfo.solve_time,
 	               cinfo.polish_time,
-	               cinfo.run_time)
+	               cinfo.run_time,
+		       cinfo.rho_updates,
+		       cinfo.rho_estimate)
 	end
 end
 
@@ -212,3 +233,6 @@ struct Results
 	y::Vector{Float64}
 	info::OSQP.Info
 end
+
+
+

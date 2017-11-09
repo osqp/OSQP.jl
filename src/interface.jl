@@ -1,32 +1,13 @@
 # Wrapper for the low level functions defined in https://github.com/oxfordcontrol/osqp/blob/master/include/osqp.h
 
-
-# macro to call a OSQP C function
-# macro osqp_ccall(func, args...)
-#     f = "osqp_$(func)"
-#     args = map(esc,args)
-#     is_unix() && return quote
-#         ccall(($f,OSQP.osqp), $(args...))
-#     end
-#     is_windows() && VERSION < v"0.6-" && return quote
-#         ccall(($f,OSQP.osqp), stdcall, $(args...))
-#     end
-#     is_windows() && VERSION >= v"0.6-" && return quote
-#         ccall(($f,OSQP.osqp), $(esc(:stdcall)), $(args...))
-#     end
-# end
-#
-
 type Model
-	"""OSQP workspace pointer"""
 	workspace::Ptr{OSQP.Workspace}
 
 	"""
-	    setup(P, a, A, l, u, settings)
+	    Module()
 
-	Perform OSQP solver setup using the inputs `P`, `q`, `A`, `l`, `u`
+	Initialize OSQP module
 	"""
-
 	function Model()
 			# TODO: Change me to more elegant way
 			# a = Array{Ptr{OSQP.Workspace}}(1)[1]
@@ -45,6 +26,11 @@ type Model
 
 end
 
+"""
+    setup!(module, P, a, A, l, u, settings)
+
+Perform OSQP solver setup of module `module`, using the inputs `P`, `q`, `A`, `l`, `u`
+"""
 function setup!(model::OSQP.Model,
 		P::SparseMatrixCSC=nothing,
 		q::Vector{Float64}=nothing,
@@ -171,7 +157,7 @@ function solve!(model::OSQP.Model)
 	unsafe_copy!(pointer(y), solution.y, data.m)
 
 	# Recover Cinfo structure
-    cinfo = unsafe_load(workspace.info)
+        cinfo = unsafe_load(workspace.info)
 
 	# Construct C structure
 	info = OSQP.Info(cinfo)
@@ -341,11 +327,10 @@ function update_settings!(model::OSQP.Model; kwargs...)
 	alpha = get(data, :alpha, nothing)
 	delta = get(data, :delta, nothing)
 	polish = get(data, :polish, nothing)
-	pol_refine_iter = get(data, :pol_refine_iter, nothing)
+	polish_refine_iter = get(data, :polish_refine_iter, nothing)
 	verbose = get(data, :verbose, nothing)
 	scaled_termination = get(data, :early_terminate, nothing)
-	early_terminate = get(data, :early_terminate, nothing)
-	early_terminate_interval = get(data, :early_terminate_interval, nothing)
+	check_termination = get(data, :check_termination, nothing)
 	warm_start = get(data, :warm_start, nothing)
 
 	# Update individual settings
@@ -396,8 +381,8 @@ function update_settings!(model::OSQP.Model; kwargs...)
 	end
 
 	if pol_refine_iter != nothing
-		exitflag = ccall((:osqp_update_pol_refine_iter, OSQP.osqp), Clong, (Ptr{OSQP.Workspace}, Clong), model.workspace, pol_refine_iter)
-		if exitflag != 0 error("Error updating pol_refine_iter") end
+		exitflag = ccall((:osqp_update_polish_refine_iter, OSQP.osqp), Clong, (Ptr{OSQP.Workspace}, Clong), model.workspace, polish_refine_iter)
+		if exitflag != 0 error("Error updating polish_refine_iter") end
 	end
 
 	if verbose != nothing
@@ -410,14 +395,9 @@ function update_settings!(model::OSQP.Model; kwargs...)
 		if exitflag != 0 error("Error updating scaled_termination") end
 	end
 
-	if early_terminate != nothing
-		exitflag = ccall((:osqp_update_early_terminate, OSQP.osqp), Clong, (Ptr{OSQP.Workspace}, Clong), model.workspace, early_terminate)
-		if exitflag != 0 error("Error updating early_terminate") end
-	end
-
-	if early_terminate_interval != nothing
-		exitflag = ccall((:osqp_update_early_terminate_interval, OSQP.osqp), Clong, (Ptr{OSQP.Workspace}, Clong), model.workspace, early_terminate_interval)
-		if exitflag != 0 error("Error updating early_terminate_interval") end
+	if check_termination != nothing
+		exitflag = ccall((:osqp_update_check_termination, OSQP.osqp), Clong, (Ptr{OSQP.Workspace}, Clong), model.workspace, check_termination)
+		if exitflag != 0 error("Error updating check_termination") end
 	end
 
 	if warm_start != nothing
@@ -462,4 +442,52 @@ function warm_start!(model::OSQP.Model; x::Vector{Float64}=nothing, y::Vector{Fl
 		if exitflag != 0 error("Error in warm starting x and y") end
 	end
 
+end
+
+
+
+# Auxiliary low-level functions
+"""
+    dimensions(model::OSQP.Model)
+
+Obtain problem dimensions from OSQP model
+"""
+function dimensions(model::OSQP.Model)
+
+	workspace = unsafe_load(model.workspace)
+	if workspace == C_NULL
+		error("Workspace has not been setup yet")
+	end
+	data = unsafe_load(workspace.data)
+	return data.n, data.m
+end
+
+
+
+
+function linsys_solver_str_to_int!(settings_dict::Dict{Symbol, Any})
+         # linsys_str = pop!(settings_dict, :linsys_solver)
+         linsys_str = get(settings_dict, :linsys_solver, nothing)	
+
+	 if linsys_str != nothing
+		 # Check type
+		 if !isa(linsys_str, String)
+			error("linsys_solver is required to be a string")
+		 end
+
+		 # Convert to lower case
+		 linsys_str = lowercase(linsys_str)
+
+		 if linsys_str == "suitesparse ldl"
+			settings_dict[:linsys_solver] = SUITESPARSE_LDL_SOLVER
+		elseif linsys_str == "mkl pardiso"
+			settings_dict[:linsys_solver] = MKL_PARDISO_SOLVER
+		elseif linsys_str == ""
+			settings_dict[:linsys_solver] = SUITESPARSE_LDL_SOLVER
+		else
+			warn("Linear system solver not recognized. Using default SuiteSparse LDL")
+			settings_dict[:linsys_solver] = SUITESPARSE_LDL_SOLVER
+
+		end	
+	end
 end
