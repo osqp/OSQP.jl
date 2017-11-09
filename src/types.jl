@@ -118,15 +118,20 @@ end
 function Settings(settings::Array{Any, 1})
 	default_settings = OSQP.Settings()
 
+	println("Default settings")
+	println(default_settings)
+
 	settings_dict = Dict{Symbol, Any}()
 	if !isempty(settings)
 		for (key, value) in settings
 			settings_dict[key] = value
 		end
 	end
+	println("Settings dict")
+	println(settings_dict)
 
        # Convert linsys solver to number
-       linsys_solver_str_to_int!(settings_dict)
+       # linsys_solver_str_to_int!(settings_dict)
 
 
 	# Get list with elements of default and user settings
