@@ -8,20 +8,23 @@ osqp = library_dependency("osqp", aliases=["libosqp"])
 # Current version
 version = "0.2.0.dev7"
 
-# Get current operative system
-if Sys.KERNEL == :Linux
-	sys_name_str = "linux"
-elseif Sys.KERNEL == :Darwin
-	sys_name_str = "mac"
-else
-	sys_name_str = "windows"
+# Get current operating system 
+osqp_platform, archive_ext =
+if is_linux()
+	"linux", "tar.gz"
+elseif is_apple()
+	"mac", "tar.gz"
+elseif is_windows()
+	"windows", "zip"
+else 
+	error("Platform not supported!")
 end
 
 
-# Provide binaries for each operative system
-archive_name="osqp-$version-$(sys_name_str)$(Sys.WORD_SIZE)"
+# Provide binaries for each operating system
+archive_name="osqp-$version-$osqp_platform$(Sys.WORD_SIZE)"
 
-provides(Binaries, URI("https://dl.bintray.com/bstellato/generic/OSQP/$version/$archive_name.tar.gz"), [osqp], unpacked_dir="$archive_name/lib")
+provides(Binaries, URI("https://dl.bintray.com/bstellato/generic/OSQP/$version/$archive_name.$archive_ext"), [osqp], unpacked_dir="$archive_name/lib")
 
 # # Windows
 # provides(Binaries, URI("https://dl.bintray.com/bstellato/generic/OSQP/$version/osqp-$version-windows$(Sys.WORD_SIZE).tar.gz"), [osqp], os = :Windows, unpacked_dir="osqp-$version")
