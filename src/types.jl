@@ -3,13 +3,13 @@
 
 
 struct Ccsc
-	nzmax::Clong
-	m::Clong
-	n::Clong
-	p::Ptr{Clong}
-	i::Ptr{Clong}
+	nzmax::Clonglong
+	m::Clonglong
+	n::Clonglong
+	p::Ptr{Clonglong}
+	i::Ptr{Clonglong}
 	x::Ptr{Cdouble}
-	nz::Clong
+	nz::Clonglong
 
 
 	# Constructor from SparseMatrixCSC
@@ -22,9 +22,9 @@ struct Ccsc
 		# Get vectors of data, rows indices and column pointers
 		x = convert(Array{Float64, 1}, M.nzval)
 		# C is 0 indexed
-		i = convert(Array{Clong, 1}, M.rowval - 1)
+		i = convert(Array{Clonglong, 1}, M.rowval - 1)
 		# C is 0 indexed
-		p = convert(Array{Clong, 1}, M.colptr - 1)
+		p = convert(Array{Clonglong, 1}, M.colptr - 1)
 
 		new(length(M.nzval), m, n, pointer(p), pointer(i), pointer(x), -1)
 	end
@@ -38,15 +38,15 @@ end
 # Internal C type for info
 # N.B. This is not the one returned to the user!
 struct CInfo
-	iter::Clong
+	iter::Clonglong
 	# We need to allocate 32 bytes for a character string, so we allocate 256 bits
 	# of integer instead
 	# TODO: Find a better way to do this
 	# status1::Int128
 	# status2::Int128
 	status::NTuple{32, Cchar}
-	status_val::Clong
-	status_polish::Clong
+	status_val::Clonglong
+	status_polish::Clonglong
 	obj_val::Cdouble
 	pri_res::Cdouble
 	dua_res::Cdouble
@@ -54,13 +54,13 @@ struct CInfo
 	solve_time::Cdouble
 	polish_time::Cdouble
 	run_time::Cdouble
-	rho_updates::Clong
+	rho_updates::Clonglong
 	rho_estimate::Cdouble
 end
 
 struct Data
-	n::Clong
-	m::Clong
+	n::Clonglong
+	m::Clonglong
 	P::Ptr{Ccsc}
 	A::Ptr{Ccsc}
 	q::Ptr{Cdouble}
@@ -86,12 +86,12 @@ end
 struct Settings
 	rho::Cdouble
 	sigma::Cdouble
-	scaling::Clong
-	adaptive_rho::Clong
-	adaptive_rho_interval::Clong
+	scaling::Clonglong
+	adaptive_rho::Clonglong
+	adaptive_rho_interval::Clonglong
 	adaptive_rho_tolerance::Cdouble
 	adaptive_rho_fraction::Cdouble
-	max_iter::Clong
+	max_iter::Clonglong
 	eps_abs::Cdouble
 	eps_rel::Cdouble
 	eps_prim_inf::Cdouble
@@ -99,12 +99,12 @@ struct Settings
 	alpha::Cdouble
 	linsys_solver::Cint  # Enum type
 	delta::Cdouble
-	polish::Clong
-	polish_refine_iter::Clong
-	verbose::Clong
-	scaled_termination::Clong
-	check_termination::Clong
-	warm_start::Clong
+	polish::Clonglong
+	polish_refine_iter::Clonglong
+	verbose::Clonglong
+	scaled_termination::Clonglong
+	check_termination::Clonglong
+	warm_start::Clonglong
 end
 
 function Settings()
@@ -152,7 +152,7 @@ struct Workspace
 
 	rho_vec::Ptr{Cdouble}
 	rho_inv_vec::Ptr{Cdouble}
-	constr_type::Ptr{Clong}
+	constr_type::Ptr{Clonglong}
 
 	# Iterates
 	x::Ptr{Cdouble}
@@ -188,8 +188,8 @@ struct Workspace
 	info::Ptr{OSQP.CInfo}
 
 	timer::Ptr{Void}
-	first_run::Clong
-	summary_printed::Clong
+	first_run::Clonglong
+	summary_printed::Clonglong
 
 end
 
