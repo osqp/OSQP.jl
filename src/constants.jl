@@ -1,10 +1,3 @@
-# Utilities
-# N.B. Cannot call constants directly. Constants in headers are not shared in dynamically linked library
-# function constant(constant_name)
-#         constant = ccall((:osqp_constant, OSQP.osqp), Clong, (Ptr{Clong}))
-#         return constant
-# end
-
 SUITESPARSE_LDL_SOLVER=0
 MKL_PARDISO_SOLVER=1
 
@@ -14,24 +7,25 @@ OSQP_INFTY = 1e20
 # OSQP return values
 # https://github.com/oxfordcontrol/osqp/blob/master/include/constants.h
 const status_map = Dict{Int, Symbol}(
-    4 => :Dual_Infeasible_Inaccurate,
-    3 => :Primal_Infeasible_Inaccurate,
-    2 => :Solved_Inaccurate,
+    4 => :Dual_infeasible_inaccurate,
+    3 => :Primal_infeasible_inaccurate,
+    2 => :Solved_inaccurate,
     1 => :Solved,
-    -2 => :Max_Iter_Reached,
-    -3 => :Primal_Infeasible,
-    -4 => :Dual_Infeasible,
+    -2 => :Max_iter_reached,
+    -3 => :Primal_infeasible,
+    -4 => :Dual_infeasible,
     -5 => :Interrupted,
     -10 => :Unsolved
 )
 
+SOLUTION_PRESENT = [:Solved_inaccurate, :Solved, :Max_iter_reached]
 
-# updatable_data
-updatable_data = [:q, :l, :u, :Px, :Px_idx, :Ax, :Ax_idx]
+# UPDATABLE_DATA
+UPDATABLE_DATA = [:q, :l, :u, :Px, :Px_idx, :Ax, :Ax_idx]
 
-# updatable_settings
-updatable_settings = [:max_iter, :eps_aps, :eps_rel, :eps_prim_inf, :eps_dual_inf,
-		      :rho, :alpha, :delta, :polish, :polish_refine_iter, :verbose, 
+# UPDATABLE_SETTINGS
+UPDATABLE_SETTINGS = [:max_iter, :eps_aps, :eps_rel, :eps_prim_inf, :eps_dual_inf,
+		      :rho, :alpha, :delta, :polish, :polish_refine_iter, :verbose,
 		      :check_termination,:warm_start]
 
 

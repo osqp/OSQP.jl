@@ -231,7 +231,11 @@ struct Results
 	x::Vector{Float64}
 	y::Vector{Float64}
 	info::OSQP.Info
+	prim_inf_cert::Union{Vector{Float64}, Void}
+	dual_inf_cert::Union{Vector{Float64}, Void}
+
 end
+Results(x, y, info) = Results(x, y, info, nothing, nothing) 
 
 
 

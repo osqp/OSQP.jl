@@ -24,10 +24,10 @@ tol = 1e-5
 		options = setup()
 
 		model = OSQP.Model()
-		OSQP.setup!(model, P, q, A, l, u; options...)
+		OSQP.setup!(model; P=P, q=q, A=A, l=l, u=u, options...)
 		results = OSQP.solve!(model)	
 
-		@test results.info.status == :Dual_Infeasible
+		@test results.info.status == :Dual_infeasible
 
 	end
 
@@ -40,10 +40,10 @@ tol = 1e-5
 		options = setup()
 
 		model = OSQP.Model()
-		OSQP.setup!(model, P, q, A, l, u; options...)
+		OSQP.setup!(model; P=P, q=q, A=A, l=l, u=u, options...)
 		results = OSQP.solve!(model)	
 
-		@test results.info.status == :Dual_Infeasible
+		@test results.info.status == :Dual_infeasible
 
 	end
 
@@ -56,14 +56,14 @@ tol = 1e-5
 		options = setup()
 
 		model = OSQP.Model()
-		OSQP.setup!(model, P, q, A, l, u; options...)
+		OSQP.setup!(model; P=P, q=q, A=A, l=l, u=u, options...)
 		
 		# Warm start to avoid infeasibility detection at first step
 		OSQP.warm_start!(model, x=[25.; 25], y=[-2.; -2; -2; -2]) 
 
 		results = OSQP.solve!(model)	
 
-		@test results.info.status == :Dual_Infeasible
+		@test results.info.status == :Dual_infeasible
 
 	end
 end

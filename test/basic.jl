@@ -32,8 +32,8 @@ tol = 1e-5
 		problem, options = setup()
 
 		model = OSQP.Model()
-		OSQP.setup!(model, problem[:P], problem[:q],
-				   problem[:A], problem[:l], problem[:u]; options...)
+		OSQP.setup!(model; P=problem[:P], q=problem[:q],
+			    A=problem[:A], l=problem[:l], u=problem[:u], options...)
 		results = OSQP.solve!(model)
 
 		@test isapprox(norm(results.x - [0.; 5.]), 0., atol=tol)
@@ -47,8 +47,8 @@ tol = 1e-5
 		problem, options = setup()
 
 		model = OSQP.Model()
-		OSQP.setup!(model, problem[:P], problem[:q],
-				   problem[:A], problem[:l], problem[:u]; options...)
+		OSQP.setup!(model; P=problem[:P], q=problem[:q],
+		            A=problem[:A], l=problem[:l], u=problem[:u], options...)
 
 		OSQP.update!(model, q=[10.; 20.])
 		results = OSQP.solve!(model)
@@ -63,8 +63,8 @@ tol = 1e-5
 		problem, options = setup()
 
 		model = OSQP.Model()
-		OSQP.setup!(model, problem[:P], problem[:q],
-				   problem[:A], problem[:l], problem[:u]; options...)
+		OSQP.setup!(model; P=problem[:P], q=problem[:q],
+		            A=problem[:A], l=problem[:l], u=problem[:u], options...)
 
 		OSQP.update!(model, l=-100 * ones(problem[:m]))
 		results = OSQP.solve!(model)
@@ -79,8 +79,8 @@ tol = 1e-5
 		problem, options = setup()
 
 		model = OSQP.Model()
-		OSQP.setup!(model, problem[:P], problem[:q],
-				   problem[:A], problem[:l], problem[:u]; options...)
+		OSQP.setup!(model; P=problem[:P], q=problem[:q],
+		            A=problem[:A], l=problem[:l], u=problem[:u], options...)
 
 		OSQP.update!(model, u=1000 * ones(problem[:m]))
 		results = OSQP.solve!(model)
@@ -96,21 +96,21 @@ tol = 1e-5
 		problem, options = setup()
 
 		model = OSQP.Model()
-		OSQP.setup!(model, problem[:P], problem[:q],
-				   problem[:A], problem[:l], problem[:u]; options...)
+		OSQP.setup!(model; P=problem[:P], q=problem[:q],
+		            A=problem[:A], l=problem[:l], u=problem[:u], options...)
 
 		OSQP.update_settings!(model, max_iter=80)
 		results = OSQP.solve!(model)
 
-		@test results.info.status == :Max_Iter_Reached
+		@test results.info.status == :Max_iter_reached
 	end
 
 	@testset "update_check_termination" begin
 		problem, options = setup()
 
 		model = OSQP.Model()
-		OSQP.setup!(model, problem[:P], problem[:q],
-				   problem[:A], problem[:l], problem[:u]; options...)
+		OSQP.setup!(model; P=problem[:P], q=problem[:q],
+		            A=problem[:A], l=problem[:l], u=problem[:u], options...)
 
 		OSQP.update_settings!(model, check_termination=false)
 		results = OSQP.solve!(model)
@@ -124,8 +124,8 @@ tol = 1e-5
 
 		# Setup default problem
 		model = OSQP.Model()
-		OSQP.setup!(model, problem[:P], problem[:q],
-				   problem[:A], problem[:l], problem[:u]; options...)
+		OSQP.setup!(model; P=problem[:P], q=problem[:q],
+			    A=problem[:A], l=problem[:l], u=problem[:u], options...)
 
 		results_default = OSQP.solve!(model)
 
@@ -133,8 +133,8 @@ tol = 1e-5
 		new_opts = copy(options)
 		new_opts[:rho] = 0.7
 		model = OSQP.Model()
-		OSQP.setup!(model, problem[:P], problem[:q],
-				   problem[:A], problem[:l], problem[:u]; new_opts...)
+		OSQP.setup!(model; P=problem[:P], q=problem[:q],
+		            A=problem[:A], l=problem[:l], u=problem[:u], new_opts...)
 		OSQP.update_settings!(model, rho=options[:rho])
 		results_new_rho = OSQP.solve!(model)
 

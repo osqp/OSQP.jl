@@ -31,12 +31,12 @@ end
 
 Perform OSQP solver setup of module `module`, using the inputs `P`, `q`, `A`, `l`, `u`
 """
-function setup!(model::OSQP.Model,
-		P::SparseMatrixCSC=nothing,
-		q::Vector{Float64}=nothing,
-		A::SparseMatrixCSC=nothing,
-		l::Vector{Float64}=nothing,
-		u::Vector{Float64}=nothing;
+function setup!(model::OSQP.Model;
+		P::Union{SparseMatrixCSC, Void}=nothing,
+		q::Union{Vector{Float64}, Void}=nothing,
+		A::Union{SparseMatrixCSC, Void}=nothing,
+		l::Union{Vector{Float64}, Void}=nothing,
+		u::Union{Vector{Float64}, Void}=nothing,
 		settings...)
 
 	# Check problem dimensions
@@ -146,6 +146,12 @@ function solve!(model::OSQP.Model)
 	solution = unsafe_load(workspace.solution)
 	data = unsafe_load(workspace.data)
 
+	# Recover Cinfo structure
+        cinfo = unsafe_load(workspace.info)
+
+	# Construct C structure
+	info = OSQP.Info(cinfo)
+
 	# Do not use this anymore. We instead copy the solution
 	# x = unsafe_wrap(Array, solution.x, data.n)
 	# y = unsafe_wrap(Array, solution.y, data.m)
@@ -153,19 +159,30 @@ function solve!(model::OSQP.Model)
 	# Allocate solution vectors and copy solution
 	x = Array{Float64}(data.n)
 	y = Array{Float64}(data.m)
-	unsafe_copy!(pointer(x), solution.x, data.n)
-	unsafe_copy!(pointer(y), solution.y, data.m)
 
-	# Recover Cinfo structure
-        cinfo = unsafe_load(workspace.info)
+        if info.status in SOLUTION_PRESENT 
+		# If solution exists, copy it
+		unsafe_copy!(pointer(x), solution.x, data.n)
+		unsafe_copy!(pointer(y), solution.y, data.m)
 
-	# Construct C structure
-	info = OSQP.Info(cinfo)
-
-	# Return results
-	return Results(x, y, info)
-
-
+		# Return results
+		return Results(x, y, info)
+	else
+		# else fill with NaN and return certificates of infeasibility
+		x *= NaN
+		y *= NaN
+		if info.status == :Primal_infeasible || info.status == :Primal_infeasible_inaccurate
+			prim_inf_cert = Array{Float64}(data.m) 
+			unsafe_copy!(pointer(prim_inf_cert), workspace.delta_y, data.m)
+			# Return results
+		        return Results(x, y, info, prim_inf_cert, nothing)	
+		elseif info.status == :Dual_infeasible || info.status == :Dual_infeasible_inaccurate
+			dual_inf_cert = Array{Float64}(data.n) 
+			unsafe_copy!(pointer(dual_inf_cert), workspace.delta_x, data.n)
+			# Return results
+		        return Results(x, y, info, nothing, dual_inf_cert)	
+		end
+	end
 end
 
 
@@ -188,7 +205,7 @@ function update!(model::OSQP.Model; kwargs...)
 	else
 		data = Dict{Symbol, Any}()
 		for (key, value) in kwargs
-			if !(key in updatable_data)
+			if !(key in UPDATABLE_DATA)
 				error("$(key) field cannot be updated or is not recognized")
 			else
 				data[key] = value
@@ -309,7 +326,7 @@ function update_settings!(model::OSQP.Model; kwargs...)
 	else
 		data = Dict{Symbol, Any}()
 		for (key, value) in kwargs
-			if !(key in updatable_settings)
+			if !(key in UPDATABLE_SETTINGS)
 				error("$(key) cannot be updated or is not recognized")
 			else
 				data[key] = value

@@ -25,7 +25,7 @@ tol = 1e-3
 		options = setup()
 
 		model = OSQP.Model()
-		OSQP.setup!(model, P, q, A, l, u; options...)
+		OSQP.setup!(model; P=P, q=q, A=A, l=l, u=u, options...)
 		results = OSQP.solve!(model)	
 
 		@test isapprox(norm(A * results.x - u), 0., atol=tol) 

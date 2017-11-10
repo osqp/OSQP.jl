@@ -36,10 +36,10 @@ tol = 1e-5
 		options = setup()
 
 		model = OSQP.Model()
-		OSQP.setup!(model, P, q, A, l, u; options...)
+		OSQP.setup!(model; P=P, q=q, A=A, l=l, u=u, options...)
 		results = OSQP.solve!(model)	
 
-		@test results.info.status == :Primal_Infeasible
+		@test results.info.status == :Primal_infeasible
 
 	end
 
@@ -57,10 +57,10 @@ tol = 1e-5
 		options = setup()
 
 		model = OSQP.Model()
-		OSQP.setup!(model, P, q, A, l, u; options...)
+		OSQP.setup!(model; P=P, q=q, A=A, l=l, u=u, options...)
 		results = OSQP.solve!(model)	
 
-		@test results.info.status == :Primal_Infeasible
+		@test results.info.status == :Primal_infeasible
 
 	end
 end

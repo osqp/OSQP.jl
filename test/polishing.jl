@@ -27,7 +27,7 @@ tol = 1e-3
 		# Solve problem
 		options = setup()
 		model = OSQP.Model()
-		OSQP.setup!(model, P, q, A, l, u; options...)
+		OSQP.setup!(model; P=P, q=q, A=A, l=l, u=u, options...)
 		results = OSQP.solve!(model)
 
 
@@ -59,7 +59,7 @@ tol = 1e-3
 		# Solve problem
 		options = setup()
 		model = OSQP.Model()
-		OSQP.setup!(model, P, q, A, l, u; options...)
+		OSQP.setup!(model; P=P, q=q, A=A, l=l, u=u, options...)
 		results = OSQP.solve!(model)
 
 
@@ -91,7 +91,7 @@ tol = 1e-3
 		# Solve problem
 		options = setup()
 		model = OSQP.Model()
-		OSQP.setup!(model, P, q, A, l, u; options...)
+		OSQP.setup!(model; P=P, q=q, A=A, l=l, u=u, options...)
 		results = OSQP.solve!(model)
 
 

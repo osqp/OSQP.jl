@@ -60,7 +60,7 @@ tol = 1e-5
 		(n, m, P, q, A, l, u) = (problem[:n], problem[:m], problem[:P], problem[:q], problem[:A], problem[:l], problem[:u])
 
 		model = OSQP.Model()
-		OSQP.setup!(model, P, q, A, l, u; options...)
+		OSQP.setup!(model; P=P, q=q, A=A, l=l, u=u, options...)
 		results = OSQP.solve!(model)	
 
 		# # Solve with Gurobi
@@ -105,7 +105,7 @@ tol = 1e-5
 		P_new = problem[:P_new]
 
 		model = OSQP.Model()
-		OSQP.setup!(model, P, q, A, l, u; options...)
+		OSQP.setup!(model; P=P, q=q, A=A, l=l, u=u, options...)
 	
 		# Update matrix
 		Pnew_triu = triu(P_new)
@@ -152,7 +152,7 @@ tol = 1e-5
 		P_new = problem[:P_new]
 
 		model = OSQP.Model()
-		OSQP.setup!(model, P, q, A, l, u; options...)
+		OSQP.setup!(model; P=P, q=q, A=A, l=l, u=u, options...)
 	
 		# Update matrix
 		Pnew_triu = triu(P_new)
@@ -197,7 +197,7 @@ tol = 1e-5
 		A_new = problem[:A_new]
 
 		model = OSQP.Model()
-		OSQP.setup!(model, P, q, A, l, u; options...)
+		OSQP.setup!(model; P=P, q=q, A=A, l=l, u=u, options...)
 	
 		# Update matrix
 		# Note the shift in indexing! (Cherent with C)
@@ -244,7 +244,7 @@ tol = 1e-5
 		A_new = problem[:A_new]
 
 		model = OSQP.Model()
-		OSQP.setup!(model, P, q, A, l, u; options...)
+		OSQP.setup!(model; P=P, q=q, A=A, l=l, u=u, options...)
 	
 		# Update matrix
 		OSQP.update!(model, Ax=A_new.nzval)
@@ -290,7 +290,7 @@ tol = 1e-5
 		A_new = problem[:A_new]
 
 		model = OSQP.Model()
-		OSQP.setup!(model, P, q, A, l, u; options...)
+		OSQP.setup!(model; P=P, q=q, A=A, l=l, u=u, options...)
 	
 		# Update matrices P and A
 		P_new_triu = triu(P_new)
@@ -341,7 +341,7 @@ tol = 1e-5
 		A_new = problem[:A_new]
 
 		model = OSQP.Model()
-		OSQP.setup!(model, P, q, A, l, u; options...)
+		OSQP.setup!(model; P=P, q=q, A=A, l=l, u=u, options...)
 	
 		# Update matrices P and A
 		P_new_triu = triu(P_new)
@@ -391,7 +391,7 @@ tol = 1e-5
 		A_new = problem[:A_new]
 
 		model = OSQP.Model()
-		OSQP.setup!(model, P, q, A, l, u; options...)
+		OSQP.setup!(model; P=P, q=q, A=A, l=l, u=u, options...)
 	
 		# Update matrices P and A
 		P_new_triu = triu(P_new)
@@ -441,7 +441,7 @@ tol = 1e-5
 		A_new = problem[:A_new]
 
 		model = OSQP.Model()
-		OSQP.setup!(model, P, q, A, l, u; options...)
+		OSQP.setup!(model; P=P, q=q, A=A, l=l, u=u, options...)
 	
 		# Update matrices P and A
 		P_new_triu = triu(P_new)
