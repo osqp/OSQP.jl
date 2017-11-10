@@ -6,6 +6,7 @@ function setup()
                        :eps_abs => 1e-08,
                        :eps_rel => 1e-08,
                        :polish => false,
+		       :adaptive_rho => false,
 		       :check_termination => 1)
 	return options
 end

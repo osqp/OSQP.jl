@@ -6,6 +6,7 @@ function setup()
                        :polish => true,
                        :eps_abs => 1e-03,
                        :eps_rel => 1e-03,
+		       :verbose => false,
                        :max_iter => 5000)
 	return options
 end
@@ -47,13 +48,13 @@ tol = 1e-3
 
 		srand(1)
 
-		n = 30
+		n = 10
 		m = n
 		P = spdiagm(randn(n)) + 1. * speye(n)
 		q = randn(n)
 		A = speye(n)
-		l = -200 * ones(m)
-		u = 200 * ones(m)
+		l = -100 * ones(m)
+		u = 100 * ones(m)
 
 		# Solve problem
 		options = setup()

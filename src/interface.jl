@@ -380,7 +380,7 @@ function update_settings!(model::OSQP.Model; kwargs...)
 		if exitflag != 0 error("Error updating polish") end
 	end
 
-	if pol_refine_iter != nothing
+	if polish_refine_iter != nothing
 		exitflag = ccall((:osqp_update_polish_refine_iter, OSQP.osqp), Clong, (Ptr{OSQP.Workspace}, Clong), model.workspace, polish_refine_iter)
 		if exitflag != 0 error("Error updating polish_refine_iter") end
 	end

@@ -2,14 +2,16 @@ using OSQP
 using Base.Test
 
 
-tests = ["basic.jl", 
+tests = [
+	 "basic.jl",
 	 "dual_infeasibility.jl",
 	 "feasibility.jl",
 	 "polishing.jl",
 	 "primal_infeasibility.jl",
 	 "unconstrained.jl",
 	 "warm_start.jl",
-	 "update_matrices.jl"]
+	 "update_matrices.jl"
+	 ]
 
 println("Running tests:")
 
