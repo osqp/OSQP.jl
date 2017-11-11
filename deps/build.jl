@@ -6,7 +6,7 @@ using BinDeps
 osqp = library_dependency("osqp", aliases=["libosqp"])
 
 # Current version
-version = "0.2.0.dev8"
+version = "0.2.0.dev9"
 
 # Get current operating system 
 osqp_platform =
