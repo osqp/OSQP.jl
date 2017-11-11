@@ -1,15 +1,21 @@
 # Types defined in types.h
 # https://github.com/oxfordcontrol/osqp/blob/master/include/types.h
 
+# Integer type from C
+if Sys.WORD_SIZE == 64   # 64bit system
+	Cc_int = Clonglong
+else  # 32bit system
+	Cc_int = Cint
+end
 
 struct Ccsc
-	nzmax::Clonglong
-	m::Clonglong
-	n::Clonglong
-	p::Ptr{Clonglong}
-	i::Ptr{Clonglong}
+	nzmax::Cc_int
+	m::Cc_int
+	n::Cc_int
+	p::Ptr{Cc_int}
+	i::Ptr{Cc_int}
 	x::Ptr{Cdouble}
-	nz::Clonglong
+	nz::Cc_int
 
 
 	# Constructor from SparseMatrixCSC
@@ -22,9 +28,9 @@ struct Ccsc
 		# Get vectors of data, rows indices and column pointers
 		x = convert(Array{Float64, 1}, M.nzval)
 		# C is 0 indexed
-		i = convert(Array{Clonglong, 1}, M.rowval - 1)
+		i = convert(Array{Cc_int, 1}, M.rowval - 1)
 		# C is 0 indexed
-		p = convert(Array{Clonglong, 1}, M.colptr - 1)
+		p = convert(Array{Cc_int, 1}, M.colptr - 1)
 
 		new(length(M.nzval), m, n, pointer(p), pointer(i), pointer(x), -1)
 	end
@@ -38,15 +44,15 @@ end
 # Internal C type for info
 # N.B. This is not the one returned to the user!
 struct CInfo
-	iter::Clonglong
+	iter::Cc_int
 	# We need to allocate 32 bytes for a character string, so we allocate 256 bits
 	# of integer instead
 	# TODO: Find a better way to do this
 	# status1::Int128
 	# status2::Int128
 	status::NTuple{32, Cchar}
-	status_val::Clonglong
-	status_polish::Clonglong
+	status_val::Cc_int
+	status_polish::Cc_int
 	obj_val::Cdouble
 	pri_res::Cdouble
 	dua_res::Cdouble
@@ -54,13 +60,13 @@ struct CInfo
 	solve_time::Cdouble
 	polish_time::Cdouble
 	run_time::Cdouble
-	rho_updates::Clonglong
+	rho_updates::Cc_int
 	rho_estimate::Cdouble
 end
 
 struct Data
-	n::Clonglong
-	m::Clonglong
+	n::Cc_int
+	m::Cc_int
 	P::Ptr{Ccsc}
 	A::Ptr{Ccsc}
 	q::Ptr{Cdouble}
@@ -86,12 +92,12 @@ end
 struct Settings
 	rho::Cdouble
 	sigma::Cdouble
-	scaling::Clonglong
-	adaptive_rho::Clonglong
-	adaptive_rho_interval::Clonglong
+	scaling::Cc_int
+	adaptive_rho::Cc_int
+	adaptive_rho_interval::Cc_int
 	adaptive_rho_tolerance::Cdouble
 	adaptive_rho_fraction::Cdouble
-	max_iter::Clonglong
+	max_iter::Cc_int
 	eps_abs::Cdouble
 	eps_rel::Cdouble
 	eps_prim_inf::Cdouble
@@ -99,12 +105,12 @@ struct Settings
 	alpha::Cdouble
 	linsys_solver::Cint  # Enum type
 	delta::Cdouble
-	polish::Clonglong
-	polish_refine_iter::Clonglong
-	verbose::Clonglong
-	scaled_termination::Clonglong
-	check_termination::Clonglong
-	warm_start::Clonglong
+	polish::Cc_int
+	polish_refine_iter::Cc_int
+	verbose::Cc_int
+	scaled_termination::Cc_int
+	check_termination::Cc_int
+	warm_start::Cc_int
 end
 
 function Settings()
@@ -152,7 +158,7 @@ struct Workspace
 
 	rho_vec::Ptr{Cdouble}
 	rho_inv_vec::Ptr{Cdouble}
-	constr_type::Ptr{Clonglong}
+	constr_type::Ptr{Cc_int}
 
 	# Iterates
 	x::Ptr{Cdouble}
@@ -188,8 +194,8 @@ struct Workspace
 	info::Ptr{OSQP.CInfo}
 
 	timer::Ptr{Void}
-	first_run::Clonglong
-	summary_printed::Clonglong
+	first_run::Cc_int
+	summary_printed::Cc_int
 
 end
 
