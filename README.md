@@ -16,4 +16,4 @@ where `x in R^n` is the optimization variable. The objective function is defined
 
 
 ## Documentation
-The interface is documented [here](http://osqp.readthedocs.io/en/latest/interfaces/julia.html).
+The interface is documented [here](http://osqp.readthedocs.io/).
