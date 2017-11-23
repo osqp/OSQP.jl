@@ -15,11 +15,11 @@ import Base.Libdl: RTLD_LAZY, RTLD_DEEPBIND, RTLD_GLOBAL, dlopen
 
 
 function __init__()
-    # Get version number
-    # vnum = VersionNumber(version())
+    # Get version 
+    ver_array = split(version(), ".")
+    ver_string = string(ver_array[1], ".", ver_array[2], ".", ver_array[3])  # Get string without dev vers
+    vnum = VersionNumber(ver_string)
 
-    # Get version with dev inside (debug)
-    vnum = VersionNumber(version()[1:end-5])
 
     depsdir = realpath(joinpath(dirname(@__FILE__),"..","deps"))
     if (vnum.major != 0 && vnum.minor != 2)
