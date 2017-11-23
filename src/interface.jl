@@ -133,7 +133,7 @@ end
 function solve!(model::OSQP.Model)
 
 	# Solve problem
-	exitflag = ccall((:osqp_solve, OSQP.osqp), Clong,
+	exitflag = ccall((:osqp_solve, OSQP.osqp), Cc_int,
 			 (Ptr{OSQP.Workspace}, ),
 			 model.workspace)
 
@@ -191,7 +191,7 @@ function version()
 end
 
 function clean!(model::OSQP.Model)
-	exitflag = ccall((:osqp_cleanup, OSQP.osqp), Clong,
+	exitflag = ccall((:osqp_cleanup, OSQP.osqp), Cc_int,
 			 (Ptr{OSQP.Workspace},), model.workspace)
 	if exitflag != 0
 		error("Error in OSQP cleanup")
@@ -230,7 +230,7 @@ function update!(model::OSQP.Model; kwargs...)
 		if length(q) != n
 			error("q must have length n = $(n)")
 		end
-		exitflag = ccall((:osqp_update_lin_cost, OSQP.osqp), Clong, (Ptr{OSQP.Workspace}, Ptr{Cdouble}), model.workspace, pointer(q))
+		exitflag = ccall((:osqp_update_lin_cost, OSQP.osqp), Cc_int, (Ptr{OSQP.Workspace}, Ptr{Cdouble}), model.workspace, pointer(q))
 		if exitflag != 0 error("Error updating q") end
 	end
 
@@ -246,7 +246,7 @@ function update!(model::OSQP.Model; kwargs...)
 		l = max.(l, -OSQP_INFTY)
 
 		if u == nothing
-			exitflag = ccall((:osqp_update_lower_bound, OSQP.osqp), Clong, (Ptr{OSQP.Workspace}, Ptr{Cdouble}), model.workspace, pointer(l))
+			exitflag = ccall((:osqp_update_lower_bound, OSQP.osqp), Cc_int, (Ptr{OSQP.Workspace}, Ptr{Cdouble}), model.workspace, pointer(l))
 			if exitflag != 0 error("Error updating l") end
 		end
 	end
@@ -263,7 +263,7 @@ function update!(model::OSQP.Model; kwargs...)
 		u = min.(u, OSQP_INFTY)
 
 		if l == nothing
-			exitflag = ccall((:osqp_update_upper_bound, OSQP.osqp), Clong, (Ptr{OSQP.Workspace}, Ptr{Cdouble}), model.workspace, pointer(u))
+			exitflag = ccall((:osqp_update_upper_bound, OSQP.osqp), Cc_int, (Ptr{OSQP.Workspace}, Ptr{Cdouble}), model.workspace, pointer(u))
 			if exitflag != 0 error("Error updating u") end
 		end
 	end
@@ -271,7 +271,7 @@ function update!(model::OSQP.Model; kwargs...)
 
 	# Update bounds
 	if (l != nothing) & (u != nothing)
-		exitflag = ccall((:osqp_update_bounds, OSQP.osqp), Clong, (Ptr{OSQP.Workspace}, Ptr{Cdouble}, Ptr{Cdouble}), model.workspace, pointer(l), pointer(u))
+		exitflag = ccall((:osqp_update_bounds, OSQP.osqp), Cc_int, (Ptr{OSQP.Workspace}, Ptr{Cdouble}, Ptr{Cdouble}), model.workspace, pointer(l), pointer(u))
 		if exitflag != 0 error("Error updating bounds l and u") end
 	end
 
@@ -285,7 +285,7 @@ function update!(model::OSQP.Model; kwargs...)
 			Px_idx = pointer(Px_idx)  # Get pointer to pass to the C function
 		end
 		if Ax == nothing
-			exitflag = ccall((:osqp_update_P, OSQP.osqp), Clong, (Ptr{OSQP.Workspace}, Ptr{Cdouble}, Ptr{Clong}, Clong),
+			exitflag = ccall((:osqp_update_P, OSQP.osqp), Cc_int, (Ptr{OSQP.Workspace}, Ptr{Cdouble}, Ptr{Cc_int}, Cc_int),
 					 model.workspace, pointer(Px), Px_idx, length(Px))
 			if exitflag != 0 error("Error updating P") end
 		end
@@ -300,7 +300,7 @@ function update!(model::OSQP.Model; kwargs...)
 			Ax_idx = pointer(Ax_idx)  # Get pointer to pass to the C function
 		end
 		if Px == nothing
-			exitflag = ccall((:osqp_update_A, OSQP.osqp), Clong, (Ptr{OSQP.Workspace}, Ptr{Cdouble}, Ptr{Clong}, Clong),
+			exitflag = ccall((:osqp_update_A, OSQP.osqp), Cc_int, (Ptr{OSQP.Workspace}, Ptr{Cdouble}, Ptr{Cc_int}, Cc_int),
 					 model.workspace, pointer(Ax), Ax_idx, length(Ax))
 			if exitflag != 0 error("Error updating A") end
 		end
@@ -308,9 +308,9 @@ function update!(model::OSQP.Model; kwargs...)
 
 	# Update both matrices P and A
 	if (Px != nothing) & (Ax != nothing)
-		exitflag = ccall((:osqp_update_P_A, OSQP.osqp), Clong,
-				 (Ptr{OSQP.Workspace}, Ptr{Cdouble}, Ptr{Clong}, Clong,
-				  Ptr{Cdouble}, Ptr{Clong}, Clong),
+		exitflag = ccall((:osqp_update_P_A, OSQP.osqp), Cc_int,
+				 (Ptr{OSQP.Workspace}, Ptr{Cdouble}, Ptr{Cc_int}, Cc_int,
+				  Ptr{Cdouble}, Ptr{Cc_int}, Cc_int),
 				 model.workspace, pointer(Px), Px_idx, length(Px), pointer(Ax), Ax_idx, length(Ax))
 		if exitflag != 0 error("Error updating P and A") end
 	end
@@ -352,73 +352,73 @@ function update_settings!(model::OSQP.Model; kwargs...)
 
 	# Update individual settings
 	if max_iter != nothing
-		exitflag = ccall((:osqp_update_max_iter, OSQP.osqp), Clong, (Ptr{OSQP.Workspace}, Clong), model.workspace, max_iter)
+		exitflag = ccall((:osqp_update_max_iter, OSQP.osqp), Cc_int, (Ptr{OSQP.Workspace}, Cc_int), model.workspace, max_iter)
 		if exitflag != 0 error("Error updating max_iter") end
 	end
 
 	if eps_abs != nothing
-		exitflag = ccall((:osqp_update_eps_abs, OSQP.osqp), Clong, (Ptr{OSQP.Workspace}, Cdouble), model.workspace, eps_abs)
+		exitflag = ccall((:osqp_update_eps_abs, OSQP.osqp), Cc_int, (Ptr{OSQP.Workspace}, Cdouble), model.workspace, eps_abs)
 		if exitflag != 0 error("Error updating eps_abs") end
 	end
 
 	if eps_rel != nothing
-		exitflag = ccall((:osqp_update_eps_rel, OSQP.osqp), Clong, (Ptr{OSQP.Workspace}, Cdouble), model.workspace, eps_rel)
+		exitflag = ccall((:osqp_update_eps_rel, OSQP.osqp), Cc_int, (Ptr{OSQP.Workspace}, Cdouble), model.workspace, eps_rel)
 		if exitflag != 0 error("Error updating eps_rel") end
 	end
 
 
 	if eps_prim_inf != nothing
-		exitflag = ccall((:osqp_update_eps_prim_inf, OSQP.osqp), Clong, (Ptr{OSQP.Workspace}, Cdouble), model.workspace, eps_prim_inf)
+		exitflag = ccall((:osqp_update_eps_prim_inf, OSQP.osqp), Cc_int, (Ptr{OSQP.Workspace}, Cdouble), model.workspace, eps_prim_inf)
 		if exitflag != 0 error("Error updating eps_prim_inf") end
 	end
 
 	if eps_dual_inf != nothing
-		exitflag = ccall((:osqp_update_eps_dual_inf, OSQP.osqp), Clong, (Ptr{OSQP.Workspace}, Cdouble), model.workspace, eps_dual_inf)
+		exitflag = ccall((:osqp_update_eps_dual_inf, OSQP.osqp), Cc_int, (Ptr{OSQP.Workspace}, Cdouble), model.workspace, eps_dual_inf)
 		if exitflag != 0 error("Error updating eps_dual_inf") end
 	end
 
 	if rho != nothing
-		exitflag = ccall((:osqp_update_rho, OSQP.osqp), Clong, (Ptr{OSQP.Workspace}, Cdouble), model.workspace, rho)
+		exitflag = ccall((:osqp_update_rho, OSQP.osqp), Cc_int, (Ptr{OSQP.Workspace}, Cdouble), model.workspace, rho)
 		if exitflag != 0 error("Error updating rho") end
 	end
 
 	if alpha != nothing
-		exitflag = ccall((:osqp_update_alpha, OSQP.osqp), Clong, (Ptr{OSQP.Workspace}, Cdouble), model.workspace, alpha)
+		exitflag = ccall((:osqp_update_alpha, OSQP.osqp), Cc_int, (Ptr{OSQP.Workspace}, Cdouble), model.workspace, alpha)
 		if exitflag != 0 error("Error updating alpha") end
 	end
 
 	if delta != nothing
-		exitflag = ccall((:osqp_update_delta, OSQP.osqp), Clong, (Ptr{OSQP.Workspace}, Cdouble), model.workspace, delta)
+		exitflag = ccall((:osqp_update_delta, OSQP.osqp), Cc_int, (Ptr{OSQP.Workspace}, Cdouble), model.workspace, delta)
 		if exitflag != 0 error("Error updating delta") end
 	end
 
 	if polish != nothing
-		exitflag = ccall((:osqp_update_polish, OSQP.osqp), Clong, (Ptr{OSQP.Workspace}, Clong), model.workspace, polish)
+		exitflag = ccall((:osqp_update_polish, OSQP.osqp), Cc_int, (Ptr{OSQP.Workspace}, Cc_int), model.workspace, polish)
 		if exitflag != 0 error("Error updating polish") end
 	end
 
 	if polish_refine_iter != nothing
-		exitflag = ccall((:osqp_update_polish_refine_iter, OSQP.osqp), Clong, (Ptr{OSQP.Workspace}, Clong), model.workspace, polish_refine_iter)
+		exitflag = ccall((:osqp_update_polish_refine_iter, OSQP.osqp), Cc_int, (Ptr{OSQP.Workspace}, Cc_int), model.workspace, polish_refine_iter)
 		if exitflag != 0 error("Error updating polish_refine_iter") end
 	end
 
 	if verbose != nothing
-		exitflag = ccall((:osqp_update_verbose, OSQP.osqp), Clong, (Ptr{OSQP.Workspace}, Clong), model.workspace, verbose)
+		exitflag = ccall((:osqp_update_verbose, OSQP.osqp), Cc_int, (Ptr{OSQP.Workspace}, Cc_int), model.workspace, verbose)
 		if exitflag != 0 error("Error updating verbose") end
 	end
 
 	if scaled_termination != nothing
-		exitflag = ccall((:osqp_update_scaled_termination, OSQP.osqp), Clong, (Ptr{OSQP.Workspace}, Clong), model.workspace, scaled_termination)
+		exitflag = ccall((:osqp_update_scaled_termination, OSQP.osqp), Cc_int, (Ptr{OSQP.Workspace}, Cc_int), model.workspace, scaled_termination)
 		if exitflag != 0 error("Error updating scaled_termination") end
 	end
 
 	if check_termination != nothing
-		exitflag = ccall((:osqp_update_check_termination, OSQP.osqp), Clong, (Ptr{OSQP.Workspace}, Clong), model.workspace, check_termination)
+		exitflag = ccall((:osqp_update_check_termination, OSQP.osqp), Cc_int, (Ptr{OSQP.Workspace}, Cc_int), model.workspace, check_termination)
 		if exitflag != 0 error("Error updating check_termination") end
 	end
 
 	if warm_start != nothing
-		exitflag = ccall((:osqp_update_warm_start, OSQP.osqp), Clong, (Ptr{OSQP.Workspace}, Clong), model.workspace, warm_start)
+		exitflag = ccall((:osqp_update_warm_start, OSQP.osqp), Cc_int, (Ptr{OSQP.Workspace}, Cc_int), model.workspace, warm_start)
 		if exitflag != 0 error("Error updating warm_start") end
 	end
 
@@ -437,7 +437,7 @@ function warm_start!(model::OSQP.Model; x::Vector{Float64}=nothing, y::Vector{Fl
 		end
 
 		if y == nothing
-			exitflag = ccall((:osqp_warm_start_x, OSQP.osqp), Clong, (Ptr{OSQP.Workspace}, Ptr{Cdouble}), model.workspace, x)
+			exitflag = ccall((:osqp_warm_start_x, OSQP.osqp), Cc_int, (Ptr{OSQP.Workspace}, Ptr{Cdouble}), model.workspace, x)
 			if exitflag != 0 error("Error in warm starting x") end
 		end
 	end
@@ -449,13 +449,13 @@ function warm_start!(model::OSQP.Model; x::Vector{Float64}=nothing, y::Vector{Fl
 		end
 
 		if x == nothing
-			exitflag = ccall((:osqp_warm_start_y, OSQP.osqp), Clong, (Ptr{OSQP.Workspace}, Ptr{Cdouble}), model.workspace, y)
+			exitflag = ccall((:osqp_warm_start_y, OSQP.osqp), Cc_int, (Ptr{OSQP.Workspace}, Ptr{Cdouble}), model.workspace, y)
 			if exitflag != 0 error("Error in warm starting y") end
 		end
 	end
 
 	if (x != nothing) & (y != nothing)
-		exitflag = ccall((:osqp_warm_start, OSQP.osqp), Clong, (Ptr{OSQP.Workspace}, Ptr{Cdouble}, Ptr{Cdouble}), model.workspace, x, y)
+		exitflag = ccall((:osqp_warm_start, OSQP.osqp), Cc_int, (Ptr{OSQP.Workspace}, Ptr{Cdouble}, Ptr{Cdouble}), model.workspace, x, y)
 		if exitflag != 0 error("Error in warm starting x and y") end
 	end
 
