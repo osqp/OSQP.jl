@@ -11,7 +11,7 @@ function setup()
 	problem[:l] = -Inf * ones(length(problem[:u]))
 	problem[:n] = size(problem[:P], 1)
 	problem[:m] = size(problem[:A], 1)
-	options = Dict(:verbose => true,
+	options = Dict(:verbose => false,
 		       :eps_abs => 1e-09,
 		       :eps_rel => 1e-09,
 		       :check_termination => 1,
