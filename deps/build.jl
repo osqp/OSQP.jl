@@ -11,13 +11,13 @@ version = "0.2.1"
 # Get current operating system 
 osqp_platform =
 if is_linux()
-	"linux"
+    "linux"
 elseif is_apple()
-	"mac"
+    "mac"
 elseif is_windows()
-	"windows"
+    "windows"
 else 
-	error("Platform not supported!")
+    error("Platform not supported!")
 end
 
 
@@ -42,20 +42,20 @@ libname = "libosqp.$(Libdl.dlext)"
 
 provides(SimpleBuild,
     (@build_steps begin
-	GetSources(osqp)
-	CreateDirectory(joinpath(prefix, "lib"))
-	@build_steps begin
-	    # ChangeDirectory(srcdir)
-	    CreateDirectory(blddir)
-	    @build_steps begin
-		ChangeDirectory(blddir)
-		FileRule(joinpath(prefix, "lib", libname), @build_steps begin
-		    `cmake -G "Unix Makefiles" -DUNITTESTS=OFF ..`
-		    `make osqp`
-		    `mv out/$libname $prefix/lib`
-		end)
-	    end
-	end
+    GetSources(osqp)
+    CreateDirectory(joinpath(prefix, "lib"))
+    @build_steps begin
+        # ChangeDirectory(srcdir)
+        CreateDirectory(blddir)
+        @build_steps begin
+        ChangeDirectory(blddir)
+        FileRule(joinpath(prefix, "lib", libname), @build_steps begin
+            `cmake -G "Unix Makefiles" -DUNITTESTS=OFF ..`
+            `make osqp`
+            `mv out/$libname $prefix/lib`
+        end)
+        end
+    end
     end),
 [osqp], os = :Linux)
 

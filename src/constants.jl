@@ -25,7 +25,7 @@ UPDATABLE_DATA = [:q, :l, :u, :Px, :Px_idx, :Ax, :Ax_idx]
 
 # UPDATABLE_SETTINGS
 UPDATABLE_SETTINGS = [:max_iter, :eps_aps, :eps_rel, :eps_prim_inf, :eps_dual_inf,
-		      :rho, :alpha, :delta, :polish, :polish_refine_iter, :verbose,
-		      :check_termination,:warm_start]
+              :rho, :alpha, :delta, :polish, :polish_refine_iter, :verbose,
+              :check_termination,:warm_start]
 
 
