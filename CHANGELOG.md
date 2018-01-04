@@ -1,5 +1,6 @@
 Changes since last release
 --------------------------
+* Updated matrix updates indexing to match Julia one 
 
 Version 0.1.1 (25 November 2017): OSQP v0.2.1
 ----------------------------------------------
