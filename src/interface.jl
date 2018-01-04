@@ -219,8 +219,14 @@ function update!(model::OSQP.Model; kwargs...)
     u = get(data, :u, nothing)
     Px = get(data, :Px, nothing)
     Px_idx = get(data, :Px_idx, C_NULL)
+    if (Px_idx != C_NULL)
+        Px_idx -= 1  # Shift indexing to match C one
+    end
     Ax = get(data, :Ax, nothing)
     Ax_idx = get(data, :Ax_idx, C_NULL)
+    if (Ax_idx != C_NULL)
+        Ax_idx -= 1 # Shift indexing to match C one
+    end
 
     # Get problem dimensions
     (n, m) = OSQP.dimensions(model)

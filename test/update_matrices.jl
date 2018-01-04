@@ -109,8 +109,7 @@ tol = 1e-5
     
         # Update matrix
         Pnew_triu = triu(P_new)
-        # Note the shift in indexing! (Cherent with C)
-        Pnew_triu_idx = collect(range(1, length(Pnew_triu.nzval))) - 1
+        Pnew_triu_idx = collect(range(1, length(Pnew_triu.nzval)))
         OSQP.update!(model, Px=Pnew_triu.nzval, Px_idx=Pnew_triu_idx)
         results = OSQP.solve!(model)
         
@@ -200,8 +199,7 @@ tol = 1e-5
         OSQP.setup!(model; P=P, q=q, A=A, l=l, u=u, options...)
     
         # Update matrix
-        # Note the shift in indexing! (Cherent with C)
-        A_new_idx = collect(range(1, length(A_new.nzval))) - 1
+        A_new_idx = collect(range(1, length(A_new.nzval)))
         OSQP.update!(model, Ax=A_new.nzval, Ax_idx=A_new_idx)
         results = OSQP.solve!(model)
         
@@ -294,9 +292,8 @@ tol = 1e-5
     
         # Update matrices P and A
         P_new_triu = triu(P_new)
-        # Note the shift in indexing! (Cherent with C)
-        P_new_triu_idx = collect(range(1, length(P_new_triu.nzval))) - 1
-        A_new_idx = collect(range(1, length(A_new.nzval))) - 1
+        P_new_triu_idx = collect(range(1, length(P_new_triu.nzval)))
+        A_new_idx = collect(range(1, length(A_new.nzval)))
 
         OSQP.update!(model, Px=P_new_triu.nzval, Px_idx=P_new_triu_idx,
                  Ax=A_new.nzval, Ax_idx=A_new_idx)
@@ -345,8 +342,7 @@ tol = 1e-5
     
         # Update matrices P and A
         P_new_triu = triu(P_new)
-        # Note the shift in indexing! (Cherent with C)
-        P_new_triu_idx = collect(range(1, length(P_new_triu.nzval))) - 1
+        P_new_triu_idx = collect(range(1, length(P_new_triu.nzval)))
 
         OSQP.update!(model, Px=P_new_triu.nzval, Px_idx=P_new_triu_idx,
                  Ax=A_new.nzval)
@@ -395,8 +391,7 @@ tol = 1e-5
     
         # Update matrices P and A
         P_new_triu = triu(P_new)
-        # Note the shift in indexing! (Cherent with C)
-        A_new_idx = collect(range(1, length(A_new.nzval))) - 1
+        A_new_idx = collect(range(1, length(A_new.nzval)))
 
         OSQP.update!(model, Px=P_new_triu.nzval,
                  Ax=A_new.nzval, Ax_idx=A_new_idx)
