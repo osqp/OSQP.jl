@@ -1,7 +1,4 @@
-using OSQP, Base.Test
-
-
-function setup()
+function setup_polishing()
     options = Dict(:verbose => false,
                    :polish => true,
                    :eps_abs => 1e-03,
@@ -17,7 +14,7 @@ tol = 1e-3
 @testset "polishing" begin
 
     @testset "polishing_problem" begin
-        P = spdiagm([11.; 0.])
+        P = sparse(Diagonal([11.; 0.]))
         q = [3.; 4.]
         A = sparse([-1. 0.; 0. -1.; -1. -3; 2. 5.; 3. 4.])
         u = [0.; 0.; -15.; 100.; 80]
@@ -25,7 +22,7 @@ tol = 1e-3
         (m, n) = size(A)
 
         # Solve problem
-        options = setup()
+        options = setup_polishing()
         model = OSQP.Model()
         OSQP.setup!(model; P=P, q=q, A=A, l=l, u=u, options...)
         results = OSQP.solve!(model)
@@ -50,21 +47,21 @@ tol = 1e-3
 
         n = 10
         m = n
-        P = spdiagm(randn(n)) + 1. * speye(n)
+        P = sparse(Diagonal(randn(n)) + 1. * sparse(I, n, n))
         q = randn(n)
-        A = speye(n)
+        A = sparse(I, n, n)
         l = -100 * ones(m)
         u = 100 * ones(m)
 
         # Solve problem
-        options = setup()
+        options = setup_polishing()
         model = OSQP.Model()
         OSQP.setup!(model; P=P, q=q, A=A, l=l, u=u, options...)
         results = OSQP.solve!(model)
 
 
         # Explicit solution
-        invP = inv(full(P))
+        invP = inv(Array(P))
         x_test = - invP * q
         y_test = zeros(m)
         obj_test = - .5 * q' * invP * q
@@ -85,11 +82,11 @@ tol = 1e-3
         P = Pt * Pt'
         q = randn(n)
         A = sprandn(m, n, 0.5)
-        l = -3 + randn(m)
-        u = 3 + randn(m)
+        l = -3 .+ randn(m)
+        u = 3 .+ randn(m)
 
         # Solve problem
-        options = setup()
+        options = setup_polishing()
         model = OSQP.Model()
         OSQP.setup!(model; P=P, q=q, A=A, l=l, u=u, options...)
         results = OSQP.solve!(model)

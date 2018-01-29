@@ -1,6 +1,17 @@
 # Wrapper for the low level functions defined in https://github.com/oxfordcontrol/osqp/blob/master/include/osqp.h
 
-type Model
+# Ensure compatibility between Julia versions with @gc_preserve
+macro compat_gc_preserve(args...)
+    vars = args[1:end-1]
+    body = args[end]
+    if VERSION > v"0.7.0-"
+        return esc(Expr(:macrocall, Expr(:., :Base, Base.Meta.quot(Symbol("@gc_preserve"))), __source__, args...))
+    else
+        return esc(body)
+    end
+end
+
+mutable struct Model
     workspace::Ptr{OSQP.Workspace}
 
     """
@@ -17,7 +28,7 @@ type Model
             model = new(a)
 
             # Add finalizer
-            finalizer(model, OSQP.clean!)
+            finalizer(OSQP.clean!, model)
 
             return model
 
@@ -32,11 +43,11 @@ end
 Perform OSQP solver setup of module `module`, using the inputs `P`, `q`, `A`, `l`, `u`
 """
 function setup!(model::OSQP.Model;
-        P::Union{SparseMatrixCSC, Void}=nothing,
-        q::Union{Vector{Float64}, Void}=nothing,
-        A::Union{SparseMatrixCSC, Void}=nothing,
-        l::Union{Vector{Float64}, Void}=nothing,
-        u::Union{Vector{Float64}, Void}=nothing,
+        P::Union{SparseMatrixCSC, Nothing}=nothing,
+        q::Union{Vector{Float64}, Nothing}=nothing,
+        A::Union{SparseMatrixCSC, Nothing}=nothing,
+        l::Union{Vector{Float64}, Nothing}=nothing,
+        u::Union{Vector{Float64}, Nothing}=nothing,
         settings...)
 
     # Check problem dimensions
@@ -111,17 +122,32 @@ function setup!(model::OSQP.Model;
     # Convert lower and upper bounds from Julia infinity to OSQP infinity
     u = min.(u, OSQP_INFTY)
     l = max.(l, -OSQP_INFTY)
+    
+    # Create managed matrices to avoid segfaults (See SCS.jl)
+    managedP = OSQP.ManagedCcsc(P)
+    managedA = OSQP.ManagedCcsc(A)
+    
+    # Get managed pointers (Ref) Pdata and Adata
+    Pdata = Ref(OSQP.Ccsc(managedP))
+    Adata = Ref(OSQP.Ccsc(managedA))
 
-    # Create OSQP data
-    data = OSQP.Data(n, m, P, q, A, l, u)
+    # Create OSQP data using the managed matrices pointers
+    data = OSQP.Data(n, m, 
+                     Base.unsafe_convert(Ptr{OSQP.Ccsc}, Pdata),
+                     Base.unsafe_convert(Ptr{OSQP.Ccsc}, Adata),
+                     pointer(q), 
+                     pointer(l), pointer(u))
 
     # Create OSQP settings
     stgs = OSQP.Settings(settings)
 
     # Perform setup
-    model.workspace = ccall((:osqp_setup, OSQP.osqp),
-                Ptr{OSQP.Workspace}, (Ptr{OSQP.Data},
-                            Ptr{OSQP.Settings}), &data, &stgs)
+    @compat_gc_preserve managedP Pdata managedA Adata begin
+            model.workspace = ccall((:osqp_setup, OSQP.osqp),
+                    Ptr{OSQP.Workspace}, (Ptr{OSQP.Data},
+                                          Ptr{OSQP.Settings}),
+                    Ref(data), Ref(stgs))
+    end
 
     if model.workspace == C_NULL
         error("Error in OSQP setup")
@@ -157,13 +183,13 @@ function solve!(model::OSQP.Model)
     # y = unsafe_wrap(Array, solution.y, data.m)
 
     # Allocate solution vectors and copy solution
-    x = Array{Float64}(data.n)
-    y = Array{Float64}(data.m)
+    x = Array{Float64}(uninitialized, data.n)
+    y = Array{Float64}(uninitialized, data.m)
 
         if info.status in SOLUTION_PRESENT 
         # If solution exists, copy it
-        unsafe_copy!(pointer(x), solution.x, data.n)
-        unsafe_copy!(pointer(y), solution.y, data.m)
+        unsafe_copyto!(pointer(x), solution.x, data.n)
+        unsafe_copyto!(pointer(y), solution.y, data.m)
 
         # Return results
         return Results(x, y, info)
@@ -172,13 +198,13 @@ function solve!(model::OSQP.Model)
         x *= NaN
         y *= NaN
         if info.status == :Primal_infeasible || info.status == :Primal_infeasible_inaccurate
-            prim_inf_cert = Array{Float64}(data.m) 
-            unsafe_copy!(pointer(prim_inf_cert), workspace.delta_y, data.m)
+            prim_inf_cert = Array{Float64}(uninitialized, data.m) 
+            unsafe_copyto!(pointer(prim_inf_cert), workspace.delta_y, data.m)
             # Return results
                 return Results(x, y, info, prim_inf_cert, nothing)  
         elseif info.status == :Dual_infeasible || info.status == :Dual_infeasible_inaccurate
-            dual_inf_cert = Array{Float64}(data.n) 
-            unsafe_copy!(pointer(dual_inf_cert), workspace.delta_x, data.n)
+            dual_inf_cert = Array{Float64}(uninitialized, data.n) 
+            unsafe_copyto!(pointer(dual_inf_cert), workspace.delta_x, data.n)
             # Return results
                 return Results(x, y, info, nothing, dual_inf_cert)  
         end
@@ -220,12 +246,12 @@ function update!(model::OSQP.Model; kwargs...)
     Px = get(data, :Px, nothing)
     Px_idx = get(data, :Px_idx, C_NULL)
     if (Px_idx != C_NULL)
-        Px_idx -= 1  # Shift indexing to match C one
+        Px_idx .-= 1  # Shift indexing to match C one
     end
     Ax = get(data, :Ax, nothing)
     Ax_idx = get(data, :Ax_idx, C_NULL)
     if (Ax_idx != C_NULL)
-        Ax_idx -= 1 # Shift indexing to match C one
+        Ax_idx .-= 1 # Shift indexing to match C one
     end
 
     # Get problem dimensions

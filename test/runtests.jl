@@ -1,5 +1,6 @@
-using OSQP
-using Base.Test
+using OSQP, SparseArrays
+using Test
+using Random
 
 
 tests = [

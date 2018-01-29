@@ -16,10 +16,20 @@ struct Ccsc
     i::Ptr{Cc_int}
     x::Ptr{Cdouble}
     nz::Cc_int
+end
 
 
-    # Constructor from SparseMatrixCSC
-    function Ccsc(M::SparseMatrixCSC)
+struct ManagedCcsc
+    nzmax::Cc_int
+    m::Cc_int
+    n::Cc_int
+    p::Vector{Cc_int}
+    i::Vector{Cc_int}
+    x::Vector{Cdouble}
+    nz::Cc_int
+
+    # Construct ManagedCcsc matrix from SparseMatrixCSC
+    function ManagedCcsc(M::SparseMatrixCSC)
 
         # Get dimensions
         m = M.m
@@ -28,13 +38,22 @@ struct Ccsc
         # Get vectors of data, rows indices and column pointers
         x = convert(Array{Float64, 1}, M.nzval)
         # C is 0 indexed
-        i = convert(Array{Cc_int, 1}, M.rowval - 1)
+        i = convert(Array{Cc_int, 1}, M.rowval .- 1)
         # C is 0 indexed
-        p = convert(Array{Cc_int, 1}, M.colptr - 1)
-
-        new(length(M.nzval), m, n, pointer(p), pointer(i), pointer(x), -1)
+        p = convert(Array{Cc_int, 1}, M.colptr .- 1)
+        
+        # Create new ManagedCcsc matrix
+        new(length(M.nzval), m, n, p, i, x, -1)
     end
 end
+
+
+# Returns an Ccsc matrix. The vectors are *not* GC tracked in the struct.
+# Use this only when you know that the managed matrix will outlive the Ccsc
+# matrix.
+Ccsc(m::ManagedCcsc) =
+    Ccsc(m.nzmax, m.m, m.n, pointer(m.p), pointer(m.i), pointer(m.x), m.nz)
+
 
 struct Solution
     x::Ptr{Cdouble}
@@ -48,8 +67,6 @@ struct CInfo
     # We need to allocate 32 bytes for a character string, so we allocate 256 bits
     # of integer instead
     # TODO: Find a better way to do this
-    # status1::Int128
-    # status2::Int128
     status::NTuple{32, Cchar}
     status_val::Cc_int
     status_polish::Cc_int
@@ -72,20 +89,6 @@ struct Data
     q::Ptr{Cdouble}
     l::Ptr{Cdouble}
     u::Ptr{Cdouble}
-
-    function Data(n::Int,
-              m::Int,
-              P::SparseMatrixCSC,
-              q::Vector{Float64},
-              A::SparseMatrixCSC,
-              l::Vector{Float64},
-              u::Vector{Float64})
-
-        Pcsc = OSQP.Ccsc(P)
-        Acsc = OSQP.Ccsc(A)
-        new(n, m, pointer([Pcsc]), pointer([Acsc]),
-            pointer(q), pointer(l), pointer(u))
-    end
 end
 
 
@@ -115,13 +118,12 @@ end
 
 function Settings()
     s = Ref{OSQP.Settings}()
-    ccall((:set_default_settings, OSQP.osqp), Void,
+    ccall((:set_default_settings, OSQP.osqp), Nothing,
           (Ref{OSQP.Settings},), s)
     return s[]
 end
 
-# function Settings(settings_dict::Dict{Symbol, Any})
-function Settings(settings::Array{Any, 1})
+function Settings(settings::Base.Iterators.IndexValue)
     default_settings = OSQP.Settings()
 
     settings_dict = Dict{Symbol, Any}()
@@ -141,7 +143,7 @@ function Settings(settings::Array{Any, 1})
     settings_list = [setting in keys(settings_dict) ?
              convert(fieldtype(typeof(default_settings), setting), settings_dict[setting]) :
              getfield(default_settings, setting)
-             for setting in fieldnames(default_settings)]
+             for setting in fieldnames(typeof(default_settings))]
 
     # Create new settings with new dictionary
     s = OSQP.Settings(settings_list...)
@@ -153,8 +155,8 @@ end
 
 struct Workspace
     data::Ptr{OSQP.Data}
-    linsys_solver::Ptr{Void}
-    pol::Ptr{Void}
+    linsys_solver::Ptr{Nothing}
+    pol::Ptr{Nothing}
 
     rho_vec::Ptr{Cdouble}
     rho_inv_vec::Ptr{Cdouble}
@@ -189,11 +191,11 @@ struct Workspace
     E_temp::Ptr{Cdouble}
 
     settings::Ptr{OSQP.Settings}
-    scaling::Ptr{Void}
+    scaling::Ptr{Nothing}
     solution::Ptr{OSQP.Solution}
     info::Ptr{OSQP.CInfo}
 
-    timer::Ptr{Void}
+    timer::Ptr{Nothing}
     first_run::Cc_int
     summary_printed::Cc_int
 
@@ -237,8 +239,8 @@ struct Results
     x::Vector{Float64}
     y::Vector{Float64}
     info::OSQP.Info
-    prim_inf_cert::Union{Vector{Float64}, Void}
-    dual_inf_cert::Union{Vector{Float64}, Void}
+    prim_inf_cert::Union{Vector{Float64}, Nothing}
+    dual_inf_cert::Union{Vector{Float64}, Nothing}
 
 end
 Results(x, y, info) = Results(x, y, info, nothing, nothing) 

@@ -1,7 +1,4 @@
-using OSQP, Base.Test
-
-
-function setup()
+function setup_warm_start()
     options = Dict(:verbose => false,
                    :eps_abs => 1e-08,
                    :eps_rel => 1e-08,
@@ -30,7 +27,7 @@ tol = 1e-5
 
 
 
-        options = setup()
+        options = setup_warm_start()
 
         model = OSQP.Model()
         OSQP.setup!(model; P=P, q=q, A=A, l=l, u=u, options...)
