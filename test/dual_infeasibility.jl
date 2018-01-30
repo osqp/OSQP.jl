@@ -1,7 +1,4 @@
-using OSQP, Base.Test
-
-
-function setup()
+function setup_dual_infeasibility()
         options = Dict(:verbose => false,
                        :eps_abs => 1e-05,
                        :eps_rel => 1e-05,
@@ -18,10 +15,10 @@ tol = 1e-5
     @testset "dual_infeasible_lp" begin
         P = spzeros(2, 2) 
         q = [2.; -1.] 
-        A = speye(2) 
+        A = sparse(I, 2, 2)
         u = Inf * ones(2) 
         l = [0.; 0.] 
-        options = setup()
+        options = setup_dual_infeasibility()
 
         model = OSQP.Model()
         OSQP.setup!(model; P=P, q=q, A=A, l=l, u=u, options...)
@@ -32,12 +29,12 @@ tol = 1e-5
     end
 
     @testset "dual_infeasible_qp" begin
-        P = spdiagm([4.; 0.]) 
+        P = sparse(Diagonal([4.; 0.]))
         q = [0.; 2] 
         A = sparse([1. 1.; -1. 1]) 
         u = [2.; 3] 
         l = -Inf * ones(2) 
-        options = setup()
+        options = setup_dual_infeasibility()
 
         model = OSQP.Model()
         OSQP.setup!(model; P=P, q=q, A=A, l=l, u=u, options...)
@@ -53,7 +50,7 @@ tol = 1e-5
         A = sparse([1. -1.; -1. 1; 1. 0; 0. 1]) 
         u = Inf * ones(4) 
         l = [1., 1., 0., 0.] 
-        options = setup()
+        options = setup_dual_infeasibility()
 
         model = OSQP.Model()
         OSQP.setup!(model; P=P, q=q, A=A, l=l, u=u, options...)

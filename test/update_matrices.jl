@@ -1,7 +1,4 @@
-using OSQP, Base.Test
-
-
-function setup()
+function setup_update_matrices()
     options = Dict(:verbose => false,
                    :eps_abs => 1e-08,
                    :eps_rel => 1e-08,
@@ -15,16 +12,16 @@ function setup()
     p = 0.7
     Pt = sprandn(n, n, p)
     Pt_new = copy(Pt)
-    P = Pt * Pt' + speye(n)
-    (Pti, Ptj) = findn(Pt)
+    P = Pt * Pt' + sparse(I, n, n)
+    #  PtI = findall(!iszero, P)
+    #  (Pti, Ptj) = (getindex.(PtI, 1), getindex.(PtI, 2))
     Ptx = copy(Pt.nzval)
     
     Pt_newx = Ptx + 0.1 * randn(length(Ptx))
     # Pt_new = sparse(Pi, Pj, Pt_newx)
-    P_new = Pt_new * Pt_new' + speye(n)
+    P_new = Pt_new * Pt_new' + sparse(I, n, n)
     q = randn(n)
     A = sprandn(m, n, p)
-
 
     (Ai, Aj) = findn(A)
     Ax = copy(A.nzval)
@@ -34,7 +31,7 @@ function setup()
     # A_new = copy(A)
     # A_new.nzval += randn(length(A_new.nzval))
     l = zeros(m)
-    u = 30 + randn(m)
+    u = 30 .+ randn(m)
 
     
     problem = Dict()
@@ -55,7 +52,7 @@ tol = 1e-5
 @testset "update_matrices" begin
 
     @testset "solve" begin
-        problem, options = setup()
+        problem, options = setup_update_matrices()
         
         (n, m, P, q, A, l, u) = (problem[:n], problem[:m], problem[:P], problem[:q], problem[:A], problem[:l], problem[:u])
 
@@ -98,7 +95,7 @@ tol = 1e-5
 
         @testset "update_P" begin
         
-        problem, options = setup()
+        problem, options = setup_update_matrices()
         
         (n, m, P, q, A, l, u) = (problem[:n], problem[:m], 
                      problem[:P], problem[:q], problem[:A], problem[:l], problem[:u])
@@ -144,7 +141,7 @@ tol = 1e-5
 
         @testset "update_P_allind" begin
         
-        problem, options = setup()
+        problem, options = setup_update_matrices()
         
         (n, m, P, q, A, l, u) = (problem[:n], problem[:m], 
                      problem[:P], problem[:q], problem[:A], problem[:l], problem[:u])
@@ -189,7 +186,7 @@ tol = 1e-5
 
         @testset "update_A" begin
         
-        problem, options = setup()
+        problem, options = setup_update_matrices()
         
         (n, m, P, q, A, l, u) = (problem[:n], problem[:m], 
                      problem[:P], problem[:q], problem[:A], problem[:l], problem[:u])
@@ -235,7 +232,7 @@ tol = 1e-5
 
     @testset "update_A_allind" begin
         
-        problem, options = setup()
+        problem, options = setup_update_matrices()
         
         (n, m, P, q, A, l, u) = (problem[:n], problem[:m], 
                      problem[:P], problem[:q], problem[:A], problem[:l], problem[:u])
@@ -280,7 +277,7 @@ tol = 1e-5
 
         @testset "update_P_A_indP_indA" begin
         
-        problem, options = setup()
+        problem, options = setup_update_matrices()
         
         (n, m, P, q, A, l, u) = (problem[:n], problem[:m], 
                      problem[:P], problem[:q], problem[:A], problem[:l], problem[:u])
@@ -330,7 +327,7 @@ tol = 1e-5
 
         @testset "update_P_A_indP" begin
         
-        problem, options = setup()
+        problem, options = setup_update_matrices()
         
         (n, m, P, q, A, l, u) = (problem[:n], problem[:m], 
                      problem[:P], problem[:q], problem[:A], problem[:l], problem[:u])
@@ -379,7 +376,7 @@ tol = 1e-5
 
         @testset "update_P_A_indA" begin
         
-        problem, options = setup()
+        problem, options = setup_update_matrices()
         
         (n, m, P, q, A, l, u) = (problem[:n], problem[:m], 
                      problem[:P], problem[:q], problem[:A], problem[:l], problem[:u])
@@ -428,7 +425,7 @@ tol = 1e-5
 
         @testset "update_P_A_allind" begin
         
-        problem, options = setup()
+        problem, options = setup_update_matrices()
         
         (n, m, P, q, A, l, u) = (problem[:n], problem[:m], 
                      problem[:P], problem[:q], problem[:A], problem[:l], problem[:u])

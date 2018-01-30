@@ -1,7 +1,4 @@
-using OSQP, Base.Test
-
-
-function setup()
+function setup_primal_infeasibility()
     options = Dict(:verbose => false,
                    :eps_abs => 1e-05,
                    :eps_rel => 1e-05,
@@ -24,8 +21,8 @@ tol = 1e-5
         P = P' * P
         q = randn(n) 
         A = sprandn(m, n, 0.6) 
-        u = 3 + randn(m)
-        l = -3 + randn(m)
+        u = 3 .+ randn(m)
+        l = -3 .+ randn(m)
 
         # Make problem infeasible
         A[Int(n/2), :] = A[Int(n/2) + 1, :]
@@ -33,7 +30,7 @@ tol = 1e-5
         u[Int(n/2)] = l[Int(n/2)] + 0.5
 
 
-        options = setup()
+        options = setup_primal_infeasibility()
 
         model = OSQP.Model()
         OSQP.setup!(model; P=P, q=q, A=A, l=l, u=u, options...)
@@ -54,7 +51,7 @@ tol = 1e-5
         l = [1., 1., 0., 0.]
         u = Inf * ones(m)
 
-        options = setup()
+        options = setup_primal_infeasibility()
 
         model = OSQP.Model()
         OSQP.setup!(model; P=P, q=q, A=A, l=l, u=u, options...)

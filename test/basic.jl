@@ -1,7 +1,4 @@
-using OSQP, Base.Test
-
-
-function setup()
+function setup_basic()
     # Simple QP problem
     problem = Dict()
     problem[:P] = sparse([11. 0.; 0. 0.])
@@ -29,7 +26,7 @@ tol = 1e-5
 @testset "basic" begin
 
     @testset "basic_QP" begin
-        problem, options = setup()
+        problem, options = setup_basic()
 
         model = OSQP.Model()
         OSQP.setup!(model; P=problem[:P], q=problem[:q],
@@ -44,7 +41,7 @@ tol = 1e-5
 
 
     @testset "update_q" begin
-        problem, options = setup()
+        problem, options = setup_basic()
 
         model = OSQP.Model()
         OSQP.setup!(model; P=problem[:P], q=problem[:q],
@@ -60,7 +57,7 @@ tol = 1e-5
     end
 
     @testset "update_l" begin
-        problem, options = setup()
+        problem, options = setup_basic()
 
         model = OSQP.Model()
         OSQP.setup!(model; P=problem[:P], q=problem[:q],
@@ -76,7 +73,7 @@ tol = 1e-5
     end
 
     @testset "update_u" begin
-        problem, options = setup()
+        problem, options = setup_basic()
 
         model = OSQP.Model()
         OSQP.setup!(model; P=problem[:P], q=problem[:q],
@@ -93,7 +90,7 @@ tol = 1e-5
 
 
     @testset "update_max_iter" begin
-        problem, options = setup()
+        problem, options = setup_basic()
 
         model = OSQP.Model()
         OSQP.setup!(model; P=problem[:P], q=problem[:q],
@@ -106,7 +103,7 @@ tol = 1e-5
     end
 
     @testset "update_check_termination" begin
-        problem, options = setup()
+        problem, options = setup_basic()
 
         model = OSQP.Model()
         OSQP.setup!(model; P=problem[:P], q=problem[:q],
@@ -120,7 +117,7 @@ tol = 1e-5
 
 
     @testset "update_rho" begin
-        problem, options = setup()
+        problem, options = setup_basic()
 
         # Setup default problem
         model = OSQP.Model()

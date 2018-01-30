@@ -1,7 +1,4 @@
-using OSQP, Base.Test
-
-
-function setup()
+function setup_unconstrained()
     options = Dict(:verbose => false,
                    :eps_abs => 1e-08,
                    :eps_rel => 1e-08,
@@ -19,7 +16,7 @@ tol = 1e-5
 
         n = 30
         m = 0
-        P = spdiagm(rand(n)) + 0.2 * speye(n)
+        P = sparse(Diagonal(rand(n)) + 0.2 * sparse(I, n, n))
         q = randn(n)
         A = spzeros(m, n)
         u = Float64[]
@@ -27,12 +24,12 @@ tol = 1e-5
 
 
         # Explicit solution
-        invP = inv(full(P))
+        invP = inv(Array(P))
         x_test = - invP * q
         y_test = zeros(m)
         obj_test = - .5 * q' * invP * q
 
-        options = setup()
+        options = setup_unconstrained()
 
         model = OSQP.Model()
         OSQP.setup!(model; P=P, q=q, A=A, l=l, u=u, options...)

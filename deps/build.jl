@@ -1,5 +1,8 @@
 using BinDeps
 
+# Libdl has been moved to a standard library module
+using Compat.Libdl
+
 @BinDeps.setup
 
 # Add library dependency for direct method
@@ -10,11 +13,11 @@ version = "0.2.1"
 
 # Get current operating system 
 osqp_platform =
-if is_linux()
+if Sys.is_linux()
     "linux"
-elseif is_apple()
+elseif Sys.is_apple()
     "mac"
-elseif is_windows()
+elseif Sys.is_windows()
     "windows"
 else 
     error("Platform not supported!")
@@ -37,7 +40,7 @@ srcdir = joinpath(BinDeps.depsdir(osqp),"src","osqp-$version")
 blddir = joinpath(srcdir, "build")
 
 # Define library name
-libname = "libosqp.$(Libdl.dlext)"
+libname = "libosqp.$(dlext)"
 
 
 provides(SimpleBuild,

@@ -1,7 +1,4 @@
-using OSQP, Base.Test
-
-
-function setup()
+function setup_feasibility()
     options = Dict(:verbose => false,
                    :eps_abs => 1e-06,
                    :eps_rel => 1e-06,
@@ -22,7 +19,7 @@ tol = 1e-3
         A = sprandn(m, n, 0.8) 
         u = randn(m) 
         l = u 
-        options = setup()
+        options = setup_feasibility()
 
         model = OSQP.Model()
         OSQP.setup!(model; P=P, q=q, A=A, l=l, u=u, options...)
