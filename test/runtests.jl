@@ -1,6 +1,6 @@
 using OSQP
-using Test
-using Random, LinearAlgebra, SparseArrays
+using Compat
+using Compat.Test, Compat.SparseArrays, Compat.LinearAlgebra, Compat.Random
 
 
 tests = [

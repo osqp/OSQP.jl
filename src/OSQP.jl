@@ -2,8 +2,13 @@ __precompile__()
 
 module OSQP
 
-# Sparse library modules have been moved to a standard library module
-using SparseArrays
+# Compatibility stuff
+using Compat
+using Compat.SparseArrays
+using Compat.Iterators
+
+
+
 
 if isfile(joinpath(dirname(@__FILE__),"..","deps","deps.jl"))
     include("../deps/deps.jl")

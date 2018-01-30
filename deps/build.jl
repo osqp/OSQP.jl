@@ -1,7 +1,7 @@
 using BinDeps
 
 # Libdl has been moved to a standard library module
-using Libdl
+using Compat.Libdl
 
 @BinDeps.setup
 

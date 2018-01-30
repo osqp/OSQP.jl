@@ -28,25 +28,25 @@ struct ManagedCcsc
     x::Vector{Cdouble}
     nz::Cc_int
 
-    # Construct ManagedCcsc matrix from SparseMatrixCSC
-    function ManagedCcsc(M::SparseMatrixCSC)
-
-        # Get dimensions
-        m = M.m
-        n = M.n
-
-        # Get vectors of data, rows indices and column pointers
-        x = convert(Array{Float64, 1}, M.nzval)
-        # C is 0 indexed
-        i = convert(Array{Cc_int, 1}, M.rowval .- 1)
-        # C is 0 indexed
-        p = convert(Array{Cc_int, 1}, M.colptr .- 1)
-        
-        # Create new ManagedCcsc matrix
-        new(length(M.nzval), m, n, p, i, x, -1)
-    end
 end
 
+# Construct ManagedCcsc matrix from SparseMatrixCSC
+function ManagedCcsc(M::SparseMatrixCSC)
+
+    # Get dimensions
+    m = M.m
+    n = M.n
+
+    # Get vectors of data, rows indices and column pointers
+    x = convert(Array{Float64, 1}, M.nzval)
+    # C is 0 indexed
+    i = convert(Array{Cc_int, 1}, M.rowval .- 1)
+    # C is 0 indexed
+    p = convert(Array{Cc_int, 1}, M.colptr .- 1)
+    
+    # Create new ManagedCcsc matrix
+    ManagedCcsc(length(M.nzval), m, n, p, i, x, -1)
+end
 
 # Returns an Ccsc matrix. The vectors are *not* GC tracked in the struct.
 # Use this only when you know that the managed matrix will outlive the Ccsc
@@ -123,15 +123,11 @@ function Settings()
     return s[]
 end
 
-function Settings(settings::Base.Iterators.IndexValue)
+function Settings(settings_dict::Dict{Symbol, Any})
+#  function Settings(settings::Base.Iterators.IndexValue)
+#  function Settings(settings::Array{Any, 1})
     default_settings = OSQP.Settings()
 
-    settings_dict = Dict{Symbol, Any}()
-    if !isempty(settings)
-        for (key, value) in settings
-            settings_dict[key] = value
-        end
-    end
 
        # Convert linsys_solver string to number
        linsys_solver_str_to_int!(settings_dict)

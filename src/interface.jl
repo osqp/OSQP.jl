@@ -28,7 +28,7 @@ mutable struct Model
             model = new(a)
 
             # Add finalizer
-            finalizer(OSQP.clean!, model)
+            @compat finalizer(OSQP.clean!, model)
 
             return model
 
@@ -139,7 +139,14 @@ function setup!(model::OSQP.Model;
                      pointer(l), pointer(u))
 
     # Create OSQP settings
-    stgs = OSQP.Settings(settings)
+    settings_dict = Dict{Symbol, Any}()
+    if !isempty(settings)
+        for (key, value) in settings
+            settings_dict[key] = value
+        end
+    end
+
+    stgs = OSQP.Settings(settings_dict)
 
     # Perform setup
     @compat_gc_preserve managedP Pdata managedA Adata begin
@@ -246,12 +253,12 @@ function update!(model::OSQP.Model; kwargs...)
     Px = get(data, :Px, nothing)
     Px_idx = get(data, :Px_idx, C_NULL)
     if (Px_idx != C_NULL)
-        Px_idx .-= 1  # Shift indexing to match C one
+        Px_idx = Px_idx .- 1  # Shift indexing to match C one
     end
     Ax = get(data, :Ax, nothing)
     Ax_idx = get(data, :Ax_idx, C_NULL)
     if (Ax_idx != C_NULL)
-        Ax_idx .-= 1 # Shift indexing to match C one
+        Ax_idx = Ax_idx .- 1 # Shift indexing to match C one
     end
 
     # Get problem dimensions
