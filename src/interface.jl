@@ -149,7 +149,7 @@ function setup!(model::OSQP.Model;
     stgs = OSQP.Settings(settings_dict)
 
     # Perform setup
-    @compat_gc_preserve managedP Pdata managedA Adata begin
+    @compat_gc_preserve managedP Pdata managedA Adata q l u begin
             model.workspace = ccall((:osqp_setup, OSQP.osqp),
                     Ptr{OSQP.Workspace}, (Ptr{OSQP.Data},
                                           Ptr{OSQP.Settings}),
