@@ -1,6 +1,6 @@
-using OSQP, SparseArrays
+using OSQP
 using Test
-using Random
+using Random, LinearAlgebra, SparseArrays
 
 
 tests = [
