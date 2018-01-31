@@ -216,6 +216,7 @@ function solve!(model::OSQP.Model)
                 return Results(x, y, info, nothing, dual_inf_cert)  
         end
     end
+    error() # fixes #4
 end
 
 
