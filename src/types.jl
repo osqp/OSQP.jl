@@ -38,12 +38,12 @@ function ManagedCcsc(M::SparseMatrixCSC)
     n = M.n
 
     # Get vectors of data, rows indices and column pointers
-    x = convert(Array{Float64, 1}, M.nzval)
+    x = convert(Array{Float64,1}, M.nzval)
     # C is 0 indexed
-    i = convert(Array{Cc_int, 1}, M.rowval .- 1)
+    i = convert(Array{Cc_int,1}, M.rowval .- 1)
     # C is 0 indexed
-    p = convert(Array{Cc_int, 1}, M.colptr .- 1)
-    
+    p = convert(Array{Cc_int,1}, M.colptr .- 1)
+
     # Create new ManagedCcsc matrix
     ManagedCcsc(length(M.nzval), m, n, p, i, x, -1)
 end
@@ -67,7 +67,7 @@ struct CInfo
     # We need to allocate 32 bytes for a character string, so we allocate 256 bits
     # of integer instead
     # TODO: Find a better way to do this
-    status::NTuple{32, Cchar}
+    status::NTuple{32,Cchar}
     status_val::Cc_int
     status_polish::Cc_int
     obj_val::Cdouble
@@ -123,17 +123,17 @@ function Settings()
     return s[]
 end
 
-function Settings(settings_dict::Dict{Symbol, Any})
+function Settings(settings_dict::Dict{Symbol,Any})
 #  function Settings(settings::Base.Iterators.IndexValue)
 #  function Settings(settings::Array{Any, 1})
     default_settings = OSQP.Settings()
 
 
        # Convert linsys_solver string to number
-       linsys_solver_str_to_int!(settings_dict)
+    linsys_solver_str_to_int!(settings_dict)
 
     # Get list with elements of default and user settings
-    # If setting is in the passed settings (settings_dict), 
+    # If setting is in the passed settings (settings_dict),
     # then convert type to the right type. Otherwise just take
     # the default one
     settings_list = [setting in keys(settings_dict) ?
@@ -235,11 +235,11 @@ struct Results
     x::Vector{Float64}
     y::Vector{Float64}
     info::OSQP.Info
-    prim_inf_cert::Union{Vector{Float64}, Nothing}
-    dual_inf_cert::Union{Vector{Float64}, Nothing}
+    prim_inf_cert::Union{Vector{Float64},Nothing}
+    dual_inf_cert::Union{Vector{Float64},Nothing}
 
 end
-Results(x, y, info) = Results(x, y, info, nothing, nothing) 
+Results(x, y, info) = Results(x, y, info, nothing, nothing)
 
 
 
