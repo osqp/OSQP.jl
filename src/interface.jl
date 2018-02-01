@@ -38,9 +38,9 @@ mutable struct Model
 end
 
 """
-    setup!(module, P, a, A, l, u, settings)
+    setup!(model; P, q, A, l, u, settings)
 
-Perform OSQP solver setup of module `module`, using the inputs `P`, `q`, `A`, `l`, `u`
+Perform OSQP solver setup of model `model`, using the inputs `P`, `q`, `A`, `l`, `u`.
 """
 function setup!(model::OSQP.Model;
         P::Union{SparseMatrixCSC,Nothing} = nothing,
