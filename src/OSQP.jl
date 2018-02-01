@@ -2,6 +2,8 @@ __precompile__()
 
 module OSQP
 
+export OSQPSolver
+
 # Compatibility stuff
 using Compat
 using Compat.SparseArrays
@@ -34,5 +36,8 @@ end
 include("constants.jl")
 include("types.jl")
 include("interface.jl")
+include("OSQPSolverInterface.jl")
+
+import .OSQPSolverInterface: OSQPSolver
 
 end # module
