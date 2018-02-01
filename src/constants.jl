@@ -1,13 +1,12 @@
-const SUITESPARSE_LDL_SOLVER=0
-const MKL_PARDISO_SOLVER=1
+const SUITESPARSE_LDL_SOLVER = 0
+const MKL_PARDISO_SOLVER = 1
 
 # Define OSQP infinity constants
 const OSQP_INFTY = 1e20
 
 # OSQP return values
 # https://github.com/oxfordcontrol/osqp/blob/master/include/constants.h
-const status_map = Dict{Int, Symbol}(
-    4 => :Dual_infeasible_inaccurate,
+const status_map = Dict{Int,Symbol}(4 => :Dual_infeasible_inaccurate,
     3 => :Primal_infeasible_inaccurate,
     2 => :Solved_inaccurate,
     1 => :Solved,
@@ -15,8 +14,7 @@ const status_map = Dict{Int, Symbol}(
     -3 => :Primal_infeasible,
     -4 => :Dual_infeasible,
     -5 => :Interrupted,
-    -10 => :Unsolved
-)
+    -10 => :Unsolved)
 
 const SOLUTION_PRESENT = [:Solved_inaccurate, :Solved, :Max_iter_reached]
 

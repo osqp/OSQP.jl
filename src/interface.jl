@@ -2,7 +2,7 @@
 
 # Ensure compatibility between Julia versions with @gc_preserve
 macro compat_gc_preserve(args...)
-    vars = args[1:end-1]
+    vars = args[1:end - 1]
     body = args[end]
     if VERSION > v"0.7.0-"
         return esc(Expr(:macrocall, Expr(:., :Base, Base.Meta.quot(Symbol("@gc_preserve"))), __source__, args...))
@@ -22,15 +22,15 @@ mutable struct Model
     function Model()
             # TODO: Change me to more elegant way
             # a = Array{Ptr{OSQP.Workspace}}(1)[1]
-            a = C_NULL
+        a = C_NULL
 
             # Create new model
-            model = new(a)
+        model = new(a)
 
             # Add finalizer
-            @compat finalizer(OSQP.clean!, model)
+        @compat finalizer(OSQP.clean!, model)
 
-            return model
+        return model
 
     end
 
@@ -43,11 +43,11 @@ end
 Perform OSQP solver setup of module `module`, using the inputs `P`, `q`, `A`, `l`, `u`
 """
 function setup!(model::OSQP.Model;
-        P::Union{SparseMatrixCSC, Nothing}=nothing,
-        q::Union{Vector{Float64}, Nothing}=nothing,
-        A::Union{SparseMatrixCSC, Nothing}=nothing,
-        l::Union{Vector{Float64}, Nothing}=nothing,
-        u::Union{Vector{Float64}, Nothing}=nothing,
+        P::Union{SparseMatrixCSC,Nothing} = nothing,
+        q::Union{Vector{Float64},Nothing} = nothing,
+        A::Union{SparseMatrixCSC,Nothing} = nothing,
+        l::Union{Vector{Float64},Nothing} = nothing,
+        u::Union{Vector{Float64},Nothing} = nothing,
         settings...)
 
     # Check problem dimensions
@@ -78,7 +78,7 @@ function setup!(model::OSQP.Model;
     end
 
     if (A != nothing) & (l == nothing)
-        l = - Inf * ones(m)
+        l = -Inf * ones(m)
     end
     if (A != nothing) & (u == nothing)
         u = Inf * ones(m)
@@ -122,24 +122,24 @@ function setup!(model::OSQP.Model;
     # Convert lower and upper bounds from Julia infinity to OSQP infinity
     u = min.(u, OSQP_INFTY)
     l = max.(l, -OSQP_INFTY)
-    
+
     # Create managed matrices to avoid segfaults (See SCS.jl)
     managedP = OSQP.ManagedCcsc(P)
     managedA = OSQP.ManagedCcsc(A)
-    
+
     # Get managed pointers (Ref) Pdata and Adata
     Pdata = Ref(OSQP.Ccsc(managedP))
     Adata = Ref(OSQP.Ccsc(managedA))
 
     # Create OSQP data using the managed matrices pointers
-    data = OSQP.Data(n, m, 
+    data = OSQP.Data(n, m,
                      Base.unsafe_convert(Ptr{OSQP.Ccsc}, Pdata),
                      Base.unsafe_convert(Ptr{OSQP.Ccsc}, Adata),
-                     pointer(q), 
+                     pointer(q),
                      pointer(l), pointer(u))
 
     # Create OSQP settings
-    settings_dict = Dict{Symbol, Any}()
+    settings_dict = Dict{Symbol,Any}()
     if !isempty(settings)
         for (key, value) in settings
             settings_dict[key] = value
@@ -150,7 +150,7 @@ function setup!(model::OSQP.Model;
 
     # Perform setup
     @compat_gc_preserve managedP Pdata managedA Adata q l u begin
-            model.workspace = ccall((:osqp_setup, OSQP.osqp),
+        model.workspace = ccall((:osqp_setup, OSQP.osqp),
                     Ptr{OSQP.Workspace}, (Ptr{OSQP.Data},
                                           Ptr{OSQP.Settings}),
                     Ref(data), Ref(stgs))
@@ -180,7 +180,7 @@ function solve!(model::OSQP.Model)
     data = unsafe_load(workspace.data)
 
     # Recover Cinfo structure
-        cinfo = unsafe_load(workspace.info)
+    cinfo = unsafe_load(workspace.info)
 
     # Construct C structure
     info = OSQP.Info(cinfo)
@@ -193,7 +193,7 @@ function solve!(model::OSQP.Model)
     x = Array{Float64}(uninitialized, data.n)
     y = Array{Float64}(uninitialized, data.m)
 
-        if info.status in SOLUTION_PRESENT 
+    if info.status in SOLUTION_PRESENT
         # If solution exists, copy it
         unsafe_copyto!(pointer(x), solution.x, data.n)
         unsafe_copyto!(pointer(y), solution.y, data.m)
@@ -205,15 +205,15 @@ function solve!(model::OSQP.Model)
         x *= NaN
         y *= NaN
         if info.status == :Primal_infeasible || info.status == :Primal_infeasible_inaccurate
-            prim_inf_cert = Array{Float64}(uninitialized, data.m) 
+            prim_inf_cert = Array{Float64}(uninitialized, data.m)
             unsafe_copyto!(pointer(prim_inf_cert), workspace.delta_y, data.m)
             # Return results
-                return Results(x, y, info, prim_inf_cert, nothing)  
+            return Results(x, y, info, prim_inf_cert, nothing)
         elseif info.status == :Dual_infeasible || info.status == :Dual_infeasible_inaccurate
-            dual_inf_cert = Array{Float64}(uninitialized, data.n) 
+            dual_inf_cert = Array{Float64}(uninitialized, data.n)
             unsafe_copyto!(pointer(dual_inf_cert), workspace.delta_x, data.n)
             # Return results
-                return Results(x, y, info, nothing, dual_inf_cert)  
+            return Results(x, y, info, nothing, dual_inf_cert)
         end
     end
     error() # fixes #4
@@ -237,7 +237,7 @@ function update!(model::OSQP.Model; kwargs...)
     if isempty(kwargs)
         return
     else
-        data = Dict{Symbol, Any}()
+        data = Dict{Symbol,Any}()
         for (key, value) in kwargs
             if !(key in UPDATABLE_DATA)
                 error("$(key) field cannot be updated or is not recognized")
@@ -364,7 +364,7 @@ function update_settings!(model::OSQP.Model; kwargs...)
     if isempty(kwargs)
         return
     else
-        data = Dict{Symbol, Any}()
+        data = Dict{Symbol,Any}()
         for (key, value) in kwargs
             if !(key in UPDATABLE_SETTINGS)
                 error("$(key) cannot be updated or is not recognized")
@@ -467,7 +467,7 @@ end
 
 
 
-function warm_start!(model::OSQP.Model; x::Vector{Float64}=nothing, y::Vector{Float64}=nothing)
+function warm_start!(model::OSQP.Model; x::Vector{Float64} = nothing, y::Vector{Float64} = nothing)
     # Get problem dimensions
     (n, m) = OSQP.dimensions(model)
 
@@ -522,20 +522,20 @@ end
 
 
 
-function linsys_solver_str_to_int!(settings_dict::Dict{Symbol, Any})
+function linsys_solver_str_to_int!(settings_dict::Dict{Symbol,Any})
          # linsys_str = pop!(settings_dict, :linsys_solver)
-         linsys_str = get(settings_dict, :linsys_solver, nothing)   
+    linsys_str = get(settings_dict, :linsys_solver, nothing)
 
-     if linsys_str != nothing
+    if linsys_str != nothing
          # Check type
-         if !isa(linsys_str, String)
+        if !isa(linsys_str, String)
             error("linsys_solver is required to be a string")
-         end
+        end
 
          # Convert to lower case
-         linsys_str = lowercase(linsys_str)
+        linsys_str = lowercase(linsys_str)
 
-         if linsys_str == "suitesparse ldl"
+        if linsys_str == "suitesparse ldl"
             settings_dict[:linsys_solver] = SUITESPARSE_LDL_SOLVER
         elseif linsys_str == "mkl pardiso"
             settings_dict[:linsys_solver] = MKL_PARDISO_SOLVER
@@ -545,6 +545,6 @@ function linsys_solver_str_to_int!(settings_dict::Dict{Symbol, Any})
             warn("Linear system solver not recognized. Using default SuiteSparse LDL")
             settings_dict[:linsys_solver] = SUITESPARSE_LDL_SOLVER
 
-        end 
+        end
     end
 end
