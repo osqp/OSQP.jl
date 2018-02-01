@@ -3,9 +3,9 @@
 
 # Integer type from C
 if Sys.WORD_SIZE == 64   # 64bit system
-    Cc_int = Clonglong
+    const Cc_int = Clonglong
 else  # 32bit system
-    Cc_int = Cint
+    const Cc_int = Cint
 end
 
 struct Ccsc
