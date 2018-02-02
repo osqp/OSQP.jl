@@ -2,14 +2,12 @@ __precompile__()
 
 module OSQP
 
-export OSQPSolver
+export OSQPSolver   # MathProgBase solver
 
 # Compatibility stuff
 using Compat
 using Compat.SparseArrays
 using Compat.Iterators
-
-
 
 
 if isfile(joinpath(dirname(@__FILE__), "..", "deps", "deps.jl"))
@@ -32,12 +30,9 @@ function __init__()
     end
 end
 
-
 include("constants.jl")
 include("types.jl")
 include("interface.jl")
-include("OSQPSolverInterface.jl")
-
-import .OSQPSolverInterface: OSQPSolver
+include("OSQPSolverInterface.jl")   # MathProgBase interface
 
 end # module
