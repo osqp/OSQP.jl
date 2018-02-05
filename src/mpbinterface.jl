@@ -53,6 +53,7 @@ end
 
 checksolved(model::OSQPModel) = isdefined(model, :results) || error("Model has not been solved.")
 variablebounderror() = error("Variable bounds are not supported (use constraints instead).")
+senseerror() = error("Only objective sense :Min is currently supported to avoid confusing behavior.")
 
 # http://mathprogbasejl.readthedocs.io/en/latest/solverinterface.html
 MathProgBase.LinearQuadraticModel(solver::OSQPSolver) = OSQPModel(solver.settings)
@@ -66,30 +67,41 @@ end
 
 function MathProgBase.status(model::OSQPModel)::Symbol
     checksolved(model)
-    status = model.results.info.status
-    ret = status # if OSQP status can't be mapped to a standard return value, just return as is
+    osqpstatus = model.results.info.status
+    status = osqpstatus # if OSQP status can't be mapped to a standard return value, just return as is
 
     # map to standard return status values:
-    status == :Solved && (ret = :Optimal)
-    status == :Max_iter_reached && (ret = :UserLimit)
-    status == :Interrupted && (ret = :UserLimit) # following Gurobi.jl
-    status == :Primal_infeasible && (ret = :Infeasible)
-    status == :Primal_infeasible_inaccurate && (ret = :Infeasible)
-    status == :Dual_infeasible && (ret = :DualityFailure)
+    osqpstatus == :Solved && (status = :Optimal)
+    osqpstatus == :Max_iter_reached && (status = :UserLimit)
+    osqpstatus == :Interrupted && (status = :UserLimit) # following Gurobi.jl
+    osqpstatus == :Primal_infeasible && (status = :Infeasible)
+    osqpstatus == :Primal_infeasible_inaccurate && (status = :Infeasible)
+    osqpstatus == :Dual_infeasible && (status = :DualityFailure)
 
-    return ret
+    return status
 end
 
 # TODO: getobjbound
 # TODO: getobjgap
 MathProgBase.getrawsolver(model::OSQPModel) = model.inner
 MathProgBase.getsolvetime(model::OSQPModel) = (checksolved(model); model.results.info.run_time)
-# TODO: setsense!
-# TODO: getsense
+MathProgBase.setsense!(model::OSQPModel, sense::Symbol) = sense == :Min || senseerror()
+MathProgBase.getsense(model::OSQPModel) = :Min
 MathProgBase.numvar(model::OSQPModel) = size(model.A, 2)
 MathProgBase.numconstr(model::OSQPModel) = size(model.A, 1)
-# TODO: freemodel!
-# TODO: copy
+MathProgBase.freemodel!(model::OSQPModel) = OSQP.clean!(model.inner)
+
+function Base.copy(model::OSQPModel)
+    ret = OSQPModel(model.settings)
+    resize!(ret, numvar(model), numconstr(model))
+    copy!(ret.P, model.P)
+    copy!(ret.q, model.q)
+    copy!(ret.A, model.A)
+    copy!(ret.l, model.l)
+    copy!(ret.u, model.u)
+    ret
+end
+
 MathProgBase.setvartype!(model::OSQPModel, v::Vector{Symbol}) = any(x -> x != :Cont, v) && error("OSQP only supports continuous variables.")
 MathProgBase.getvartype(model::OSQPModel) = fill(:Cont, numvar(model))
 
@@ -109,21 +121,12 @@ MathProgBase.setwarmstart!(model::OSQPModel, v) = OSQP.warm_start!(model.inner, 
 
 function MathProgBase.loadproblem!(model::OSQPModel, A, l, u, c, lb, ub, sense)
     (any(x -> x != -Inf, l) || any(x -> x != Inf, u)) && variablebounderror()
+    sense == :Min || senseerror()
     m, n = size(A)
     resize!(model, n, m)
-
-    if sense == :Min
-        copy!(model.q, c)
-    elseif sense == :Max
-        model.q .= .-c
-    else
-        error("Objective sense not recognized")
-    end
-
     copy!(model.l, lb)
     copy!(model.u, ub)
     copy!(model.A, A)
-
     model
 end
 
@@ -150,8 +153,6 @@ MathProgBase.getconstrduals(model::OSQPModel) = (checksolved(model); model.resul
 # TODO: getinfeasibilityray
 # TODO: getbasis
 # TODO: getunboundedray
-# TODO: getsimplexiter
-# TODO: getbarrieriter
 
 
 # http://mathprogbasejl.readthedocs.io/en/latest/lpqcqp.html#quadratic-programming
