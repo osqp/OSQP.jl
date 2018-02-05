@@ -1,6 +1,6 @@
-module OSQPSolverInterface
+module OSQPMathProgBaseInterface
 
-using MathProgBase
+import MathProgBase
 import OSQP
 
 import MathProgBase: numvar, numconstr
@@ -9,7 +9,7 @@ struct OSQPSolver <: MathProgBase.AbstractMathProgSolver
     settings::Dict{Symbol,Any}
 end
 
-OSQPSolver() = OSQPSolver(Dict{Symbol, Any}())
+OSQPSolver(; kwargs...) = OSQPSolver(Dict{Symbol, Any}(k => v for (k, v) in kwargs))
 
 mutable struct OSQPModel <: MathProgBase.AbstractLinearQuadraticModel
     settings::Dict{Symbol, Any}
@@ -156,9 +156,9 @@ MathProgBase.getconstrduals(model::OSQPModel) = (checksolved(model); model.resul
 
 # http://mathprogbasejl.readthedocs.io/en/latest/lpqcqp.html#quadratic-programming
 MathProgBase.numquadconstr(model::OSQPModel) = 0
-MathProgBase.setquadobj!(model::OSQPModel, Q) = (copy!(model.P, Q); model)
+MathProgBase.setquadobj!(model::OSQPModel, Q::Matrix) = (copy!(model.P, Q); model)
 
-function MathProgBase.setquadobj!(model::OSQPModel, rowidx, colidx, quadval)
+function MathProgBase.setquadobj!(model::OSQPModel, rowidx::Vector, colidx::Vector, quadval::Vector)
     nterms = length(quadval)
     @boundscheck length(rowidx) == nterms || error()
     @boundscheck length(colidx) == nterms || error()
