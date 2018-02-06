@@ -467,7 +467,7 @@ end
 
 
 
-function warm_start!(model::OSQP.Model; x::Vector{Float64} = nothing, y::Vector{Float64} = nothing)
+function warm_start!(model::OSQP.Model; x::Union{Vector{Float64}, Nothing} = nothing, y::Union{Vector{Float64}, Nothing} = nothing)
     # Get problem dimensions
     (n, m) = OSQP.dimensions(model)
 

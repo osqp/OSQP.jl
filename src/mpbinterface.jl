@@ -21,6 +21,9 @@ mutable struct OSQPModel <: MathProgBase.AbstractLinearQuadraticModel
     l::Vector{Float64}
     u::Vector{Float64}
 
+    xwarmstart::Vector{Float64}
+    dowarmstart::Bool
+
     results::OSQP.Results
 
     function OSQPModel(settings::Associative{Symbol, Any})
@@ -29,7 +32,9 @@ mutable struct OSQPModel <: MathProgBase.AbstractLinearQuadraticModel
         A = spzeros(Float64, 0, 0)
         l = Float64[]
         u = Float64[]
-        new(copy(settings), OSQP.Model(), P, q, A, l, u) # leave results undefined
+        xwarmstart = Float64[]
+        dowarmstart = false
+        new(copy(settings), OSQP.Model(), P, q, A, l, u, xwarmstart, dowarmstart) # leave results undefined
     end
 end
 
@@ -39,6 +44,8 @@ function Base.resize!(model::OSQPModel, n, m)
     if nchange
         model.P = spzeros(Float64, n, n)
         resize!(model.q, n)
+        resize!(model.xwarmstart, n)
+        model.dowarmstart = false
     end
     if mchange
         resize!(model.l, m)
@@ -62,6 +69,7 @@ MathProgBase.getobjval(model::OSQPModel) = (checksolved(model); model.results.in
 
 function MathProgBase.optimize!(model::OSQPModel)
     OSQP.setup!(model.inner; P = model.P, q = model.q, A = model.A, l = model.l, u = model.u, model.settings...)
+    model.dowarmstart && OSQP.warm_start!(model.inner, x = model.xwarmstart)
     model.results = OSQP.solve!(model.inner)
 end
 
@@ -113,7 +121,7 @@ function MathProgBase.setparameters!(x::Union{OSQPSolver, OSQPModel}; Silent = n
     x
 end
 
-MathProgBase.setwarmstart!(model::OSQPModel, v) = OSQP.warm_start!(model.inner, x = v)
+MathProgBase.setwarmstart!(model::OSQPModel, v) = (copy!(model.xwarmstart, v); model.dowarmstart = true)
 
 
 # http://mathprogbasejl.readthedocs.io/en/latest/lpqcqp.html#linearquadratic-models
