@@ -205,6 +205,7 @@ function loadproblem!(model::OSQPMathProgModel, A, l, u, c, lb, ub, sense)
 end
 
 # TODO: writeproblem
+# TODO: Fix variable bounds
 getvarLB(model::OSQPMathProgModel) = fill(-Inf, numvar(model))
 setvarLB!(model::OSQPMathProgModel, l) = variablebounderror()
 getvarUB(model::OSQPMathProgModel) = fill(Inf, numvar(model))
