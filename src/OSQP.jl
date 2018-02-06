@@ -2,7 +2,7 @@ __precompile__()
 
 module OSQP
 
-export OSQPSolver   # MathProgBase solver
+export OSQPMathProgBaseInterface
 
 # Compatibility stuff
 using Compat
@@ -33,6 +33,6 @@ end
 include("constants.jl")
 include("types.jl")
 include("interface.jl")
-include("OSQPSolverInterface.jl")   # MathProgBase interface
+include("mpbinterface.jl")
 
 end # module

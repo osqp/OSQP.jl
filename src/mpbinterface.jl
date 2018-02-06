@@ -1,8 +1,9 @@
-# Standard MathProg interrface
-importall MathProgBase.SolverInterface
+module OSQPMathProgBaseInterface
 
-export OSQPSolver
+import MathProgBase
+import OSQP
 
+import MathProgBase: numvar, numconstr
 
 struct OSQPSolver <: AbstractMathProgSolver
     settings::Dict{Symbol,Any}
@@ -20,14 +21,19 @@ mutable struct OSQPMathProgModel <: AbstractLinearQuadraticModel
     # Setup needed
     perform_setup::Bool
 
-    # Problem data
+    # Problem data in the form
+    #
+    # minimize    (1/2) x' P x + q' x
+    # subject to  lb <= A x <= ub      
+    #             l <= x <= u
+    sense::Symbol
     P::SparseMatrixCSC{Float64, Int}
     q::Vector{Float64}
     A::SparseMatrixCSC{Float64, Int}
+    lb::Vector{Float64}
+    ub::Vector{Float64}
     l::Vector{Float64}
     u::Vector{Float64}
-
-    # TODO: Write data in linprog format so that variable bounds are supported
 
     # Results
     results::Results
@@ -36,35 +42,62 @@ mutable struct OSQPMathProgModel <: AbstractLinearQuadraticModel
         P = spzeros(Float64, 0, 0)
         q = Float64[]
         A = spzeros(Float64, 0, 0)
+        lb = Float64[]
+        ub = Float64[]
         l = Float64[]
         u = Float64[]
         perform_setup = true
-        new(settings, Model(), perform_setup, P, q, A, l, u) # leave other fields undefined
+        new(settings, Model(), perform_setup, :Min, P, q, A, lb, ub, l, u) # leave other fields undefined
     end
 end
 
-function Base.resize!(model::OSQPMathProgModel, n, m)
-    nchange = n != numvar(model)
-    mchange = m != numconstr(model)
-    if nchange
-        model.P = spzeros(Float64, n, n)
-        resize!(model.q, n)
-    end
-    if mchange
-        resize!(model.l, m)
-        resize!(model.u, m)
-    end
-    if nchange || mchange
-        model.A = spzeros(Float64, m, n)
+function get_qp_dimensions(P::SparseMatrixCSC, q::Vector{Float64}, A::SparseMatrixCSC)
+    # Check problem dimensions
+    if P == nothing
+        if q != nothing
+            n = length(q)
+        elseif A != nothing
+            n = size(A, 2)
+        end
+
+    else
+        n = size(P, 1)
     end
 
-    model
+    if A == nothing
+        m = 0
+    else
+        m = size(A, 1)
+    end
+
+    return n, m
 end
+
+# TODO: Do we need this?
+# function Base.resize!(model::OSQPMathProgModel, n, m)
+#     nchange = n != numvar(model)
+#     mchange = m != numconstr(model)
+#     if nchange
+#         model.P = spzeros(Float64, n, n)
+#         resize!(model.q, n)
+#     end
+#     if mchange
+#         resize!(model.l, m)
+#         resize!(model.u, m)
+#     end
+#     if nchange || mchange
+#         model.A = spzeros(Float64, m, n)
+#     end
+
+#     model
+# end
 
 # TODO: Remove results when the problem is updated 
+# Maybe add resetproblem function to remove results and reset perform_setup?
 checksolved(model::OSQPMathProgModel) = isdefined(model, :results) || error("Model has not been solved.")
-variablebounderror() = error("Variable bounds are not supported (use constraints instead).")
-resetproblem(model::OSQPMathProgModel) = 
+
+# Reset problem when setup has to be performed again
+resetproblem(model::OSQPMathProgModel) = (model.results = nothing; model.perform_setup=true)
 
 # http://mathprogbasejl.readthedocs.io/en/latest/solverinterface.html
 LinearQuadraticModel(solver::OSQPSolver) = OSQPMathProgModel(solver.settings)
@@ -74,7 +107,12 @@ getobjval(model::OSQPMathProgModel) = (checksolved(model); model.results.info.ob
 function optimize!(model::OSQPMathProgModel)
     # Perform setup only if necessary
     if model.perform_setup
-        setup!(model.inner; P = model.P, q = model.q, A = model.A, l = model.l, u = model.u, settings = model.settings)
+        (n, _) = get_qp_dimensions(model.P, model.q, model.A)
+        setup!(model.inner; P = model.P, q = model.q, 
+               A = [model.A; sparse(I, n)], 
+               l = [model.lb; model.l], 
+               u = [model.ub; model.u], 
+               settings = model.settings)
         model.perform_setup = false  # No longer needed to perform setup
     end
 
@@ -84,44 +122,72 @@ end
 
 function status(model::OSQPMathProgModel)::Symbol
     checksolved(model)
-    status = model.results.info.status
-    ret = status # if OSQP status can't be mapped to a standard return value, just return as is
+    osqpstatus = model.results.info.status
+    status = osqpstatus # if OSQP status can't be mapped to a standard return value, just return as is
 
     # map to standard return status values:
-    status == :Solved && (ret = :Optimal)
-    status == :Max_iter_reached && (ret = :UserLimit)
-    status == :Interrupted && (ret = :UserLimit) # following Gurobi.jl
-    status == :Primal_infeasible && (ret = :Infeasible)
-    status == :Primal_infeasible_inaccurate && (ret = :Infeasible)
-    status == :Dual_infeasible && (ret = :DualityFailure)
-    status == :Dual_infeasible_inaccurate && (ret = :DualityFailure)
-    return ret
+    osqpstatus == :Solved && (status = :Optimal)
+    osqpstatus == :Max_iter_reached && (status = :UserLimit)
+    osqpstatus == :Interrupted && (status = :UserLimit) # following Gurobi.jl
+    osqpstatus == :Primal_infeasible && (status = :Infeasible)
+    osqpstatus == :Primal_infeasible_inaccurate && (status = :Infeasible)
+    osqpstatus == :Dual_infeasible && (status = :DualityFailure)
+    osqpstatus == :Dual_infeasible_inaccurate && (status = :DualityFailure)
+
+    return status
 end
 
 # TODO: getobjbound
 # TODO: getobjgap
 getrawsolver(model::OSQPMathProgModel) = model.inner
 getsolvetime(model::OSQPMathProgModel) = (checksolved(model); model.results.info.run_time)
-# TODO: setsense!
-# TODO: getsense
+# TODO: Fix sense!
+function setsense!(model::OSQPMathProgModel, sense::Symbol) 
+    if sense in [:Min, :Max]
+        model.sense = sense
+    else
+        error("sense not recognized")
+    end
+end
+getsense(model::OSQPMathProgModel) = model.sense
+
+# TODO: Not necessarily right the following two lines
 numvar(model::OSQPMathProgModel) = size(model.A, 2)
 numconstr(model::OSQPMathProgModel) = size(model.A, 1)
-# TODO: freemodel!
-# TODO: copy
+freemodel!(model::OSQPMathProgModel) = OSQP.clean!(model.inner)
+
+# NB COpy not implemented
+# function Base.copy(model::OSQPMathProgModel)
+#     ret = OSQPMathProgModel(model.settings)
+#     resize!(ret, numvar(model), numconstr(model))
+#     copy!(ret.P, model.P)
+#     copy!(ret.q, model.q)
+#     copy!(ret.A, model.A)
+#     copy!(ret.l, model.l)
+#     copy!(ret.u, model.u)
+#     ret
+# end
+
 setvartype!(model::OSQPMathProgModel, v::Vector{Symbol}) = any(x -> x != :Cont, v) && error("OSQP only supports continuous variables.")
 getvartype(model::OSQPMathProgModel) = fill(:Cont, numvar(model))
 
-# Removed setparameters! since it is unused at the moment
-setwarmstart!(model::OSQPMathProgModel, v) = warm_start!(model.inner, x = v)
+# setparameters! unused at the moment. They are loaded using the initial loadproblem! call
+# function setparameters!(x::Union{OSQPSolver, OSQPMathProgModel}; Silent = nothing)
+#     if Silent != nothing
+#         Silent::Bool
+#         x.settings[:verbose] = !Silent
+#     end
+#     x
+# end
+
+# Check SCS.jl function to set also dual variables
+setwarmstart!(model::OSQPMathProgModel, v) = OSQP.warm_start!(model.inner, x = v)
 
 
 # http://mathprogbasejl.readthedocs.io/en/latest/lpqcqp.html#linearquadratic-models
 # TODO: loadproblem!(m::AbstractLinearQuadraticModel, filename::String)
 function loadproblem!(model::OSQPMathProgModel, A, l, u, c, lb, ub, sense)
     (any(x -> x != -Inf, l) || any(x -> x != Inf, u)) && variablebounderror()
-    m, n = size(A)
-    resize!(model, n, m)
-
     if sense == :Min
         copy!(model.q, c)
     elseif sense == :Max
@@ -130,16 +196,15 @@ function loadproblem!(model::OSQPMathProgModel, A, l, u, c, lb, ub, sense)
         error("Objective sense not recognized")
     end
 
+    m, n = size(A)
+    resize!(model, n, m)
     copy!(model.l, lb)
     copy!(model.u, ub)
     copy!(model.A, A)
-
     model
 end
 
-# TODO: writeproblem(m::AbstractLinearQuadraticModel, filename::String)
-
-# Edit problem data
+# TODO: writeproblem
 getvarLB(model::OSQPMathProgModel) = fill(-Inf, numvar(model))
 setvarLB!(model::OSQPMathProgModel, l) = variablebounderror()
 getvarUB(model::OSQPMathProgModel) = fill(Inf, numvar(model))
@@ -162,15 +227,14 @@ getconstrduals(model::OSQPMathProgModel) = (checksolved(model); model.results.y)
 # TODO: getinfeasibilityray
 # TODO: getbasis
 # TODO: getunboundedray
-# TODO: getsimplexiter
-# TODO: getbarrieriter
 
 
 # http://mathprogbasejl.readthedocs.io/en/latest/lpqcqp.html#quadratic-programming
 numquadconstr(model::OSQPMathProgModel) = 0
-setquadobj!(model::OSQPMathProgModel, Q) = (copy!(model.P, Q); model)
 
-function setquadobj!(model::OSQPMathProgModel, rowidx, colidx, quadval)
+# TODO Change setquadobj! with proper sense
+setquadobj!(model::OSQPMathProgModel, Q::Matrix) = (copy!(model.P, Q); model)
+function setquadobj!(model::OSQPMathProgModel, rowidx::Vector, colidx::Vector, quadval::Vector)
     nterms = length(quadval)
     @boundscheck length(rowidx) == nterms || error()
     @boundscheck length(colidx) == nterms || error()
@@ -195,3 +259,5 @@ function setquadobj!(model::OSQPMathProgModel, rowidx, colidx, quadval)
 end
 
 # Note: skipping quadconstr methods
+
+end # module

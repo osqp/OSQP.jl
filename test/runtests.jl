@@ -11,7 +11,8 @@ tests = [
     "primal_infeasibility.jl",
     "unconstrained.jl",
     "warm_start.jl",
-    "update_matrices.jl"
+    "update_matrices.jl",
+    "mpbinterface.jl"
     ]
 
 println("Running tests:")
