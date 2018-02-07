@@ -49,27 +49,34 @@ mutable struct OSQPMathProgModel <: AbstractLinearQuadraticModel
     end
 end
 
-function get_qp_dimensions(P::SparseMatrixCSC, q::Vector{Float64}, A::SparseMatrixCSC)
+# TODO: Change here nothing to something more meaningful on the dimensions
+function get_qp_variables(model::OSQPMathProgModel)
     # Check problem dimensions
-    if P == nothing
-        if q != nothing
-            n = length(q)
-        elseif A != nothing
-            n = size(A, 2)
+    if model.P == nothing
+        if model.q != nothing
+            n = length(model.q)
+        elseif model.A != nothing
+            n = size(model.A, 2)
         end
 
     else
-        n = size(P, 1)
+        n = size(model.P, 1)
     end
 
-    if A == nothing
+    return n
+end
+
+function get_qp_constraints(model::OSQPMathProgModel)
+    if model.A == nothing
         m = 0
     else
-        m = size(A, 1)
+        m = size(model.A, 1)
     end
 
-    return n, m
+    return m
 end
+
+
 
 # TODO: Do we need this?
 # function Base.resize!(model::OSQPMathProgModel, n, m)
@@ -90,7 +97,6 @@ end
 #     model
 # end
 
-# TODO: Remove results when the problem is updated 
 # Maybe add resetproblem function to remove results and reset perform_setup?
 checksolved(model::OSQPMathProgModel) = isdefined(model, :results) || error("Model has not been solved.")
 
@@ -139,22 +145,32 @@ end
 # TODO: getobjgap
 getrawsolver(model::OSQPMathProgModel) = model.inner
 getsolvetime(model::OSQPMathProgModel) = (checksolved(model); model.results.info.run_time)
-# TODO: Fix sense!
+
+
 function setsense!(model::OSQPMathProgModel, sense::Symbol) 
     if sense in [:Min, :Max]
+        if sense == :Max & model.sense != :Max
+            model.q *= -1
+            model.P *= -1
+
+            # Update problem data
+            if !problem.perform_setup
+                update!(model.inner, q=model.q)
+                update!(model.inner, Px=triu(model.P.nzval))
+            end
+        end
         model.sense = sense
     else
         error("sense not recognized")
     end
 end
-getsense(model::OSQPMathProgModel) = model.sense
 
-# TODO: Not necessarily right the following two lines
-numvar(model::OSQPMathProgModel) = size(model.A, 2)
-numconstr(model::OSQPMathProgModel) = size(model.A, 1)
+getsense(model::OSQPMathProgModel) = model.sense
+numvar(model::OSQPMathProgModel) = get_qp_variables(model)
+numconstr(model::OSQPMathProgModel) = get_qp_constraints(model)
 freemodel!(model::OSQPMathProgModel) = OSQP.clean!(model.inner)
 
-# NB COpy not implemented
+# NB Copy not implemented
 # function Base.copy(model::OSQPMathProgModel)
 #     ret = OSQPMathProgModel(model.settings)
 #     resize!(ret, numvar(model), numconstr(model))
@@ -169,6 +185,7 @@ freemodel!(model::OSQPMathProgModel) = OSQP.clean!(model.inner)
 setvartype!(model::OSQPMathProgModel, v::Vector{Symbol}) = any(x -> x != :Cont, v) && error("OSQP only supports continuous variables.")
 getvartype(model::OSQPMathProgModel) = fill(:Cont, numvar(model))
 
+#TODO: Fix setparameters!
 # setparameters! unused at the moment. They are loaded using the initial loadproblem! call
 # function setparameters!(x::Union{OSQPSolver, OSQPMathProgModel}; Silent = nothing)
 #     if Silent != nothing
@@ -178,14 +195,12 @@ getvartype(model::OSQPMathProgModel) = fill(:Cont, numvar(model))
 #     x
 # end
 
-# Check SCS.jl function to set also dual variables
+# TODO: Check SCS.jl function to set also dual variables
 setwarmstart!(model::OSQPMathProgModel, v) = OSQP.warm_start!(model.inner, x = v)
 
 
 # http://mathprogbasejl.readthedocs.io/en/latest/lpqcqp.html#linearquadratic-models
-# TODO: loadproblem!(m::AbstractLinearQuadraticModel, filename::String)
 function loadproblem!(model::OSQPMathProgModel, A, l, u, c, lb, ub, sense)
-    (any(x -> x != -Inf, l) || any(x -> x != Inf, u)) && variablebounderror()
     if sense == :Min
         copy!(model.q, c)
     elseif sense == :Max
@@ -194,26 +209,88 @@ function loadproblem!(model::OSQPMathProgModel, A, l, u, c, lb, ub, sense)
         error("Objective sense not recognized")
     end
 
-    m, n = size(A)
-    resize!(model, n, m)
+
+    # Copy variables
     copy!(model.q, c)
-    copy!(model.l, lb)
-    copy!(model.u, ub)
-    copy!(model.A, A)
+    copy!(model.lb, lb)
+    copy!(model.ub, ub)
+    copy!(model.l, l)
+    copy!(model.u, u)
+    copy!(model.A, sparse(A))  # Sparsify matrix A
     model
 end
 
-# TODO: writeproblem
-# TODO: Fix variable bounds
-getvarLB(model::OSQPMathProgModel) = fill(-Inf, numvar(model))
-setvarLB!(model::OSQPMathProgModel, l) = variablebounderror()
-getvarUB(model::OSQPMathProgModel) = fill(Inf, numvar(model))
-setvarUB!(model::OSQPMathProgModel, l) = variablebounderror()
-getconstrLB(model::OSQPMathProgModel) = model.l
-setconstrLB!(model::OSQPMathProgModel, lb) = (copy!(model.l, lb); model)
-getconstrUB(model::OSQPMathProgModel) = model.u
-setconstrUB!(model::OSQPMathProgModel, ub) = (copy!(model.u, ub); model)
-setobj!(model::OSQPMathProgModel, c) = (copy!(model.q, c); model)
+getvarLB(model::OSQPMathProgModel) = model.l
+function setvarLB!(model::OSQPMathProgModel, l)
+    # Copy new variable lower bounds
+    copy!(model.l, l)
+
+    # Update lower bounds in the model
+    if !model.perform_setup
+        update!(model.inner, l=[model.lb; model.l])
+    end
+    
+    return model
+end
+
+getvarUB(model::OSQPMathProgModel) = model.u
+function setvarUB!(model::OSQPMathProgModel, u)
+    # Copy new variable upper bounds
+    copy!(model.u, u)
+
+    # Update lower bounds in the model
+    if !model.perform_setup
+        update!(model.inner, u=[model.ub; model.u])
+    end
+    
+    return model
+end
+
+
+getconstrLB(model::OSQPMathProgModel) = model.lb
+function setconstrLB!(model::OSQPMathProgModel, lb)
+    # Copy new constraints lower bounds
+    copy!(model.lb, lb)
+
+    # Update lower bounds in the model
+    if !model.perform_setup
+        update!(model.inner, l=[model.lb; model.l])
+    end
+    
+    return model
+end
+
+
+getconstrUB(model::OSQPMathProgModel) = model.ub
+function setconstrUB!(model::OSQPMathProgModel, ub)
+    # Copy new constraints upper bounds
+    copy!(model.ub, ub)
+
+    # Update upper bounds in the model
+    if !model.perform_setup
+        update!(model.inner, u=[model.ub; model.u])
+    end
+    
+    return model
+end
+
+
+function setobj!(model::OSQPMathProgModel, c)
+    # Copy cost
+    copy!(model.q, c)
+    
+    # Negate cost if necessary
+    model.sense == :Max && model.q = -model.q   
+
+    if !model.perform_setup
+        update!(model.inner, q=model.q)
+    end
+
+    return model
+
+end
+
+
 getconstrmatrix(model::OSQPMathProgModel) = model.A
 # TODO: addvar!
 # TODO: delvars!
@@ -222,38 +299,67 @@ getconstrmatrix(model::OSQPMathProgModel) = model.A
 # TODO: changecoeffs!
 numlinconstr(model::OSQPMathProgModel) = numconstr(model)
 getconstrsolution(model::OSQPMathProgModel) = model.A * getsolution(model)
-# TODO: getreducedcosts
-getconstrduals(model::OSQPMathProgModel) = (checksolved(model); model.results.y)
-# TODO: getinfeasibilityray
-# TODO: getbasis
-# TODO: getunboundedray
+getreducedcosts(model::OSQPMathProgModel) = (checksolved(model); model.results.y[end-get_qp_variables(model):end])
+getconstrduals(model::OSQPMathProgModel) = (checksolved(model); model.results.y[1:get_qp_variables(model)])
 
+
+function getinfeasibilityray(model::OSQPMathProgModel)
+    checksolved(model)
+    
+    if model.info.status in [:Primal_infeasible, :Primal_infeasible_inaccurate]
+        # NB This returns an infeasibility ray taking into account also the variable bounds
+        return model.results.prim_inf_cert
+    else
+        error("Problem not infeasible")
+    end
+end
+
+
+function getunboundedray(model::OSQPMathProgModel)
+    checksolved(model)
+    
+    if model.info.status in [:Dual_infeasible, :Dual_infeasible_inaccurate]
+        return model.results.dual_inf_cert
+    else
+        error("Problem not unbounded")
+    end
+end
+
+# TODO: getbasis
 
 # http://mathprogbasejl.readthedocs.io/en/latest/lpqcqp.html#quadratic-programming
 numquadconstr(model::OSQPMathProgModel) = 0
 
-# TODO Change setquadobj! with proper sense
-setquadobj!(model::OSQPMathProgModel, Q::Matrix) = (copy!(model.P, Q); model)
+setquadobj!(model::OSQPMathProgModel, Q::Matrix) = ((Qi, Qj, Qx) = findnz(Q); setquadobj!(model, Qi, Qj, Qx))
 function setquadobj!(model::OSQPMathProgModel, rowidx::Vector, colidx::Vector, quadval::Vector)
     nterms = length(quadval)
     @boundscheck length(rowidx) == nterms || error()
     @boundscheck length(colidx) == nterms || error()
 
-    # zero out coeffs
-    for i = 1 : nterms
-        @inbounds row = rowidx[i]
-        @inbounds col = colidx[i]
-        model.P[row, col] = 0
+    # Check if only the values have changed
+    if isdefined(model, :P)
+        Pi, Pj, Px = findnz(model.P)
+        if rowidx == Pi & colidx == Pj & !model.perform_setup
+            if model.sense == :Max
+                # Update only nonzeros of P
+                update!(model.inner, Px=-Px)
+            else
+                # Update only nonzeros of P
+                update!(model.inner, Px=Px)         
+            end
+            return model       
+        end
     end
+    
+    # Create sparse matrix from indices
+    model.P = sparse(rowidx, colidx, quadval)
 
-    # add new coeffs
-    for i = 1 : nterms
-        @inbounds row = rowidx[i]
-        @inbounds col = colidx[i]
-        @inbounds val = quadval[i]
-        model.P[row, col] += val
-        model.P[col, row] = model.P[row, col]
+    if model.sense == :Max
+        model.P = -model.P
     end
+    
+    # Need new setup when we set a new P
+    model.perform_setup = true
 
     model
 end

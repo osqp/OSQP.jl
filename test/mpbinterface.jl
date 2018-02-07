@@ -1,11 +1,10 @@
 using MathProgBase
-# import MathProgBase: LinearQuadraticModel, loadproblem!, setquadobj!, optimize!, status, getobjval, getsolution
 importall MathProgBase.SolverInterface
 
 
 @testset "MathProgBase" begin
     solver = OSQPMathProgBaseInterface.OSQPSolver(eps_abs = 1e-7, eps_rel = 1e-16)
-    MathProgBase.setparameters!(solver, Silent=true)
+    # MathProgBase.setparameters!(solver, Silent=true)
 
     @testset "quadprog" begin
         # modified from joinpath(Pkg.dir("MathProgBase"), "test", "quadprog.jl"):
