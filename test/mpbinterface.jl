@@ -2,6 +2,8 @@ using MathProgBase
 importall MathProgBase.SolverInterface
 
 
+# TODO: Add tests for linprog.jl
+
 @testset "MathProgBase" begin
     solver = OSQPMathProgBaseInterface.OSQPSolver(eps_abs = 1e-7, eps_rel = 1e-16)
     # MathProgBase.setparameters!(solver, Silent=true)

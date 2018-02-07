@@ -185,15 +185,19 @@ freemodel!(model::OSQPMathProgModel) = OSQP.clean!(model.inner)
 setvartype!(model::OSQPMathProgModel, v::Vector{Symbol}) = any(x -> x != :Cont, v) && error("OSQP only supports continuous variables.")
 getvartype(model::OSQPMathProgModel) = fill(:Cont, numvar(model))
 
-#TODO: Fix setparameters!
-# setparameters! unused at the moment. They are loaded using the initial loadproblem! call
-# function setparameters!(x::Union{OSQPSolver, OSQPMathProgModel}; Silent = nothing)
-#     if Silent != nothing
-#         Silent::Bool
-#         x.settings[:verbose] = !Silent
-#     end
-#     x
-# end
+function setparameters!(x::OSQPMathProgModel; Silent = nothing)
+    if Silent != nothing
+        Silent::Bool
+        x.settings[:verbose] = !Silent
+    end
+
+    # Update silent setting if setup has already been performed
+    if !x.perform_setup
+        update_settings!(x.inner, verbose=Silent)
+    end
+
+    x
+end
 
 # TODO: Check SCS.jl function to set also dual variables
 setwarmstart!(model::OSQPMathProgModel, v) = OSQP.warm_start!(model.inner, x = v)
