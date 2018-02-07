@@ -1,19 +1,22 @@
 using MathProgBase
 import MathProgBase: LinearQuadraticModel, loadproblem!, setquadobj!, optimize!, status, numvar, numconstr, setwarmstart!, getsense,
     getobjval, getsolution, setsense!, getvarLB, setvarLB!, getvarUB, setvarUB!, getconstrLB, setconstrLB!, getconstrUB, setconstrUB!,
-    getconstrmatrix, numlinconstr, getsolvetime, getrawsolver, getvartype, setvartype!
+    getconstrmatrix, numlinconstr, getsolvetime, getrawsolver, getvartype, setvartype!, getconstrduals
 
 @testset "MathProgBase" begin
     solver = OSQPMathProgBaseInterface.OSQPSolver(eps_abs = 1e-7, eps_rel = 1e-16)
     MathProgBase.setparameters!(solver, Silent=true)
 
-    # modified version of joinpath(Pkg.dir("MathProgBase"), "test", "quadprog.jl"):
-    sol = quadprog([0., 0., 0.],[2. 1. 0.; 1. 2. 1.; 0. 1. 2.],[1. 2. 3.; 1. 1. 0.],'>',[4., 1.],-Inf,Inf,solver)
-    @test sol.status == :Optimal
-    @test isapprox(sol.objval, 130/70, atol=1e-6)
-    @test isapprox(norm(sol.sol[1:3] - [0.5714285714285715,0.4285714285714285,0.8571428571428572]), 0.0, atol=1e-6)
+    @testset "quadprog" begin
+        # modified from joinpath(Pkg.dir("MathProgBase"), "test", "quadprog.jl"):
+        sol = quadprog([0., 0., 0.],[2. 1. 0.; 1. 2. 1.; 0. 1. 2.],[1. 2. 3.; 1. 1. 0.],'>',[4., 1.],-Inf,Inf,solver)
+        @test sol.status == :Optimal
+        @test isapprox(sol.objval, 130/70, atol=1e-6)
+        @test isapprox(norm(sol.sol[1:3] - [0.5714285714285715,0.4285714285714285,0.8571428571428572]), 0.0, atol=1e-6)
+    end
 
     @testset "QP1" begin
+        # modified from joinpath(Pkg.dir("MathProgBase"), "test", "quadprog.jl"):
         m = LinearQuadraticModel(solver)
         loadproblem!(m, [1. 2. 3.; 1. 1. 0.],[-Inf,-Inf,-Inf],[Inf,Inf,Inf],[0.,0.,0.],[4., 1.],[Inf,Inf], :Min)
 
@@ -36,6 +39,38 @@ import MathProgBase: LinearQuadraticModel, loadproblem!, setquadobj!, optimize!,
         verify_solution(m)
 
         setwarmstart!(m2, getsolution(m) .+ 0.1)
+        optimize!(m2)
+        verify_solution(m2)
+    end
+
+    @testset "basic_QP" begin
+        # same QP as test/basic.jl: "basic_QP" but using MathProgBase
+        P = sparse([11. 0.; 0. 0.])
+        q = [3.; 4]
+        A = sparse([-1 0; 0 -1; -1 -3; 2 5; 3 4])
+        u = [0.; 0.; -15; 100; 80]
+        l = fill(-Inf, length(u))
+
+        verify_solution = function (m)
+            tol = 1e-5
+            @show getsolution(m)
+            @show getconstrduals(m)
+            @show getobjval(m)
+            println()
+
+            @test isapprox(norm(getsolution(m) - [0.; 5.]), 0., atol=tol)
+            @test isapprox(norm(getconstrduals(m) - [1.666666666666; 0.; 1.3333333; 0.; 0.]), 0., atol=tol)
+            @test isapprox(getobjval(m), 20., atol=tol)
+        end
+
+        m1 = LinearQuadraticModel(solver)
+        loadproblem!(m1, A, [-Inf, -Inf], [Inf, Inf], q, l, u, :Min)
+        m2 = copy(m1)
+        setquadobj!(m1, P)
+        optimize!(m1)
+        verify_solution(m1)
+
+        setquadobj!(m2, findnz(triu(P))...) # triu to avoid duplicate elements
         optimize!(m2)
         verify_solution(m2)
     end
