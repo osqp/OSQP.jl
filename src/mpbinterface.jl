@@ -3,8 +3,6 @@ module OSQPMathProgBaseInterface
 import MathProgBase
 import OSQP
 
-import MathProgBase: numvar, numconstr
-
 struct OSQPSolver <: AbstractMathProgSolver
     settings::Dict{Symbol,Any}
 end
@@ -198,6 +196,7 @@ function loadproblem!(model::OSQPMathProgModel, A, l, u, c, lb, ub, sense)
 
     m, n = size(A)
     resize!(model, n, m)
+    copy!(model.q, c)
     copy!(model.l, lb)
     copy!(model.u, ub)
     copy!(model.A, A)
