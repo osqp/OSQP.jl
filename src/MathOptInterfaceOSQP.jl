@@ -34,29 +34,36 @@ end
 MOI.isempty(instance::OSQPInstance) = instance.isempty
 
 function MOI.copy!(dest::OSQPInstance, src::MOI.AbstractInstance)
+    # TODO: cangets (awaiting https://github.com/JuliaOpt/MathOptInterface.jl/pull/210)
+
+    # Type aliases
+    Affine = MOI.ScalarAffineFunction{Float64}
+    SingleVariable = MOI.SingleVariable
+    Quadratic = MOI.ScalarQuadraticFunction{Float64}
+    Interval = MOI.Interval{Float64}
+
+    # Empty
     MOI.empty!(dest)
 
+    # Check constraint types
+    for (F, S) in MOI.get(src, MOI.ListOfConstraints())
+        MOI.supportsconstraint(dest, F, S) || return MOI.CopyResult(MOI.CopyUnsupportedConstraint, "Unsupported $F-in-$S constraint", IndexMap())
+    end
+
     # Set up index map
-    idxmap = MOI.IndexMap() # TODO: could even get a typed one
+    idxmap = IndexMap() # TODO: could even use a typed version of this, as there's only one type of constraint right now.
     vis_src = MOI.get(src, MOI.ListOfVariableIndices())
     for i in eachindex(vis_src)
         idxmap[vis_src[i]] = VI(i)
     end
-    cis_src = MOI.get(src, MOI.ListOfConstraintIndices())
+    cis_src = MOI.get(src, MOI.ListOfConstraintIndices{Affine, Interval}()) # TODO: canget
     for i in eachindex(cis_src)
-        ci_src = cis_src[i]
-        if ci_src isa CI{MOI.ScalarAffineFunction, MOI.Interval}
-            idxmap[cis_src[i]] = CI{MOI.ScalarAffineFunction, MOI.Interval}(i)
-        else
-            return MOI.CopyResult(MOI.CopyUnsupportedConstraint, "Unsupported constraint of type $(typeof(ci_src))", idxmap)
-        end
+        idxmap[cis_src[i]] = CI{Affine, Interval}(i)
     end
 
     # Get sizes
-    @assert MOI.canget(src, MOI.NumberOfVariables())
     n = MOI.get(src, MOI.NumberOfVariables())
-    @assert MOI.canget(src, MOI.NumberOfConstraints())
-    m = MOI.get(src, MOI.NumberOfConstraints())
+    m = MOI.get(src, MOI.NumberOfConstraints{Affine, Interval}())
 
     # Allocate storage for problem data
     P = spzeros(n, n)
@@ -66,13 +73,24 @@ function MOI.copy!(dest::OSQPInstance, src::MOI.AbstractInstance)
     u = zeros(m)
 
     # Process objective function
-    @assert MOI.canget(src, MOI.ObjectiveFunction())
-    obj = MOI.get(src, MOI.ObjectiveFunction())
-    processobjective!(P, q, obj, idxmap)
+    # prefer the simplest form
+    if MOI.canget(src, MOI.ObjectiveFunction{SingleVariable}())
+        processobjective!(P, q, MOI.get(src, MOI.ObjectiveFunction{SingleVariable}()), idxmap)
+    elseif MOI.canget(src, MOI.ObjectiveFunction{Affine}())
+        processobjective!(P, q, MOI.get(src, MOI.ObjectiveFunction{Affine}()), idxmap)
+    elseif MOI.canget(src, MOI.ObjectiveFunction{Quadratic}())
+        processobjective!(P, q, MOI.get(src, MOI.ObjectiveFunction{Quadratic}()), idxmap)
+    else
+        return MOI.CopyResult(MOI.CopyOtherError, "No suitable objective function found", idxmap)
+    end
+    sense = MOI.get(src, MOI.ObjectiveSense())
+    @assert sense == MOI.MinSense || sense == MOI.FeasibilitySense
     # TODO: constant term
 
+    # Process constraints
+    processconstraints!(A, l, u, src, idxmap, Affine, Interval)
+
     # Process instance attributes
-    @assert MOI.get(src, MOI.ObjectiveSense()) == MOI.get(dest, MOI.ObjectiveSense())
 
     # Process variable attributes
     # TODO: VariablePrimalStart
@@ -81,14 +99,13 @@ function MOI.copy!(dest::OSQPInstance, src::MOI.AbstractInstance)
     # TODO: ConstraintPrimalStart
     # TODO: ConstraintDualStart
 
-
+    # Set up and finish up
     OSQP.setup!(dest.inner; P = P, q = q, A = A, l = l, u = u) # TODO: settings
-
     dest.isempty = false
-
     return MOI.CopyResult(MOI.CopySuccess, "", idxmap)
 end
 
+# These could probably move to MOIU:
 function process_affine_objective!(P::SparseMatrixCSC, q::Vector, variables::Vector{VI}, coefficients::Vector, idxmap)
     q[:] = 0
     n = length(coefficients)
@@ -120,6 +137,26 @@ function processobjective!(P::SparseMatrixCSC, q::Vector, objfun::MOI.SingleVari
     P[:] = 0
     q[idxmap[objfun.variable.value]] = 1
     nothing
+end
+
+function processconstraints!(A::SparseMatrixCSC, l::Vector, u::Vector, src::MOI.AbstractInstance, idxmap, F::Type{<:MOI.ScalarAffineFunction}, S::Type{<:MOI.Interval})
+    cis_src = MOI.get(src, MOI.ListOfConstraintIndices{F, S}())
+    row = 1
+    for ci in cis_src
+        s = MOI.get(src, MOI.ConstraintSet(), ci)
+        f = MOI.get(src, MOI.ConstraintFunction(), ci)
+        l[row] = s.lower - f.constant
+        u[row] = s.upper - f.constant
+        n = length(f.coefficients)
+        @assert length(f.variables) == n
+        for i = 1 : n
+            var = f.variables[i]
+            coeff = f.coefficients[i]
+            col = idxmap[var].value
+            A[row, col] = coeff
+        end
+        row += 1
+    end
 end
 
 
@@ -233,7 +270,7 @@ MOI.canaddvariable(instance::OSQPInstance) = false
 MOI.canget(instance::OSQPInstance, ::MOI.VariablePrimalStart, ::Type{VI}) = false # currently not exposed, but could be
 MOI.canset(instance::OSQPInstance, ::MOI.VariablePrimalStart, ::Type{VI}) = false # TODO: need selective way of updating primal start
 
-MOI.canget(instance::OSQPInstance, ::MOI.VariablePrimal, ::VI) = hasresults(instance) && instance.results.info.status ∈ OSQP.SOLUTION_PRESENT
+MOI.canget(instance::OSQPInstance, ::MOI.VariablePrimal, ::Type{VI}) = hasresults(instance) && instance.results.info.status ∈ OSQP.SOLUTION_PRESENT
 MOI.get(instance::OSQPInstance, ::MOI.VariablePrimal, vi::VI) = instance.results.x[vi.value]
 MOI.get(instance::OSQPInstance, a::MOI.VariablePrimal, vi::Vector{VI}) = MOI.get.(instance, a, vi) # TODO: copied from SCS. Necessary?
 
@@ -252,7 +289,7 @@ MOI.canmodifyconstraint(instance::OSQPInstance, ci::CI{MOI.ScalarAffineFunction,
 
 # TODO: partial change with MultirowChange
 
-MOI.supportsconstraint(instance::OSQPInstance, ::Type{MOI.ScalarAffineFunction}, ::Type{MOI.Interval}) = true
+MOI.supportsconstraint(instance::OSQPInstance, ::Type{MOI.ScalarAffineFunction{Float64}}, ::Type{MOI.Interval{Float64}}) = true
 
 
 ## Constraint attributes:
