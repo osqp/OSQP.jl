@@ -90,17 +90,33 @@ function MOI.copy!(dest::OSQPInstance, src::MOI.AbstractInstance)
     # Process constraints
     processconstraints!(A, l, u, src, idxmap, Affine, Interval)
 
+    # Load data into OSQP Model
+    OSQP.setup!(dest.inner; P = P, q = q, A = A, l = l, u = u) # TODO: settings
+
     # Process instance attributes
+    # TODO
 
     # Process variable attributes
-    # TODO: VariablePrimalStart
+    if MOI.canget(src, MOI.VariablePrimalStart(), VI)
+        x = zeros(n)
+        i = 1
+        for vi in vis_src
+            x[i] = get(src, MOI.VariablePrimalStart(), vi)
+            i += 1
+        end
+        OSQP.warm_start!(src, x = x)
+    end
 
-    # Process constraint attributes
-    # TODO: ConstraintPrimalStart
-    # TODO: ConstraintDualStart
+    if MOI.canget(src, MOI.ConstraintDualStart(), CI{Affine, Interval})
+        y = zeros(m)
+        i = 1
+        for ci in cis_src
+            y[i] = get(src, MOI.ConstraintDualStart(), ci)
+            i += 1
+        end
+    end
 
-    # Set up and finish up
-    OSQP.setup!(dest.inner; P = P, q = q, A = A, l = l, u = u) # TODO: settings
+    # Finish up
     dest.isempty = false
     return MOI.CopyResult(MOI.CopySuccess, "", idxmap)
 end
