@@ -101,7 +101,15 @@ resetproblem(model::OSQPMathProgModel) = (model.results = nothing; model.perform
 # http://mathprogbasejl.readthedocs.io/en/latest/solverinterface.html
 LinearQuadraticModel(solver::OSQPSolver) = OSQPMathProgModel(solver.settings)
 getsolution(model::OSQPMathProgModel) = (checksolved(model); model.results.x)
-getobjval(model::OSQPMathProgModel) = (checksolved(model); model.results.info.obj_val)
+function getobjval(model::OSQPMathProgModel) 
+    checksolved(model)
+    
+    if model.sense == :Min
+        return model.results.info.obj_val
+    else
+        return -model.results.info.obj_val
+    end
+end
 
 function optimize!(model::OSQPMathProgModel)
     # Perform setup only if necessary
@@ -135,8 +143,8 @@ function status(model::OSQPMathProgModel)::Symbol
     osqpstatus == :Interrupted && (status = :UserLimit) # following Gurobi.jl
     osqpstatus == :Primal_infeasible && (status = :Infeasible)
     osqpstatus == :Primal_infeasible_inaccurate && (status = :Infeasible)
-    osqpstatus == :Dual_infeasible && (status = :DualityFailure)
-    osqpstatus == :Dual_infeasible_inaccurate && (status = :DualityFailure)
+    osqpstatus == :Dual_infeasible && (status = :Unbounded)
+    osqpstatus == :Dual_infeasible_inaccurate && (status = :Unbounded)
 
     return status
 end
@@ -149,14 +157,14 @@ getsolvetime(model::OSQPMathProgModel) = (checksolved(model); model.results.info
 
 function setsense!(model::OSQPMathProgModel, sense::Symbol) 
     if sense in [:Min, :Max]
-        if sense == :Max & model.sense != :Max
+        if (sense == :Max) & (model.sense != :Max)
             model.q *= -1
             model.P *= -1
 
             # Update problem data
             if !model.perform_setup
                 update!(model.inner, q=model.q)
-                update!(model.inner, Px=triu(model.P.nzval))
+                update!(model.inner, Px=triu(model.P).nzval)
             end
         end
         model.sense = sense
@@ -310,7 +318,9 @@ function setobj!(model::OSQPMathProgModel, c)
     copy!(model.q, c)
     
     # Negate cost if necessary
-    (model.sense == :Max) && (model.q = -model.q)   
+    if model.sense == :Max
+        model.q *= -1
+    end
 
     if !model.perform_setup
         update!(model.inner, q=model.q)
@@ -320,25 +330,105 @@ function setobj!(model::OSQPMathProgModel, c)
 
 end
 
+function getobj(model::OSQPMathProgModel) 
+    if model.sense == :Min
+        return model.q
+    else
+        return -model.q
+    end
+end
+
 
 getconstrmatrix(model::OSQPMathProgModel) = model.A
-# TODO: addvar!
+
+
+function addvar!(model::OSQPMathProgModel, constridx, constrcoef, l, u, objcoef)
+
+    # Get bounds if they are not set
+    ((l == nothing) && (li = -Inf)) || (li = l)
+    ((u == nothing) && (ui = Inf)) || (ui = u)
+
+    # Change cost P, q
+    if model.sense == :Min
+        qi = objcoef
+    else
+        qi = -objcoef
+    end
+    model.q = [model.q; qi]
+    model.P = blkdiag(model.P, spzeros(1,1))
+
+    # Change constraints
+    if !isempty(constrcoef) && !isempty(constridx)
+        # Update A
+        m = numconstr(model)
+        constr_xi = sparsevec(constridx, constrcoef, m)
+        model.A = [model.A constr_xi]
+    end
+
+    # Update l and u
+    model.l = [model.l; li]
+    model.u = [model.u; ui]
+
+    # Change ws
+    model.x_ws = [model.x_ws; 0]
+
+    # With new variable we need to perform setup
+    model.perform_setup = true
+
+end
+addvar!(model::OSQPMathProgModel, l, u, objcoef) = addvar!(model, [], [], l, u, objcoef)
+
+function addconstr!(model::OSQPMathProgModel, varidx, coef, lb, ub)
+    # Construct sparse vector with the new constraint
+    n = numvar(model)
+    ai = sparsevec(varidx, coef, n)
+   
+    # Augment A, lb, ub
+    if isempty(model.A)
+        model.A = sparse(ai')
+    else
+        model.A = [model.A; ai']
+    end
+    model.lb = [model.lb; lb]
+    model.ub = [model.ub; ub]
+
+    # With the new constraint we must perform setup
+    model.perform_setup = true
+
+end
+
 # TODO: delvars!
-# TODO: addconstr!
 # TODO: delconstrs!
 # TODO: changecoeffs!
+
 numlinconstr(model::OSQPMathProgModel) = numconstr(model)
 getconstrsolution(model::OSQPMathProgModel) = model.A * getsolution(model)
-getreducedcosts(model::OSQPMathProgModel) = (checksolved(model); model.results.y[end-get_qp_variables(model):end])
-getconstrduals(model::OSQPMathProgModel) = (checksolved(model); model.results.y[1:get_qp_constraints(model)])
+function getreducedcosts(model::OSQPMathProgModel) 
+    checksolved(model)
+    if model.sense == :Min
+        return -model.results.y[end-(get_qp_variables(model)-1):end]
+    else
+        return model.results.y[end-(get_qp_variables(model)-1):end]
+    end
+end
+
+function getconstrduals(model::OSQPMathProgModel) 
+    checksolved(model)
+    if model.sense == :Min
+        return -model.results.y[1:get_qp_constraints(model)]
+    else
+        return model.results.y[1:get_qp_constraints(model)]
+    end
+end
 
 
 function getinfeasibilityray(model::OSQPMathProgModel)
     checksolved(model)
     
-    if model.info.status in [:Primal_infeasible, :Primal_infeasible_inaccurate]
-        # NB This returns an infeasibility ray taking into account also the variable bounds
-        return model.results.prim_inf_cert
+    if model.results.info.status in [:Primal_infeasible, :Primal_infeasible_inaccurate]
+        m = numconstr(model)
+        # Returns infeasibility ray taking into account both bounds and constraints
+        ray = -model.results.prim_inf_cert
     else
         error("Problem not infeasible")
     end
@@ -348,7 +438,7 @@ end
 function getunboundedray(model::OSQPMathProgModel)
     checksolved(model)
     
-    if model.info.status in [:Dual_infeasible, :Dual_infeasible_inaccurate]
+    if model.results.info.status in [:Dual_infeasible, :Dual_infeasible_inaccurate]
         return model.results.dual_inf_cert
     else
         error("Problem not unbounded")
