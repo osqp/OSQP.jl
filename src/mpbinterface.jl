@@ -33,6 +33,12 @@ mutable struct OSQPMathProgModel <: AbstractLinearQuadraticModel
     l::Vector{Float64}
     u::Vector{Float64}
 
+    # Warm start auxiliary variables
+    x_ws::Vector{Float64}  # Warm start vector
+    # Call warm start function in optimize!. 
+    # NB. Warmstart is enabled internally by default when changing problem data
+    run_warmstart::Bool  
+
     # Results
     results::Results
 
@@ -45,7 +51,11 @@ mutable struct OSQPMathProgModel <: AbstractLinearQuadraticModel
         l = Float64[]
         u = Float64[]
         perform_setup = true
-        new(settings, Model(), perform_setup, :Min, P, q, A, lb, ub, l, u) # leave other fields undefined
+        x_ws = Float64[]
+        run_warmstart = false
+        new(settings, Model(), perform_setup, 
+            :Min, P, q, A, lb, ub, l, u, 
+            x_ws, run_warmstart) # leave other fields undefined
     end
 end
 
@@ -76,6 +86,7 @@ function initialize_dimensions!(model::OSQPMathProgModel, n, m)
     model.ub = zeros(m)
     model.l = zeros(n)
     model.u = zeros(n)
+    model.x_ws = zeros(n)
 
     model
 end
@@ -102,6 +113,11 @@ function optimize!(model::OSQPMathProgModel)
                u = [model.ub; model.u], 
                model.settings...)
         model.perform_setup = false  # No longer needed to perform setup
+    end
+
+    # Call internal warm start function if needed
+    if model.run_warmstart
+        warm_start!(model.inner, x=model.x_ws)
     end
 
     # Solve the problem and store the results
@@ -205,7 +221,8 @@ the primal variable warm start is supported. Note that OSQP performs warm starti
 when parts of the problem data change and a new optimize! is called.
 """
 function setwarmstart!(model::OSQPMathProgModel, x)
-    warm_start!(model.inner, x = x)
+    copy!(model.x_ws, x)
+    model.run_warmstart = true
 end
 
 
@@ -222,10 +239,8 @@ function loadproblem!(model::OSQPMathProgModel, A, l, u, c, lb, ub, sense)
     else
         error("Objective sense not recognized")
     end
-    
 
     # Copy variables
-    # TODO: Should we use deepcopy here? And no resize?
     copy!(model.q, c)
     copy!(model.lb, lb)
     copy!(model.ub, ub)
@@ -315,7 +330,7 @@ getconstrmatrix(model::OSQPMathProgModel) = model.A
 numlinconstr(model::OSQPMathProgModel) = numconstr(model)
 getconstrsolution(model::OSQPMathProgModel) = model.A * getsolution(model)
 getreducedcosts(model::OSQPMathProgModel) = (checksolved(model); model.results.y[end-get_qp_variables(model):end])
-getconstrduals(model::OSQPMathProgModel) = (checksolved(model); model.results.y[1:get_qp_variables(model)])
+getconstrduals(model::OSQPMathProgModel) = (checksolved(model); model.results.y[1:get_qp_constraints(model)])
 
 
 function getinfeasibilityray(model::OSQPMathProgModel)
@@ -345,7 +360,7 @@ end
 # http://mathprogbasejl.readthedocs.io/en/latest/lpqcqp.html#quadratic-programming
 numquadconstr(model::OSQPMathProgModel) = 0
 
-setquadobj!(model::OSQPMathProgModel, Q::Matrix) = ((Qi, Qj, Qx) = findnz(Q); setquadobj!(model, Qi, Qj, Qx))
+# setquadobj!(model::OSQPMathProgModel, Q::Matrix) = ((Qi, Qj, Qx) = findnz(Q); setquadobj!(model, Qi, Qj, Qx))
 function setquadobj!(model::OSQPMathProgModel, rowidx::Vector, colidx::Vector, quadval::Vector)
     nterms = length(quadval)
     @boundscheck length(rowidx) == nterms || error()
@@ -356,24 +371,36 @@ function setquadobj!(model::OSQPMathProgModel, rowidx::Vector, colidx::Vector, q
         Pi, Pj, Px = findnz(model.P)
         if (rowidx == Pi) & (colidx == Pj) & !model.perform_setup
             if model.sense == :Max
-                # Update only nonzeros of P
-                update!(model.inner, Px=-Px)
+                # Update matrix in MathProgBase model
+                copy!(model.P.nzval, -Px)
             else
-                # Update only nonzeros of P
-                update!(model.inner, Px=Px)         
+                # Update matrix in MathProgBase model
+                copy!(model.P.nzval, Px)      
             end
+            # Update only nonzeros of P
+            update!(model.inner, Px=model.P.nzval)
             return model       
         end
     end
     
     # Create sparse matrix from indices
-    Ptemp = sparse(rowidx, colidx, quadval)   # Temporary P matrix
-    if istril(Ptemp)   # If lower triangular matrix take transpose
-        model.P = Ptemp'
-    else
-        model.P = Ptemp
+    # zero out coeffs
+    for i = 1 : nterms
+        @inbounds row = rowidx[i]
+        @inbounds col = colidx[i]
+        model.P[row, col] = 0
     end
 
+    # add new coeffs and symmetrize
+    for i = 1 : nterms
+        @inbounds row = rowidx[i]
+        @inbounds col = colidx[i]
+        @inbounds val = quadval[i]
+        model.P[row, col] += val
+        model.P[col, row] = model.P[row, col]
+    end
+
+    # Change sign if maximizing
     if model.sense == :Max
         model.P *= -1
     end
