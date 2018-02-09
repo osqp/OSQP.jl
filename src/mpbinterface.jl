@@ -1,7 +1,7 @@
 module OSQPMathProgBaseInterface
 
-import MathProgBase
-import OSQP
+using OSQP: Model, Results, setup!, solve!, update!, clean!, update_settings!, warm_start!
+importall MathProgBase.SolverInterface
 
 struct OSQPSolver <: AbstractMathProgSolver
     settings::Dict{Symbol,Any}
@@ -49,16 +49,14 @@ mutable struct OSQPMathProgModel <: AbstractLinearQuadraticModel
     end
 end
 
-# TODO: Change here nothing to something more meaningful on the dimensions
 function get_qp_variables(model::OSQPMathProgModel)
     # Check problem dimensions
-    if model.P == nothing
-        if model.q != nothing
-            n = length(model.q)
-        elseif model.A != nothing
+    if size(model.P, 2) == 0
+        if size(model.A, 2) != 0
             n = size(model.A, 2)
+        else
+            error("the model has no variables")
         end
-
     else
         n = size(model.P, 1)
     end
@@ -66,36 +64,22 @@ function get_qp_variables(model::OSQPMathProgModel)
     return n
 end
 
-function get_qp_constraints(model::OSQPMathProgModel)
-    if model.A == nothing
-        m = 0
-    else
-        m = size(model.A, 1)
-    end
+get_qp_constraints(model::OSQPMathProgModel) = size(model.A, 1)
 
-    return m
+# Initialize 
+function initialize_dimensions!(model::OSQPMathProgModel, n, m)
+    # Initialize empty vectors and matrices with the right dimensions
+    model.P = spzeros(n, n)
+    model.q = zeros(n)
+    model.A = spzeros(m, n)
+    model.lb = zeros(m)
+    model.ub = zeros(m)
+    model.l = zeros(n)
+    model.u = zeros(n)
+
+    model
 end
 
-
-
-# TODO: Do we need this?
-# function Base.resize!(model::OSQPMathProgModel, n, m)
-#     nchange = n != numvar(model)
-#     mchange = m != numconstr(model)
-#     if nchange
-#         model.P = spzeros(Float64, n, n)
-#         resize!(model.q, n)
-#     end
-#     if mchange
-#         resize!(model.l, m)
-#         resize!(model.u, m)
-#     end
-#     if nchange || mchange
-#         model.A = spzeros(Float64, m, n)
-#     end
-
-#     model
-# end
 
 # Maybe add resetproblem function to remove results and reset perform_setup?
 checksolved(model::OSQPMathProgModel) = isdefined(model, :results) || error("Model has not been solved.")
@@ -111,12 +95,12 @@ getobjval(model::OSQPMathProgModel) = (checksolved(model); model.results.info.ob
 function optimize!(model::OSQPMathProgModel)
     # Perform setup only if necessary
     if model.perform_setup
-        (n, _) = get_qp_dimensions(model.P, model.q, model.A)
+        n = get_qp_variables(model)
         setup!(model.inner; P = model.P, q = model.q, 
                A = [model.A; sparse(I, n)], 
                l = [model.lb; model.l], 
                u = [model.ub; model.u], 
-               settings = model.settings)
+               model.settings...)
         model.perform_setup = false  # No longer needed to perform setup
     end
 
@@ -154,7 +138,7 @@ function setsense!(model::OSQPMathProgModel, sense::Symbol)
             model.P *= -1
 
             # Update problem data
-            if !problem.perform_setup
+            if !model.perform_setup
                 update!(model.inner, q=model.q)
                 update!(model.inner, Px=triu(model.P.nzval))
             end
@@ -168,43 +152,69 @@ end
 getsense(model::OSQPMathProgModel) = model.sense
 numvar(model::OSQPMathProgModel) = get_qp_variables(model)
 numconstr(model::OSQPMathProgModel) = get_qp_constraints(model)
-freemodel!(model::OSQPMathProgModel) = OSQP.clean!(model.inner)
+freemodel!(model::OSQPMathProgModel) = clean!(model.inner)
 
-# NB Copy not implemented
-# function Base.copy(model::OSQPMathProgModel)
-#     ret = OSQPMathProgModel(model.settings)
-#     resize!(ret, numvar(model), numconstr(model))
-#     copy!(ret.P, model.P)
-#     copy!(ret.q, model.q)
-#     copy!(ret.A, model.A)
-#     copy!(ret.l, model.l)
-#     copy!(ret.u, model.u)
-#     ret
-# end
+function Base.copy(model::OSQPMathProgModel)
+    ret = OSQPMathProgModel(model.settings)
+    initialize_dimensions!(ret, numvar(model), numconstr(model))
+    ret.sense = model.sense
+    copy!(ret.P, model.P)
+    copy!(ret.q, model.q)
+    copy!(ret.A, model.A)
+    copy!(ret.lb, model.lb)
+    copy!(ret.ub, model.ub)
+    copy!(ret.l, model.l)
+    copy!(ret.u, model.u)
+    ret
+end
 
 setvartype!(model::OSQPMathProgModel, v::Vector{Symbol}) = any(x -> x != :Cont, v) && error("OSQP only supports continuous variables.")
 getvartype(model::OSQPMathProgModel) = fill(:Cont, numvar(model))
 
+# Set solver independent parameters: Silent is the only supported one for now
 function setparameters!(x::OSQPMathProgModel; Silent = nothing)
     if Silent != nothing
         Silent::Bool
         x.settings[:verbose] = !Silent
-    end
 
-    # Update silent setting if setup has already been performed
-    if !x.perform_setup
-        update_settings!(x.inner, verbose=Silent)
+        # Update silent setting if setup has already been performed
+        if !x.perform_setup
+            update_settings!(x.inner, verbose=Silent)
+        end
     end
 
     x
 end
 
-# TODO: Check SCS.jl function to set also dual variables
-setwarmstart!(model::OSQPMathProgModel, v) = OSQP.warm_start!(model.inner, x = v)
+# Do not update the problem instance settings using OSQP internal functions if the x is OSQPSolver and not OSQPMathProgModel
+function setparameters!(x::OSQPSolver; Silent = nothing)  
+    if Silent != nothing
+        Silent::Bool
+        x.settings[:verbose] = !Silent
+    end
+    x
+end
+
+"""
+    setwarmstart!(model::OSQPMathProgModel, x)
+
+Warm start the solver solution with the primal variable `x`.
+
+NB. The `warm_start!` function supports setting also the dual variables but in MathProgBase only
+the primal variable warm start is supported. Note that OSQP performs warm starting automatically
+when parts of the problem data change and a new optimize! is called.
+"""
+function setwarmstart!(model::OSQPMathProgModel, x)
+    warm_start!(model.inner, x = x)
+end
 
 
 # http://mathprogbasejl.readthedocs.io/en/latest/lpqcqp.html#linearquadratic-models
 function loadproblem!(model::OSQPMathProgModel, A, l, u, c, lb, ub, sense)
+
+    (m, n) = size(A)  # Get problem dimensions
+    initialize_dimensions!(model, n, m)  # Initialize problem dimensions
+
     if sense == :Min
         copy!(model.q, c)
     elseif sense == :Max
@@ -212,9 +222,10 @@ function loadproblem!(model::OSQPMathProgModel, A, l, u, c, lb, ub, sense)
     else
         error("Objective sense not recognized")
     end
-
+    
 
     # Copy variables
+    # TODO: Should we use deepcopy here? And no resize?
     copy!(model.q, c)
     copy!(model.lb, lb)
     copy!(model.ub, ub)
@@ -284,7 +295,7 @@ function setobj!(model::OSQPMathProgModel, c)
     copy!(model.q, c)
     
     # Negate cost if necessary
-    model.sense == :Max && model.q = -model.q   
+    (model.sense == :Max) && (model.q = -model.q)   
 
     if !model.perform_setup
         update!(model.inner, q=model.q)
@@ -343,7 +354,7 @@ function setquadobj!(model::OSQPMathProgModel, rowidx::Vector, colidx::Vector, q
     # Check if only the values have changed
     if isdefined(model, :P)
         Pi, Pj, Px = findnz(model.P)
-        if rowidx == Pi & colidx == Pj & !model.perform_setup
+        if (rowidx == Pi) & (colidx == Pj) & !model.perform_setup
             if model.sense == :Max
                 # Update only nonzeros of P
                 update!(model.inner, Px=-Px)
@@ -356,10 +367,15 @@ function setquadobj!(model::OSQPMathProgModel, rowidx::Vector, colidx::Vector, q
     end
     
     # Create sparse matrix from indices
-    model.P = sparse(rowidx, colidx, quadval)
+    Ptemp = sparse(rowidx, colidx, quadval)   # Temporary P matrix
+    if istril(Ptemp)   # If lower triangular matrix take transpose
+        model.P = Ptemp'
+    else
+        model.P = Ptemp
+    end
 
     if model.sense == :Max
-        model.P = -model.P
+        model.P *= -1
     end
     
     # Need new setup when we set a new P
