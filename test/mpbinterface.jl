@@ -32,22 +32,22 @@ using MathProgBase.SolverInterface
         @test isapprox(getobjval(m), 130/70, atol=1e-6)
         @test isapprox(norm(getsolution(m) - [0.5714285714285715,0.4285714285714285,0.8571428571428572]), 0.0, atol=1e-6)
 
-        # m2 = copy(m)
+        m2 = copy(m)
 
-        # verify_solution = function (m)
-        #     stat = status(m)
-        #     @test stat == :Optimal
-        #     @test isapprox(getobjval(m), 130/70, atol=1e-6)
-        #     @test isapprox(norm(getsolution(m) - [0.5714285714285715,0.4285714285714285,0.8571428571428572]), 0.0, atol=1e-6)
-        #     @test getsolvetime(m) > 0
-        # end
+        verify_solution = function (m)
+            stat = status(m)
+            @test stat == :Optimal
+            @test isapprox(getobjval(m), 130/70, atol=1e-6)
+            @test isapprox(norm(getsolution(m) - [0.5714285714285715,0.4285714285714285,0.8571428571428572]), 0.0, atol=1e-6)
+            @test getsolvetime(m) > 0
+        end
 
-        # optimize!(m)
-        # verify_solution(m)
+        optimize!(m)
+        verify_solution(m)
 
         # setwarmstart!(m2, getsolution(m) .+ 0.1)
-        # optimize!(m2)
-        # verify_solution(m2)
+        optimize!(m2)
+        verify_solution(m2)
     end
 
     # @testset "basic_QP" begin
