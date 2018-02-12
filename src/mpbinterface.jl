@@ -486,20 +486,22 @@ function MathProgBase.setquadobj!(model::OSQPMathProgModel, rowidx::Vector, coli
     @boundscheck length(colidx) == nterms || error()
 
     # Check if only the values have changed
-    if isdefined(model, :P)
-        Pi, Pj, Px = findnz(model.P)
-        if (rowidx == Pi) & (colidx == Pj) & !model.perform_setup
-            if model.sense == :Max
-                # Update matrix in MathProgBase model
-                copy!(model.P.nzval, -Px)
-            else
-                # Update matrix in MathProgBase model
-                copy!(model.P.nzval, Px)      
-            end
-            # Update only nonzeros of P
-            update!(model.inner, Px=model.P.nzval)
-            return model       
+    Pi, Pj, Px = findnz(model.P)
+    if (rowidx == Pi) & (colidx == Pj) & !model.perform_setup
+        if model.sense == :Max
+            # Update matrix in MathProgBase model
+            copy!(model.P.nzval, -Px)
+        else
+            # Update matrix in MathProgBase model
+            copy!(model.P.nzval, Px)      
         end
+        # Update only nonzeros of P
+        update!(model.inner, Px=model.P.nzval)
+
+        # Reset solution status
+        resetproblem(model)
+
+        return model       
     end
     
     # Create sparse matrix from indices
