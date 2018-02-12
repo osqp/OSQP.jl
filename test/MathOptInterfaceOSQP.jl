@@ -10,7 +10,7 @@ const MOIT = MathOptInterfaceTests
 using MathOptInterfaceUtilities
 const MOIU = MathOptInterfaceUtilities
 
-MOIU.@model(OSQPCachingOptimizer, # instancename
+MOIU.@model(OSQPCachingOptimizer, # modelname
     (), # scalarsets
     (Interval, LessThan, GreaterThan, EqualTo), # typedscalarsets
     (), # vectorsets

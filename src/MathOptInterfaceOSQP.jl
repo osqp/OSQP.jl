@@ -28,10 +28,11 @@ mutable struct OSQPOptimizer <: MOI.AbstractOptimizer # TODO: name?
     results::Union{OSQP.Results, Nothing}
     isempty::Bool
     settings::Dict{Symbol, Any} # need to store these, because they should be preserved if empty! is called
+    sense::MOI.OptimizationSense
 
     # TODO: constant term?
 
-    OSQPOptimizer() = new(OSQP.Model(), nothing, true, Dict{Symbol, Any}())
+    OSQPOptimizer() = new(OSQP.Model(), nothing, true, Dict{Symbol, Any}(), MOI.MinSense)
 end
 
 hasresults(optimizer::OSQPOptimizer) = optimizer.results != nothing
@@ -40,6 +41,8 @@ function MOI.empty!(optimizer::OSQPOptimizer)
     optimizer.inner = OSQP.Model()
     optimizer.results = nothing
     optimizer.isempty = true
+    optimizer.sense = MOI.MinSense # model parameter, so needs to be reset
+    optimizer
 end
 
 MOI.isempty(optimizer::OSQPOptimizer) = optimizer.isempty
@@ -78,19 +81,21 @@ function MOI.copy!(dest::OSQPOptimizer, src::MOI.ModelLike)
     u = zeros(m)
 
     # Process objective function
-    # prefer the simplest form
-    if MOI.canget(src, MOI.ObjectiveFunction{SingleVariable}())
-        processobjective!(P, q, MOI.get(src, MOI.ObjectiveFunction{SingleVariable}()), idxmap)
-    elseif MOI.canget(src, MOI.ObjectiveFunction{Affine}())
-        processobjective!(P, q, MOI.get(src, MOI.ObjectiveFunction{Affine}()), idxmap)
-    elseif MOI.canget(src, MOI.ObjectiveFunction{Quadratic}())
-        processobjective!(P, q, MOI.get(src, MOI.ObjectiveFunction{Quadratic}()), idxmap)
-    else
-        return MOI.CopyResult(MOI.CopyOtherError, "No suitable objective function found", idxmap)
-    end
-    sense = MOI.get(src, MOI.ObjectiveSense())
-    @assert sense == MOI.MinSense || sense == MOI.FeasibilitySense
     # TODO: constant term
+    # prefer the simplest form
+    sense = dest.sense = MOI.get(src, MOI.ObjectiveSense())
+    if sense != MOI.FeasibilitySense
+        if MOI.canget(src, MOI.ObjectiveFunction{SingleVariable}())
+            processobjective!(P, q, MOI.get(src, MOI.ObjectiveFunction{SingleVariable}()), idxmap)
+        elseif MOI.canget(src, MOI.ObjectiveFunction{Affine}())
+            processobjective!(P, q, MOI.get(src, MOI.ObjectiveFunction{Affine}()), idxmap)
+        elseif MOI.canget(src, MOI.ObjectiveFunction{Quadratic}())
+            processobjective!(P, q, MOI.get(src, MOI.ObjectiveFunction{Quadratic}()), idxmap)
+        else
+            return MOI.CopyResult(MOI.CopyOtherError, "No suitable objective function found", idxmap)
+        end
+        sense == MOI.MaxSense && (scale!(P, -1); scale!(q, -1))
+    end
 
     # Process constraints
     for (F, S) in MOI.get(src, MOI.ListOfConstraints())
@@ -199,7 +204,7 @@ end
 
 ## Standard optimizer attributes:
 MOI.canget(optimizer::OSQPOptimizer, ::MOI.ObjectiveSense) = true
-MOI.get(optimizer::OSQPOptimizer, ::MOI.ObjectiveSense) = MOI.MinSense
+MOI.get(optimizer::OSQPOptimizer, ::MOI.ObjectiveSense) = optimizer.sense
 
 MOI.canget(optimizer::OSQPOptimizer, ::MOI.NumberOfVariables) = !optimizer.isempty # https://github.com/oxfordcontrol/OSQP.jl/issues/10
 MOI.get(optimizer::OSQPOptimizer, ::MOI.NumberOfVariables) = OSQP.dimensions(optimizer.model)[1]
@@ -267,7 +272,7 @@ MOI.get(optimizer::OSQPOptimizer, ::MOI.ResultCount) = 1
 MOI.canget(optimizer::OSQPOptimizer, ::MOI.ObjectiveFunction) = false # currently not exposed
 
 MOI.canget(optimizer::OSQPOptimizer, ::MOI.ObjectiveValue) = hasresults(optimizer)
-MOI.get(optimizer::OSQPOptimizer, ::MOI.ObjectiveValue) = optimizer.results.info.obj_val
+MOI.get(optimizer::OSQPOptimizer, ::MOI.ObjectiveValue) = (rawobj = optimizer.results.info.obj_val; ifelse(optimizer.sense == MOI.MaxSense, -rawobj, rawobj))
 
 MOI.canget(optimizer::OSQPOptimizer, ::MOI.ObjectiveBound) = false # currently not exposed
 MOI.canget(optimizer::OSQPOptimizer, ::MOI.RelativeGap) = false # currently not exposed
