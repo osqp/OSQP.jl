@@ -67,13 +67,9 @@ include(joinpath(Pkg.dir("MathProgBase"), "test", "linproginterface.jl"))
 
         verify_solution = function (m)
             tol = 1e-5
-            @show getsolution(m)
-            @show getconstrduals(m)
-            @show getobjval(m)
-            println()
 
             @test isapprox(norm(getsolution(m) - [0.; 5.]), 0., atol=tol)
-            @test isapprox(norm(getconstrduals(m) - [1.666666666666; 0.; 1.3333333; 0.; 0.]), 0., atol=tol)
+            @test isapprox(norm(getconstrduals(m) - [-1.666666666666; 0.; -1.3333333; 0.; 0.]), 0., atol=tol)
             @test isapprox(getobjval(m), 20., atol=tol)
         end
 
