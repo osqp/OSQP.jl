@@ -21,7 +21,8 @@ const Interval = MOI.Interval{Float64}
 const LessThan = MOI.LessThan{Float64}
 const GreaterThan = MOI.GreaterThan{Float64}
 const EqualTo = MOI.EqualTo{Float64}
-const ConvertibleToInterval = Union{Interval, LessThan, GreaterThan, EqualTo}
+const IntervalConvertible = Union{Interval, LessThan, GreaterThan, EqualTo}
+const AffineConvertible = Union{Affine, SingleVariable}
 
 mutable struct OSQPOptimizer <: MOI.AbstractOptimizer # TODO: name?
     inner::OSQP.Model
@@ -57,7 +58,7 @@ function MOI.copy!(dest::OSQPOptimizer, src::MOI.ModelLike)
     end
     m = 0
     for (F, S) in MOI.get(src, MOI.ListOfConstraints())
-        MOI.supportsconstraint(dest, F, S) || return MOI.CopyResult(MOI.CopyUnsupportedConstraint, "Unsupported $F-in-$S constraint", idxmap)
+        MOI.supportsconstraint(dest, F, S) || (@show F, S; error(); return MOI.CopyResult(MOI.CopyUnsupportedConstraint, "Unsupported $F-in-$S constraint", idxmap))
         m += MOI.get(src, MOI.NumberOfConstraints{F, S}())
         cis_src = MOI.get(src, MOI.ListOfConstraintIndices{F, S}())
         for i in eachindex(cis_src)
@@ -158,25 +159,39 @@ function processobjective!(P::SparseMatrixCSC, q::Vector, objfun::MOI.SingleVari
     nothing
 end
 
-function processconstraints!(A::SparseMatrixCSC, l::Vector, u::Vector, src::MOI.ModelLike, idxmap, F::Type{Affine}, S::Type{<:ConvertibleToInterval})
+# TODO: consider moving to MOI:
+constant(f::SingleVariable) = 0
+constant(f::Affine) = f.constant
+
+function processconstraintfun!(A::AbstractMatrix, row::Int, idxmap, f::SingleVariable)
+    col = idxmap[f.variable].value
+    A[row, col] = 1
+    nothing
+end
+
+function processconstraintfun!(A::AbstractMatrix, row::Int, idxmap, f::Affine)
+    n = length(f.coefficients)
+    @assert length(f.variables) == n
+    for i = 1 : n
+        var = f.variables[i]
+        coeff = f.coefficients[i]
+        col = idxmap[var].value
+        A[row, col] = coeff
+    end
+    nothing
+end
+
+function processconstraints!(A::SparseMatrixCSC, l::Vector, u::Vector, src::MOI.ModelLike, idxmap, F::Type, S::Type)
     cis_src = MOI.get(src, MOI.ListOfConstraintIndices{F, S}())
     for ci in cis_src
         s = MOI.Interval(MOI.get(src, MOI.ConstraintSet(), ci))
         f = MOI.get(src, MOI.ConstraintFunction(), ci)
         row = idxmap[ci].value
-        l[row] = s.lower - f.constant
-        u[row] = s.upper - f.constant
-        n = length(f.coefficients)
-        @assert length(f.variables) == n
-        for i = 1 : n
-            var = f.variables[i]
-            coeff = f.coefficients[i]
-            col = idxmap[var].value
-            A[row, col] = coeff
-        end
+        l[row] = s.lower - constant(f)
+        u[row] = s.upper - constant(f)
+        processconstraintfun!(A, row, idxmap, f)
     end
 end
-
 
 ## Optimizer attributes:
 MOI.canget(optimizer::OSQPOptimizer, ::MOI.ObjectiveSense) = true
@@ -294,7 +309,6 @@ MOI.canset(optimizer::OSQPOptimizer, ::MOI.VariablePrimalStart, ::Type{VI}) = fa
 
 MOI.canget(optimizer::OSQPOptimizer, ::MOI.VariablePrimal, ::Type{VI}) = hasresults(optimizer) && optimizer.results.info.status ∈ OSQP.SOLUTION_PRESENT
 MOI.get(optimizer::OSQPOptimizer, ::MOI.VariablePrimal, vi::VI) = optimizer.results.x[vi.value]
-MOI.get(optimizer::OSQPOptimizer, a::MOI.VariablePrimal, vi::Vector{VI}) = MOI.get.(optimizer, a, vi) # TODO: copied from SCS. Necessary?
 
 
 ## Constraints:
@@ -311,10 +325,7 @@ MOI.canmodifyconstraint(optimizer::OSQPOptimizer, ci::CI{MOI.ScalarAffineFunctio
 
 # TODO: partial change with MultirowChange
 
-MOI.supportsconstraint(optimizer::OSQPOptimizer, ::Type{Affine}, ::Type{Interval}) = true
-MOI.supportsconstraint(optimizer::OSQPOptimizer, ::Type{Affine}, ::Type{LessThan}) = true
-MOI.supportsconstraint(optimizer::OSQPOptimizer, ::Type{Affine}, ::Type{GreaterThan}) = true
-MOI.supportsconstraint(optimizer::OSQPOptimizer, ::Type{Affine}, ::Type{EqualTo}) = true
+MOI.supportsconstraint(optimizer::OSQPOptimizer, ::Type{<:AffineConvertible}, ::Type{<:IntervalConvertible}) = true
 
 
 ## Constraint attributes:
@@ -322,9 +333,11 @@ MOI.canget(optimizer::OSQPOptimizer, ::MOI.ConstraintPrimalStart, ::Type{<:CI}) 
 MOI.canget(optimizer::OSQPOptimizer, ::MOI.ConstraintDualStart, ::Type{<:CI}) = false # currently not exposed, but could be
 MOI.canset(optimizer::OSQPOptimizer, ::MOI.ConstraintDualStart, ::Type{VI}) = false # TODO: need selective way of updating primal start
 MOI.canget(optimizer::OSQPOptimizer, ::MOI.ConstraintPrimal, ::Type{<:CI}) = false # currently not exposed, but could be
-MOI.canget(optimizer::OSQPOptimizer, ::MOI.ConstraintDual, ::Type{<:CI}) = false # currently not exposed, but could be
 MOI.canget(optimizer::OSQPOptimizer, ::MOI.ConstraintFunction, ::Type{<:CI}) = false # TODO
 MOI.canget(optimizer::OSQPOptimizer, ::MOI.ConstraintSet, ::Type{<:CI}) = false # TODO
+
+MOI.canget(optimizer::OSQPOptimizer, ::MOI.ConstraintDual, ::Type{<:CI}) = hasresults(optimizer) && optimizer.results.info.status ∈ OSQP.SOLUTION_PRESENT
+MOI.get(optimizer::OSQPOptimizer, ::MOI.ConstraintDual, ci::CI) = optimizer.results.y[ci.value]
 
 
 # Objective modification

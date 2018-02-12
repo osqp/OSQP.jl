@@ -7,9 +7,9 @@ const MOIT = MathOptInterfaceTests
 using MathOptInterfaceUtilities
 const MOIU = MathOptInterfaceUtilities
 
-MOIU.@instance(OSQPInstanceData, # instancename
+MOIU.@model(OSQPCachingOptimizer, # instancename
     (), # scalarsets
-    (Interval,), # typedscalarsets
+    (Interval, LessThan, GreaterThan, EqualTo), # typedscalarsets
     (), # vectorsets
     (), # typedvectorsets
     (SingleVariable,), # scalarfunctions
@@ -21,8 +21,5 @@ MOIU.@instance(OSQPInstanceData, # instancename
 const config = MOIT.TestConfig(atol=1e-4, rtol=1e-4)
 
 @testset "Continuous linear problems" begin
-    excludes = collect(keys(MOIT.contlineartests))
-    deleteat!(excludes, findfirst(excludes, "linear10"))
-
-    MOIT.contlineartest(MOIU.InstanceManager(OSQPInstanceData{Float64}(), OSQPInstance()), config, excludes)
+    MOIT.contlineartest(MOIU.CachingOptimizer(OSQPCachingOptimizer{Float64}(), OSQPOptimizer()), config)
 end
