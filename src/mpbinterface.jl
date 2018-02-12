@@ -248,8 +248,10 @@ function loadproblem!(model::OSQPMathProgModel, A, l, u, c, lb, ub, sense)
         error("Objective sense not recognized")
     end
 
+    # Fix model sense
+    model.sense = sense
+
     # Copy variables
-    copy!(model.q, c)
     copy!(model.lb, lb)
     copy!(model.ub, ub)
     copy!(model.l, l)
