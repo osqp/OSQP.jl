@@ -1,6 +1,6 @@
 module MathOptInterfaceOSQP
 
-export OSQPOptimizer
+export OSQPOptimizer, OSQPSettings
 
 using Compat
 using MathOptInterface
@@ -10,10 +10,6 @@ const MOI = MathOptInterface
 const MOIU = MathOptInterfaceUtilities
 const CI = MOI.ConstraintIndex
 const VI = MOI.VariableIndex
-
-import OSQP
-import MathOptInterfaceUtilities: IndexMap
-
 const Affine = MOI.ScalarAffineFunction{Float64}
 const SingleVariable = MOI.SingleVariable
 const Quadratic = MOI.ScalarQuadraticFunction{Float64}
@@ -24,13 +20,18 @@ const EqualTo = MOI.EqualTo{Float64}
 const IntervalConvertible = Union{Interval, LessThan, GreaterThan, EqualTo}
 const AffineConvertible = Union{Affine, SingleVariable}
 
+import OSQP
+import MathOptInterfaceUtilities: IndexMap
+
 mutable struct OSQPOptimizer <: MOI.AbstractOptimizer # TODO: name?
     inner::OSQP.Model
     results::Union{OSQP.Results, Nothing}
     isempty::Bool
+    settings::Dict{Symbol, Any} # need to store these, because they should be preserved if empty! is called
+
     # TODO: constant term?
 
-    OSQPOptimizer() = new(OSQP.Model(), nothing, true)
+    OSQPOptimizer() = new(OSQP.Model(), nothing, true, Dict{Symbol, Any}())
 end
 
 hasresults(optimizer::OSQPOptimizer) = optimizer.results != nothing
@@ -57,12 +58,15 @@ function MOI.copy!(dest::OSQPOptimizer, src::MOI.ModelLike)
         idxmap[vis_src[i]] = VI(i)
     end
     m = 0
-    for (F, S) in MOI.get(src, MOI.ListOfConstraints())
-        MOI.supportsconstraint(dest, F, S) || (@show F, S; error(); return MOI.CopyResult(MOI.CopyUnsupportedConstraint, "Unsupported $F-in-$S constraint", idxmap))
-        m += MOI.get(src, MOI.NumberOfConstraints{F, S}())
-        cis_src = MOI.get(src, MOI.ListOfConstraintIndices{F, S}())
-        for i in eachindex(cis_src)
-            idxmap[cis_src[i]] = CI{F, S}(i)
+    let i = 0
+        for (F, S) in MOI.get(src, MOI.ListOfConstraints())
+            MOI.supportsconstraint(dest, F, S) || return MOI.CopyResult(MOI.CopyUnsupportedConstraint, "Unsupported $F-in-$S constraint", idxmap)
+            m += MOI.get(src, MOI.NumberOfConstraints{F, S}())
+            cis_src = MOI.get(src, MOI.ListOfConstraintIndices{F, S}())
+            for ci in cis_src
+                i += 1
+                idxmap[ci] = CI{F, S}(i)
+            end
         end
     end
 
@@ -94,7 +98,7 @@ function MOI.copy!(dest::OSQPOptimizer, src::MOI.ModelLike)
     end
 
     # Load data into OSQP Model
-    OSQP.setup!(dest.inner; P = P, q = q, A = A, l = l, u = u) # TODO: settings
+    OSQP.setup!(dest.inner; P = P, q = q, A = A, l = l, u = u, dest.settings...)
 
     # Process optimizer attributes
     # TODO
@@ -193,7 +197,7 @@ function processconstraints!(A::SparseMatrixCSC, l::Vector, u::Vector, src::MOI.
     end
 end
 
-## Optimizer attributes:
+## Standard optimizer attributes:
 MOI.canget(optimizer::OSQPOptimizer, ::MOI.ObjectiveSense) = true
 MOI.get(optimizer::OSQPOptimizer, ::MOI.ObjectiveSense) = MOI.MinSense
 
@@ -214,6 +218,39 @@ MOI.canget(optimizer::OSQPOptimizer, ::MOI.ListOfConstraintAttributesSet) = fals
 
 MOI.canget(optimizer::OSQPOptimizer, ::MOI.ConstraintPrimal, ::CI) = false # constraint primal (or A matrix) not currently exposed by OSQP interface
 
+
+## Solver-specific optimizer attributes:
+module OSQPSettings
+
+export OSQPAttribute, isupdatable
+
+using MathOptInterface, OSQP
+const MOI = MathOptInterface
+
+abstract type OSQPAttribute <: MOI.AbstractOptimizerAttribute end
+
+for setting in fieldnames(OSQP.Settings)
+    Attribute = Symbol(mapreduce(ucfirst, *, split(String(setting), '_'))) # to camelcase
+    @eval begin
+        export $Attribute
+        struct $Attribute <: OSQPAttribute end
+        Base.Symbol(::$Attribute) = $(QuoteNode(setting))
+        isupdatable(::$Attribute) = $(setting ∈ OSQP.UPDATABLE_SETTINGS)
+    end
+end
+end # module
+
+using .OSQPSettings
+
+MOI.canset(optimizer::OSQPOptimizer, a::OSQPAttribute) = MOI.isempty(optimizer) || isupdatable(a)
+function MOI.set!(optimizer::OSQPOptimizer, a::OSQPAttribute, value)
+    MOI.canset(optimizer, a) || error()
+    setting = Symbol(a)
+    optimizer.settings[setting] = value
+    if !MOI.isempty(optimizer)
+        OSQP.update_settings!(optimizer.inner; setting = value)
+    end
+end
 
 ## Solver optimizer:
 MOI.optimize!(optimizer::OSQPOptimizer) = (optimizer.results = OSQP.solve!(optimizer.inner))
@@ -337,7 +374,7 @@ MOI.canget(optimizer::OSQPOptimizer, ::MOI.ConstraintFunction, ::Type{<:CI}) = f
 MOI.canget(optimizer::OSQPOptimizer, ::MOI.ConstraintSet, ::Type{<:CI}) = false # TODO
 
 MOI.canget(optimizer::OSQPOptimizer, ::MOI.ConstraintDual, ::Type{<:CI}) = hasresults(optimizer) && optimizer.results.info.status ∈ OSQP.SOLUTION_PRESENT
-MOI.get(optimizer::OSQPOptimizer, ::MOI.ConstraintDual, ci::CI) = optimizer.results.y[ci.value]
+MOI.get(optimizer::OSQPOptimizer, ::MOI.ConstraintDual, ci::CI) = -optimizer.results.y[ci.value] # MOI uses opposite dual convention
 
 
 # Objective modification

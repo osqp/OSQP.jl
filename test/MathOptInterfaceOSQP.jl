@@ -1,6 +1,9 @@
 using OSQP.MathOptInterfaceOSQP
 using Base.Test
 
+using MathOptInterface
+const MOI = MathOptInterface
+
 using MathOptInterfaceTests
 const MOIT = MathOptInterfaceTests
 
@@ -21,5 +24,11 @@ MOIU.@model(OSQPCachingOptimizer, # instancename
 const config = MOIT.TestConfig(atol=1e-4, rtol=1e-4)
 
 @testset "Continuous linear problems" begin
-    MOIT.contlineartest(MOIU.CachingOptimizer(OSQPCachingOptimizer{Float64}(), OSQPOptimizer()), config)
+    excludes = collect(keys(MOIT.contlineartests))
+    deleteat!(excludes, findfirst(excludes, "linear1"))
+    optimizer = OSQPOptimizer()
+    MOI.set!(optimizer, OSQPSettings.Verbose(), false)
+    MOI.set!(optimizer, OSQPSettings.EpsAbs(), 1e-8)
+    MOI.set!(optimizer, OSQPSettings.EpsRel(), 1e-8)
+    MOIT.contlineartest(MOIU.CachingOptimizer(OSQPCachingOptimizer{Float64}(), optimizer), config, excludes)
 end
