@@ -223,15 +223,19 @@ MOI.get(optimizer::OSQPOptimizer, ::MOI.SolveTime) = optimizer.results.info.run_
 
 MOI.canget(optimizer::OSQPOptimizer, ::MOI.TerminationStatus) = hasresults(optimizer)
 function MOI.get(optimizer::OSQPOptimizer, ::MOI.TerminationStatus)
+    # Note that the :Dual_infeasible and :Primal_infeasible are mapped to MOI.Success
+    # because OSQP can return a proof of infeasibility. For the same reason,
+    # :Primal_infeasible_inaccurate is mapped to MOI.AlmostSuccess
+
     osqpstatus = optimizer.results.info.status
     if osqpstatus == :Unsolved
         error("Problem is unsolved.") # TODO: good idea?
     elseif osqpstatus == :Interrupted
         MOI.Interrupted
     elseif osqpstatus == :Dual_infeasible
-        MOI.InfeasibleOrUnbounded
+        MOI.Success
     elseif osqpstatus == :Primal_infeasible
-        MOI.InfeasibleNoResult
+        MOI.Success
     elseif osqpstatus == :Max_iter_reached
         MOI.IterationLimit
     elseif osqpstatus == :Solved
@@ -239,7 +243,7 @@ function MOI.get(optimizer::OSQPOptimizer, ::MOI.TerminationStatus)
     elseif osqpstatus == :Solved_inaccurate
         MOI.AlmostSuccess
     elseif osqpstatus == :Primal_infeasible_inaccurate
-        MOI.InfeasibleNoResult
+        MOI.AlmostSuccess
     end
 end
 
