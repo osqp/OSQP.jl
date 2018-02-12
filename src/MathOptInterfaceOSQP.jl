@@ -14,6 +14,15 @@ const VI = MOI.VariableIndex
 import OSQP
 import MathOptInterfaceUtilities: IndexMap
 
+const Affine = MOI.ScalarAffineFunction{Float64}
+const SingleVariable = MOI.SingleVariable
+const Quadratic = MOI.ScalarQuadraticFunction{Float64}
+const Interval = MOI.Interval{Float64}
+const LessThan = MOI.LessThan{Float64}
+const GreaterThan = MOI.GreaterThan{Float64}
+const EqualTo = MOI.EqualTo{Float64}
+const ConvertibleToInterval = Union{Interval, LessThan, GreaterThan, EqualTo}
+
 mutable struct OSQPOptimizer <: MOI.AbstractOptimizer # TODO: name?
     inner::OSQP.Model
     results::Union{OSQP.Results, Nothing}
@@ -36,34 +45,25 @@ MOI.isempty(optimizer::OSQPOptimizer) = optimizer.isempty
 function MOI.copy!(dest::OSQPOptimizer, src::MOI.ModelLike)
     # TODO: cangets (awaiting https://github.com/JuliaOpt/MathOptInterface.jl/pull/210)
 
-    # Type aliases
-    Affine = MOI.ScalarAffineFunction{Float64}
-    SingleVariable = MOI.SingleVariable
-    Quadratic = MOI.ScalarQuadraticFunction{Float64}
-    Interval = MOI.Interval{Float64}
-
     # Empty
     MOI.empty!(dest)
 
-    # Check constraint types
-    for (F, S) in MOI.get(src, MOI.ListOfConstraints())
-        MOI.supportsconstraint(dest, F, S) || return MOI.CopyResult(MOI.CopyUnsupportedConstraint, "Unsupported $F-in-$S constraint", IndexMap())
-    end
-
-    # Set up index map
-    idxmap = IndexMap() # TODO: could even use a typed version of this, as there's only one type of constraint right now.
+    # Compute problem size, set up index map, and check constraint types
+    n = MOI.get(src, MOI.NumberOfVariables())
+    idxmap = IndexMap()
     vis_src = MOI.get(src, MOI.ListOfVariableIndices())
     for i in eachindex(vis_src)
         idxmap[vis_src[i]] = VI(i)
     end
-    cis_src = MOI.get(src, MOI.ListOfConstraintIndices{Affine, Interval}()) # TODO: canget
-    for i in eachindex(cis_src)
-        idxmap[cis_src[i]] = CI{Affine, Interval}(i)
+    m = 0
+    for (F, S) in MOI.get(src, MOI.ListOfConstraints())
+        MOI.supportsconstraint(dest, F, S) || return MOI.CopyResult(MOI.CopyUnsupportedConstraint, "Unsupported $F-in-$S constraint", idxmap)
+        m += MOI.get(src, MOI.NumberOfConstraints{F, S}())
+        cis_src = MOI.get(src, MOI.ListOfConstraintIndices{F, S}())
+        for i in eachindex(cis_src)
+            idxmap[cis_src[i]] = CI{F, S}(i)
+        end
     end
-
-    # Get sizes
-    n = MOI.get(src, MOI.NumberOfVariables())
-    m = MOI.get(src, MOI.NumberOfConstraints{Affine, Interval}())
 
     # Allocate storage for problem data
     P = spzeros(n, n)
@@ -88,7 +88,9 @@ function MOI.copy!(dest::OSQPOptimizer, src::MOI.ModelLike)
     # TODO: constant term
 
     # Process constraints
-    processconstraints!(A, l, u, src, idxmap, Affine, Interval)
+    for (F, S) in MOI.get(src, MOI.ListOfConstraints())
+        processconstraints!(A, l, u, src, idxmap, F, S)
+    end
 
     # Load data into OSQP Model
     OSQP.setup!(dest.inner; P = P, q = q, A = A, l = l, u = u) # TODO: settings
@@ -109,10 +111,11 @@ function MOI.copy!(dest::OSQPOptimizer, src::MOI.ModelLike)
 
     if MOI.canget(src, MOI.ConstraintDualStart(), CI{Affine, Interval})
         y = zeros(m)
-        i = 1
-        for ci in cis_src
-            y[i] = get(src, MOI.ConstraintDualStart(), ci)
-            i += 1
+        for (F, S) in MOI.get(src, MOI.ListOfConstraints())
+            cis_src = MOI.get(src, MOI.ListOfConstraintIndices{F, S}())
+            for ci in cis_src
+                y[idxmap[ci].value] = get(src, MOI.ConstraintDualStart(), ci)
+            end
         end
     end
 
@@ -127,7 +130,7 @@ function process_affine_objective!(P::SparseMatrixCSC, q::Vector, variables::Vec
     n = length(coefficients)
     @assert length(variables) == n
     for i = 1 : n
-        q[idxmap[var[i]].value] += coefficients[i]
+        q[idxmap[variables[i]].value] += coefficients[i]
     end
 end
 
@@ -155,12 +158,12 @@ function processobjective!(P::SparseMatrixCSC, q::Vector, objfun::MOI.SingleVari
     nothing
 end
 
-function processconstraints!(A::SparseMatrixCSC, l::Vector, u::Vector, src::MOI.ModelLike, idxmap, F::Type{<:MOI.ScalarAffineFunction}, S::Type{<:MOI.Interval})
+function processconstraints!(A::SparseMatrixCSC, l::Vector, u::Vector, src::MOI.ModelLike, idxmap, F::Type{Affine}, S::Type{<:ConvertibleToInterval})
     cis_src = MOI.get(src, MOI.ListOfConstraintIndices{F, S}())
-    row = 1
     for ci in cis_src
-        s = MOI.get(src, MOI.ConstraintSet(), ci)
+        s = MOI.Interval(MOI.get(src, MOI.ConstraintSet(), ci))
         f = MOI.get(src, MOI.ConstraintFunction(), ci)
+        row = idxmap[ci].value
         l[row] = s.lower - f.constant
         u[row] = s.upper - f.constant
         n = length(f.coefficients)
@@ -171,7 +174,6 @@ function processconstraints!(A::SparseMatrixCSC, l::Vector, u::Vector, src::MOI.
             col = idxmap[var].value
             A[row, col] = coeff
         end
-        row += 1
     end
 end
 
@@ -309,7 +311,10 @@ MOI.canmodifyconstraint(optimizer::OSQPOptimizer, ci::CI{MOI.ScalarAffineFunctio
 
 # TODO: partial change with MultirowChange
 
-MOI.supportsconstraint(optimizer::OSQPOptimizer, ::Type{MOI.ScalarAffineFunction{Float64}}, ::Type{MOI.Interval{Float64}}) = true
+MOI.supportsconstraint(optimizer::OSQPOptimizer, ::Type{Affine}, ::Type{Interval}) = true
+MOI.supportsconstraint(optimizer::OSQPOptimizer, ::Type{Affine}, ::Type{LessThan}) = true
+MOI.supportsconstraint(optimizer::OSQPOptimizer, ::Type{Affine}, ::Type{GreaterThan}) = true
+MOI.supportsconstraint(optimizer::OSQPOptimizer, ::Type{Affine}, ::Type{EqualTo}) = true
 
 
 ## Constraint attributes:
