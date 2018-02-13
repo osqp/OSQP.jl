@@ -91,28 +91,20 @@ function MOI.copy!(dest::OSQPOptimizer, src::MOI.ModelLike)
     # prefer the simplest form
     sense = dest.sense = MOI.get(src, MOI.ObjectiveSense())
     if sense != MOI.FeasibilitySense
-        # FIXME: awaiting resolution of https://github.com/JuliaOpt/MathOptInterfaceUtilities.jl/issues/97
-        if MOI.canget(src, MOI.ObjectiveFunction{SingleVariable}()) # really just any objective function
+        if MOI.canget(src, MOI.ObjectiveFunction{SingleVariable}())
             objfun = MOI.get(src, MOI.ObjectiveFunction{SingleVariable}())
+            processobjective!(P, q, objfun, idxmap)
+        elseif MOI.canget(src, MOI.ObjectiveFunction{Affine}())
+            objfun = MOI.get(src, MOI.ObjectiveFunction{Affine}())
+            processobjective!(P, q, objfun, idxmap)
+            dest.objconstant = constant(objfun)
+        elseif MOI.canget(src, MOI.ObjectiveFunction{Quadratic}())
+            objfun = MOI.get(src, MOI.ObjectiveFunction{Quadratic}())
             processobjective!(P, q, objfun, idxmap)
             dest.objconstant = constant(objfun)
         else
             return MOI.CopyResult(MOI.CopyOtherError, "No suitable objective function found", idxmap)
         end
-        # if MOI.canget(src, MOI.ObjectiveFunction{SingleVariable}())
-        #     objfun = MOI.get(src, MOI.ObjectiveFunction{SingleVariable}())
-        #     processobjective!(P, q, objfun, idxmap)
-        # elseif MOI.canget(src, MOI.ObjectiveFunction{Affine}())
-        #     objfun = MOI.get(src, MOI.ObjectiveFunction{Affine}())
-        #     processobjective!(P, q, objfun, idxmap)
-        #     dest.objconstant = constant(objfun)
-        # elseif MOI.canget(src, MOI.ObjectiveFunction{Quadratic}())
-        #     objfun = MOI.get(src, MOI.ObjectiveFunction{Quadratic}())
-        #     processobjective!(P, q, objfun, idxmap)
-        #     dest.objconstant = constant(objfun)
-        # else
-        #     return MOI.CopyResult(MOI.CopyOtherError, "No suitable objective function found", idxmap)
-        # end
         sense == MOI.MaxSense && (scale!(P, -1); scale!(q, -1); dest.objconstant = -dest.objconstant)
     end
 
