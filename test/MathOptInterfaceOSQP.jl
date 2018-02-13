@@ -42,12 +42,12 @@ end
 const config = MOIT.TestConfig(atol=1e-4, rtol=1e-4)
 
 @testset "Continuous linear problems" begin
-    excludes = collect(keys(MOIT.contlineartests))
-    deleteat!(excludes, findfirst(excludes, "linear1"))
+    # excludes = collect(keys(MOIT.contlineartests))
+    # deleteat!(excludes, findfirst(excludes, "linear1"))
+    # deleteat!(excludes, findfirst(excludes, "linear8a"))
 
-    # excludes = String[]
-    # push!(excludes, "linear8a") # OSQP returns :Primal_infeasible and doesn't provide duals
-    # push!(excludes, "linear8c") # OSQP returns :Dual_infeasible and doesn't provide primals
+    excludes = String[]
+    push!(excludes, "linear7") # vector constraints
     optimizer = OSQPOptimizer()
     MOI.set!(optimizer, OSQPSettings.Verbose(), false)
     MOI.set!(optimizer, OSQPSettings.EpsAbs(), 1e-8)

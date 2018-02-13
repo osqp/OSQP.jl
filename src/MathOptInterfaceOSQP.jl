@@ -317,7 +317,9 @@ function MOI.get(optimizer::OSQPOptimizer, ::MOI.PrimalStatus)
         MOI.FeasiblePoint
     elseif osqpstatus == :Primal_infeasible_inaccurate
         MOI.NearlyInfeasibilityCertificate
-    else # :Interrupted, :Dual_infeasible, :Max_iter_reached, :Solved_inaccurate (TODO: good idea? use OSQP.SOLUTION_PRESENT?)
+    elseif osqpstatus == :Dual_infeasible
+        MOI.InfeasibilityCertificate
+    else # :Interrupted, :Max_iter_reached, :Solved_inaccurate (TODO: good idea? use OSQP.SOLUTION_PRESENT?)
         MOI.UnknownResultStatus
     end
 end
@@ -329,9 +331,13 @@ function MOI.get(optimizer::OSQPOptimizer, ::MOI.DualStatus)
         error("Problem is unsolved.") # TODO: good idea?
     elseif osqpstatus == :Dual_infeasible
         MOI.InfeasibilityCertificate
+    elseif osqpstatus == :Primal_infeasible
+        MOI.InfeasibilityCertificate
+    elseif osqpstatus == :Primal_infeasible_inaccurate
+        MOI.AlmostInfeasibilityCertificate
     elseif osqpstatus == :Solved
         MOI.FeasiblePoint
-    else # :Interrupted, :Primal_infeasible, :Max_iter_reached, :Primal_infeasible_inaccurate, :Solved_inaccurate (TODO: good idea? use OSQP.SOLUTION_PRESENT?)
+    else # :Interrupted, :Max_iter_reached, :Solved_inaccurate (TODO: good idea? use OSQP.SOLUTION_PRESENT?)
         MOI.UnknownResultStatus
     end
 end
@@ -349,8 +355,14 @@ MOI.canaddvariable(optimizer::OSQPOptimizer) = false
 MOI.canget(optimizer::OSQPOptimizer, ::MOI.VariablePrimalStart, ::Type{VI}) = false # currently not exposed, but could be
 MOI.canset(optimizer::OSQPOptimizer, ::MOI.VariablePrimalStart, ::Type{VI}) = false # TODO: need selective way of updating primal start
 
-MOI.canget(optimizer::OSQPOptimizer, ::MOI.VariablePrimal, ::Type{VI}) = hasresults(optimizer) && optimizer.results.info.status ∈ OSQP.SOLUTION_PRESENT
-MOI.get(optimizer::OSQPOptimizer, ::MOI.VariablePrimal, vi::VI) = optimizer.results.x[vi.value]
+MOI.canget(optimizer::OSQPOptimizer, ::MOI.VariablePrimal, ::Type{VI}) = hasresults(optimizer)
+function MOI.get(optimizer::OSQPOptimizer, ::MOI.VariablePrimal, vi::VI)
+    if optimizer.results.info.status in OSQP.SOLUTION_PRESENT
+        return optimizer.results.x[vi.value]
+    else
+        return optimizer.results.dual_inf_cert[vi.value]
+    end
+end
 
 
 ## Constraints:
@@ -378,8 +390,15 @@ MOI.canget(optimizer::OSQPOptimizer, ::MOI.ConstraintPrimal, ::Type{<:CI}) = fal
 MOI.canget(optimizer::OSQPOptimizer, ::MOI.ConstraintFunction, ::Type{<:CI}) = false # TODO
 MOI.canget(optimizer::OSQPOptimizer, ::MOI.ConstraintSet, ::Type{<:CI}) = false # TODO
 
-MOI.canget(optimizer::OSQPOptimizer, ::MOI.ConstraintDual, ::Type{<:CI}) = hasresults(optimizer) && optimizer.results.info.status ∈ OSQP.SOLUTION_PRESENT
-MOI.get(optimizer::OSQPOptimizer, ::MOI.ConstraintDual, ci::CI) = -optimizer.results.y[ci.value] # MOI uses opposite dual convention
+MOI.canget(optimizer::OSQPOptimizer, ::MOI.ConstraintDual, ::Type{<:CI}) = hasresults(optimizer)
+function MOI.get(optimizer::OSQPOptimizer, ::MOI.ConstraintDual, ci::CI)
+    # MOI uses opposite dual convention
+    if optimizer.results.info.status in OSQP.SOLUTION_PRESENT
+        return -optimizer.results.y[ci.value]
+    else
+        return -optimizer.results.prim_inf_cert[ci.value]
+    end
+end
 
 
 # Objective modification
