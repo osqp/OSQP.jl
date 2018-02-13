@@ -42,10 +42,6 @@ end
 const config = MOIT.TestConfig(atol=1e-4, rtol=1e-4)
 
 @testset "Continuous linear problems" begin
-    # excludes = collect(keys(MOIT.contlineartests))
-    # deleteat!(excludes, findfirst(excludes, "linear1"))
-    # deleteat!(excludes, findfirst(excludes, "linear8a"))
-
     excludes = String[]
     push!(excludes, "linear7") # vector constraints
     optimizer = OSQPOptimizer()
@@ -53,4 +49,17 @@ const config = MOIT.TestConfig(atol=1e-4, rtol=1e-4)
     MOI.set!(optimizer, OSQPSettings.EpsAbs(), 1e-8)
     MOI.set!(optimizer, OSQPSettings.EpsRel(), 1e-16)
     MOIT.contlineartest(MOIU.CachingOptimizer(OSQPCachingOptimizer{Float64}(), optimizer), config, excludes)
+end
+
+@testset "Continuous quadratic problems" begin
+    excludes = String[]
+    push!(excludes, "quadratic4") # QCP
+    push!(excludes, "quadratic5") # QCP
+    push!(excludes, "quadratic6") # QCP
+    push!(excludes, "quadratic7") # SOCP
+    optimizer = OSQPOptimizer()
+    MOI.set!(optimizer, OSQPSettings.Verbose(), false)
+    MOI.set!(optimizer, OSQPSettings.EpsAbs(), 1e-8)
+    MOI.set!(optimizer, OSQPSettings.EpsRel(), 1e-16)
+    MOIT.contquadratictest(MOIU.CachingOptimizer(OSQPCachingOptimizer{Float64}(), optimizer), config, excludes)
 end

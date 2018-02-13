@@ -10,18 +10,25 @@ const MOI = MathOptInterface
 const MOIU = MathOptInterfaceUtilities
 const CI = MOI.ConstraintIndex
 const VI = MOI.VariableIndex
-const Affine = MOI.ScalarAffineFunction{Float64}
+
 const SingleVariable = MOI.SingleVariable
+const Affine = MOI.ScalarAffineFunction{Float64}
 const Quadratic = MOI.ScalarQuadraticFunction{Float64}
+const AffineConvertible = Union{Affine, SingleVariable}
+
 const Interval = MOI.Interval{Float64}
 const LessThan = MOI.LessThan{Float64}
 const GreaterThan = MOI.GreaterThan{Float64}
 const EqualTo = MOI.EqualTo{Float64}
 const IntervalConvertible = Union{Interval, LessThan, GreaterThan, EqualTo}
-const AffineConvertible = Union{Affine, SingleVariable}
 
 import OSQP
 import MathOptInterfaceUtilities: IndexMap
+
+# TODO: consider moving to MOI:
+constant(f::SingleVariable) = 0
+constant(f::Affine) = f.constant
+constant(f::Quadratic) = f.constant
 
 mutable struct OSQPOptimizer <: MOI.AbstractOptimizer # TODO: name?
     inner::OSQP.Model
@@ -29,10 +36,9 @@ mutable struct OSQPOptimizer <: MOI.AbstractOptimizer # TODO: name?
     isempty::Bool
     settings::Dict{Symbol, Any} # need to store these, because they should be preserved if empty! is called
     sense::MOI.OptimizationSense
+    objconstant::Float64
 
-    # TODO: constant term?
-
-    OSQPOptimizer() = new(OSQP.Model(), nothing, true, Dict{Symbol, Any}(), MOI.MinSense)
+    OSQPOptimizer() = new(OSQP.Model(), nothing, true, Dict{Symbol, Any}(), MOI.MinSense, 0.)
 end
 
 hasresults(optimizer::OSQPOptimizer) = optimizer.results != nothing
@@ -42,6 +48,7 @@ function MOI.empty!(optimizer::OSQPOptimizer)
     optimizer.results = nothing
     optimizer.isempty = true
     optimizer.sense = MOI.MinSense # model parameter, so needs to be reset
+    optimizer.objconstant = 0.
     optimizer
 end
 
@@ -81,20 +88,32 @@ function MOI.copy!(dest::OSQPOptimizer, src::MOI.ModelLike)
     u = zeros(m)
 
     # Process objective function
-    # TODO: constant term
     # prefer the simplest form
     sense = dest.sense = MOI.get(src, MOI.ObjectiveSense())
     if sense != MOI.FeasibilitySense
-        if MOI.canget(src, MOI.ObjectiveFunction{SingleVariable}())
-            processobjective!(P, q, MOI.get(src, MOI.ObjectiveFunction{SingleVariable}()), idxmap)
-        elseif MOI.canget(src, MOI.ObjectiveFunction{Affine}())
-            processobjective!(P, q, MOI.get(src, MOI.ObjectiveFunction{Affine}()), idxmap)
-        elseif MOI.canget(src, MOI.ObjectiveFunction{Quadratic}())
-            processobjective!(P, q, MOI.get(src, MOI.ObjectiveFunction{Quadratic}()), idxmap)
+        # FIXME: awaiting resolution of https://github.com/JuliaOpt/MathOptInterfaceUtilities.jl/issues/97
+        if MOI.canget(src, MOI.ObjectiveFunction{SingleVariable}()) # really just any objective function
+            objfun = MOI.get(src, MOI.ObjectiveFunction{SingleVariable}())
+            processobjective!(P, q, objfun, idxmap)
+            dest.objconstant = constant(objfun)
         else
             return MOI.CopyResult(MOI.CopyOtherError, "No suitable objective function found", idxmap)
         end
-        sense == MOI.MaxSense && (scale!(P, -1); scale!(q, -1))
+        # if MOI.canget(src, MOI.ObjectiveFunction{SingleVariable}())
+        #     objfun = MOI.get(src, MOI.ObjectiveFunction{SingleVariable}())
+        #     processobjective!(P, q, objfun, idxmap)
+        # elseif MOI.canget(src, MOI.ObjectiveFunction{Affine}())
+        #     objfun = MOI.get(src, MOI.ObjectiveFunction{Affine}())
+        #     processobjective!(P, q, objfun, idxmap)
+        #     dest.objconstant = constant(objfun)
+        # elseif MOI.canget(src, MOI.ObjectiveFunction{Quadratic}())
+        #     objfun = MOI.get(src, MOI.ObjectiveFunction{Quadratic}())
+        #     processobjective!(P, q, objfun, idxmap)
+        #     dest.objconstant = constant(objfun)
+        # else
+        #     return MOI.CopyResult(MOI.CopyOtherError, "No suitable objective function found", idxmap)
+        # end
+        sense == MOI.MaxSense && (scale!(P, -1); scale!(q, -1); dest.objconstant = -dest.objconstant)
     end
 
     # Process constraints
@@ -167,10 +186,6 @@ function processobjective!(P::SparseMatrixCSC, q::Vector, objfun::MOI.SingleVari
     q[idxmap[objfun.variable.value]] = 1
     nothing
 end
-
-# TODO: consider moving to MOI:
-constant(f::SingleVariable) = 0
-constant(f::Affine) = f.constant
 
 function processconstraintfun!(A::AbstractMatrix, row::Int, idxmap, f::SingleVariable)
     col = idxmap[f.variable].value
@@ -272,7 +287,10 @@ MOI.get(optimizer::OSQPOptimizer, ::MOI.ResultCount) = 1
 MOI.canget(optimizer::OSQPOptimizer, ::MOI.ObjectiveFunction) = false # currently not exposed
 
 MOI.canget(optimizer::OSQPOptimizer, ::MOI.ObjectiveValue) = hasresults(optimizer)
-MOI.get(optimizer::OSQPOptimizer, ::MOI.ObjectiveValue) = (rawobj = optimizer.results.info.obj_val; ifelse(optimizer.sense == MOI.MaxSense, -rawobj, rawobj))
+function MOI.get(optimizer::OSQPOptimizer, ::MOI.ObjectiveValue)
+    rawobj = optimizer.results.info.obj_val + optimizer.objconstant
+    ifelse(optimizer.sense == MOI.MaxSense, -rawobj, rawobj)
+end
 
 MOI.canget(optimizer::OSQPOptimizer, ::MOI.ObjectiveBound) = false # currently not exposed
 MOI.canget(optimizer::OSQPOptimizer, ::MOI.RelativeGap) = false # currently not exposed
