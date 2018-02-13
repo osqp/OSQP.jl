@@ -2,12 +2,12 @@ __precompile__()
 
 module OSQP
 
+export OSQPMathProgBaseInterface
+
 # Compatibility stuff
 using Compat
 using Compat.SparseArrays
 using Compat.Iterators
-
-
 
 
 if isfile(joinpath(dirname(@__FILE__), "..", "deps", "deps.jl"))
@@ -30,9 +30,9 @@ function __init__()
     end
 end
 
-
 include("constants.jl")
 include("types.jl")
 include("interface.jl")
+include("mpbinterface.jl")
 
 end # module
