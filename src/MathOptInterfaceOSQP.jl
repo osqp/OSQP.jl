@@ -378,7 +378,11 @@ function MOI.get(optimizer::OSQPOptimizer, ::MOI.VariablePrimal, vi::VI)
     if optimizer.results.info.status in OSQP.SOLUTION_PRESENT
         return optimizer.results.x[vi.value]
     else
-        return optimizer.results.dual_inf_cert[vi.value]
+        if optimizer.results.dual_inf_cert != nothing
+            return optimizer.results.dual_inf_cert[vi.value]
+        else
+            error("Variable primal not available")
+        end
     end
 end
 
@@ -414,7 +418,11 @@ function MOI.get(optimizer::OSQPOptimizer, ::MOI.ConstraintDual, ci::CI)
     if optimizer.results.info.status in OSQP.SOLUTION_PRESENT
         return -optimizer.results.y[ci.value]
     else
-        return -optimizer.results.prim_inf_cert[ci.value]
+        if optimizer.results.prim_inf_cert != nothing
+            return -optimizer.results.prim_inf_cert[ci.value]
+        else
+            error("Constraint dual not available.")
+        end
     end
 end
 
