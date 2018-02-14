@@ -11,7 +11,7 @@ const MOIU = MathOptInterfaceUtilities
 const CI = MOI.ConstraintIndex
 const VI = MOI.VariableIndex
 
-const SparseTriplets = Tuple{Vector{<:Integer}, Vector{<:Integer}, Vector{<:Any}}
+const SparseTriplets = Tuple{Vector{Int}, Vector{Int}, Vector{<:Any}}
 
 const SingleVariable = MOI.SingleVariable
 const Affine = MOI.ScalarAffineFunction{Float64}
@@ -31,6 +31,55 @@ constant(f::SingleVariable) = 0
 constant(f::Affine) = f.constant
 constant(f::Quadratic) = f.constant
 
+mutable struct VectorModificationCache{T}
+    data::Vector{T}
+    dirty::Bool
+    VectorModificationCache(data::Vector{T}) where {T} = new{T}(copy(data), false)
+end
+Base.setindex!(c::VectorModificationCache, x, i::Integer) = (c.dirty = true; c.data[i] = x)
+
+# FIXME: need the S that's passed in to be the upper triangle only. Should probably use Symmetric{T,SparseMatrixCSC{T,Int}}
+struct MatrixModificationCache{T}
+    cartesian_to_nzval_index::Dict{CartesianIndex{2}, Int}
+    modifications::SparseVector{T, Int}
+
+    function MatrixModificationCache(S::SparseMatrixCSC{T}) where T
+        cartesian_to_nzval_index = Dict{CartesianIndex{2}, Int}()
+        sizehint!(cartesian_to_nzval_index, nnz(S))
+        @inbounds for col = 1 : S.n, k = S.colptr[col] : (S.colptr[col+1]-1) # from sparse findn
+            row = S.rowval[k]
+            cartesian_to_nzval_index[CartesianIndex(row, col)] = k
+        end
+        modifications = spzeros(length(cartesian_to_nzval_index))
+        new{T}(cartesian_to_nzval_index, modifications)
+    end
+end
+
+function Base.setindex!(cache::MatrixModificationCache, x, row::Integer, col::Integer)
+    I = CartesianIndex(row, col)
+    haskey(cache.cartesian_to_nzval_index, I) || error("Changing the sparsity pattern is not allowed.")
+    modind = cache.cartesian_to_nzval_index[I]
+    cache.modifications[modind] = x
+end
+
+struct ProblemModificationCache{T}
+    qcache::VectorModificationCache{T}
+    lcache::VectorModificationCache{T}
+    ucache::VectorModificationCache{T}
+    Pcache::MatrixModificationCache{T}
+    Acache::MatrixModificationCache{T}
+
+    ProblemModificationCache{T}() where {T} = new{T}()
+    function ProblemModificationCache(q::Vector{T}, l::Vector{T}, u::Vector{T}, P::SparseMatrixCSC, A::SparseMatrixCSC) where T
+        qcache = VectorModificationCache(q)
+        lcache = VectorModificationCache(l)
+        ucache = VectorModificationCache(u)
+        Pcache = MatrixModificationCache(P)
+        Acache = MatrixModificationCache(A)
+        new{T}(qcache, lcache, ucache, Pcache, Acache)
+    end
+end
+
 mutable struct OSQPOptimizer <: MOI.AbstractOptimizer # TODO: name?
     inner::OSQP.Model
     results::Union{OSQP.Results, Nothing}
@@ -38,8 +87,11 @@ mutable struct OSQPOptimizer <: MOI.AbstractOptimizer # TODO: name?
     settings::Dict{Symbol, Any} # need to store these, because they should be preserved if empty! is called
     sense::MOI.OptimizationSense
     objconstant::Float64
+    modificationcache::ProblemModificationCache{Float64}
 
-    OSQPOptimizer() = new(OSQP.Model(), nothing, true, Dict{Symbol, Any}(), MOI.MinSense, 0.)
+    function OSQPOptimizer()
+        new(OSQP.Model(), nothing, true, Dict{Symbol, Any}(), MOI.MinSense, 0., ProblemModificationCache{Float64}())
+    end
 end
 
 hasresults(optimizer::OSQPOptimizer) = optimizer.results != nothing
@@ -50,6 +102,7 @@ function MOI.empty!(optimizer::OSQPOptimizer)
     optimizer.isempty = true
     optimizer.sense = MOI.MinSense # model parameter, so needs to be reset
     optimizer.objconstant = 0.
+    optimizer.modificationcache = ProblemModificationCache{Float64}()
     optimizer
 end
 
@@ -65,6 +118,7 @@ function MOI.copy!(dest::OSQPOptimizer, src::MOI.ModelLike)
     end
     dest.sense, P, q, dest.objconstant = processobjective(src, idxmap)
     A, l, u = processconstraints(src, idxmap)
+    dest.modificationcache = ProblemModificationCache(q, l, u, P, A)
     OSQP.setup!(dest.inner; P = P, q = q, A = A, l = l, u = u, dest.settings...)
     processwarmstart!(dest, src, idxmap)
 
@@ -110,16 +164,16 @@ function processobjective(src::MOI.ModelLike, idxmap)
         elseif MOI.canget(src, MOI.ObjectiveFunction{Affine}())
             faffine = MOI.get(src, MOI.ObjectiveFunction{Affine}())
             P = spzeros(n, n)
-            q = processlinearterm(faffine.variables, faffine.coefficients, idxmap)
+            q = processlinearterms(faffine.variables, faffine.coefficients, idxmap)
             c = faffine.constant
         elseif MOI.canget(src, MOI.ObjectiveFunction{Quadratic}())
             fquadratic = MOI.get(src, MOI.ObjectiveFunction{Quadratic}())
             I = [idxmap[var].value for var in fquadratic.quadratic_rowvariables]
             J = [idxmap[var].value for var in fquadratic.quadratic_colvariables]
             V = fquadratic.quadratic_coefficients
-            symmetrize!((I, J, V))
+            symmetrize!(I, J, V)
             P = sparse(I, J, V, n, n)
-            q = processlinearterm(fquadratic.affine_variables, fquadratic.affine_coefficients, idxmap)
+            q = processlinearterms(fquadratic.affine_variables, fquadratic.affine_coefficients, idxmap)
             c = fquadratic.constant
         else
             error("No suitable objective function found")
@@ -133,7 +187,7 @@ function processobjective(src::MOI.ModelLike, idxmap)
     sense, P, q, c
 end
 
-function processlinearterm(variables::Vector{VI}, coefficients::Vector, idxmap)
+function processlinearterms(variables::Vector{VI}, coefficients::Vector, idxmap)
     q = zeros(length(idxmap.varmap))
     ncoeffs = length(coefficients)
     @assert length(variables) == ncoeffs
@@ -143,8 +197,8 @@ function processlinearterm(variables::Vector{VI}, coefficients::Vector, idxmap)
     q
 end
 
-function symmetrize!(triplets::SparseTriplets)
-    I, J, V = triplets
+# FIXME: set upper triangle only
+function symmetrize!(I::Vector{Int}, J::Vector{Int}, V::Vector)
     n = length(V)
     @assert length(I) == length(J) == n
     for i = 1 : n
