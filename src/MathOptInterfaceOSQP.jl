@@ -192,7 +192,7 @@ function processconstraintfun!(A::AbstractMatrix, row::Int, idxmap, f::Affine)
         var = f.variables[i]
         coeff = f.coefficients[i]
         col = idxmap[var].value
-        A[row, col] = coeff
+        A[row, col] += coeff
     end
     nothing
 end
