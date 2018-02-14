@@ -10,7 +10,7 @@ const MOIT = MathOptInterfaceTests
 using MathOptInterfaceUtilities
 const MOIU = MathOptInterfaceUtilities
 
-MOIU.@model(OSQPCachingOptimizer, # modelname
+MOIU.@model(OSQPCacheModel, # modelname
     (), # scalarsets
     (Interval, LessThan, GreaterThan, EqualTo), # typedscalarsets
     (), # vectorsets
@@ -48,7 +48,7 @@ const config = MOIT.TestConfig(atol=1e-4, rtol=1e-4)
     MOI.set!(optimizer, OSQPSettings.Verbose(), false)
     MOI.set!(optimizer, OSQPSettings.EpsAbs(), 1e-8)
     MOI.set!(optimizer, OSQPSettings.EpsRel(), 1e-16)
-    MOIT.contlineartest(MOIU.CachingOptimizer(OSQPCachingOptimizer{Float64}(), optimizer), config, excludes)
+    MOIT.contlineartest(MOIU.CachingOptimizer(OSQPCacheModel{Float64}(), optimizer), config, excludes)
 end
 
 @testset "Continuous quadratic problems" begin
@@ -61,5 +61,5 @@ end
     MOI.set!(optimizer, OSQPSettings.Verbose(), false)
     MOI.set!(optimizer, OSQPSettings.EpsAbs(), 1e-8)
     MOI.set!(optimizer, OSQPSettings.EpsRel(), 1e-16)
-    MOIT.contquadratictest(MOIU.CachingOptimizer(OSQPCachingOptimizer{Float64}(), optimizer), config, excludes)
+    MOIT.contquadratictest(MOIU.CachingOptimizer(OSQPCacheModel{Float64}(), optimizer), config, excludes)
 end

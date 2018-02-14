@@ -66,29 +66,7 @@ function MOI.copy!(dest::OSQPOptimizer, src::MOI.ModelLike)
     dest.sense, P, q, dest.objconstant = processobjective(src, idxmap)
     A, l, u = processconstraints(src, idxmap)
     OSQP.setup!(dest.inner; P = P, q = q, A = A, l = l, u = u, dest.settings...)
-
-    # TODO: clean up:
-    # Process variable attributes
-    m, n = size(A)
-    if MOI.canget(src, MOI.VariablePrimalStart(), VI)
-        x = zeros(n)
-        i = 1
-        for vi in vis_src
-            x[i] = get(src, MOI.VariablePrimalStart(), vi)
-            i += 1
-        end
-        OSQP.warm_start!(src, x = x)
-    end
-
-    if MOI.canget(src, MOI.ConstraintDualStart(), CI{Affine, Interval})
-        y = zeros(m)
-        for (F, S) in MOI.get(src, MOI.ListOfConstraints())
-            cis_src = MOI.get(src, MOI.ListOfConstraintIndices{F, S}())
-            for ci in cis_src
-                y[idxmap[ci].value] = get(src, MOI.ConstraintDualStart(), ci)
-            end
-        end
-    end
+    processwarmstart!(dest, src, idxmap)
 
     # Finish up
     dest.isempty = false
@@ -235,6 +213,38 @@ function processconstraints!(triplets::SparseTriplets, f::MOI.ScalarAffineFuncti
     end
 end
 
+function processwarmstart!(dest::OSQPOptimizer, src::MOI.ModelLike, idxmap)
+    if MOI.canget(src, MOI.VariablePrimalStart(), VI)
+        n = length(idxmap.varmap)
+        x = zeros(n)
+        processprimalstart!(x, src, idxmap)
+        OSQP.warm_start!(src, x = x)
+    end
+    if MOI.canget(src, MOI.ConstraintDualStart(), CI{Affine, Interval})
+        m = length(idxmap.conmap)
+        y = zeros(m)
+        processdualstart!(y, src, idxmap)
+        OSQP.warm_start!(src, y = y)
+    end
+end
+
+function processprimalstart!(x::Vector, src::MOI.ModelLike, idxmap)
+    vis_src = MOI.get(src, MOI.ListOfVariableIndices())
+    for vi in vis_src
+        x[idxmap[vi]] = get(src, MOI.VariablePrimalStart(), vi)
+    end
+end
+
+function processdualstart!(y::Vector, src::MOI.ModelLike, idxmap)
+    for (F, S) in MOI.get(src, MOI.ListOfConstraints())
+        cis_src = MOI.get(src, MOI.ListOfConstraintIndices{F, S}())
+        for ci in cis_src
+            y[idxmap[ci].value] = get(src, MOI.ConstraintDualStart(), ci)
+        end
+    end
+end
+
+
 ## Standard optimizer attributes:
 MOI.canget(optimizer::OSQPOptimizer, ::MOI.ObjectiveSense) = true
 MOI.get(optimizer::OSQPOptimizer, ::MOI.ObjectiveSense) = optimizer.sense
@@ -245,28 +255,14 @@ MOI.get(optimizer::OSQPOptimizer, ::MOI.NumberOfVariables) = OSQP.dimensions(opt
 MOI.canget(optimizer::OSQPOptimizer, ::MOI.ListOfVariableIndices) = MOI.canget(optimizer, MOI.NumberOfVariables())
 MOI.get(optimizer::OSQPOptimizer, ::MOI.ListOfVariableIndices) = [VI(i) for i = 1 : get(optimizer, MOI.NumberOfVariables())] # TODO: support for UnitRange would be nice
 
-# FIXME or remove:
-# MOI.canget(optimizer::OSQPOptimizer, ::MOI.NumberOfConstraints) = !optimizer.isempty # https://github.com/oxfordcontrol/OSQP.jl/issues/10
-# MOI.get(optimizer::OSQPOptimizer, ::MOI.NumberOfConstraints) = OSQP.dimensions(optimizer.model)[2]
-
-MOI.canget(optimizer::OSQPOptimizer, ::MOI.ListOfConstraints) = false # TODO
-MOI.canget(optimizer::OSQPOptimizer, ::MOI.ListOfConstraintIndices) = false # TODO
-MOI.canget(optimizer::OSQPOptimizer, ::MOI.ListOfModelAttributesSet) = false # currently not exposed
-MOI.canget(optimizer::OSQPOptimizer, ::MOI.ListOfVariableAttributesSet) = false # currently not exposed (for warmstart, rest is N/A)
-MOI.canget(optimizer::OSQPOptimizer, ::MOI.ListOfConstraintAttributesSet) = false # currently not exposed
-
-MOI.canget(optimizer::OSQPOptimizer, ::MOI.ConstraintPrimal, ::CI) = false # constraint primal (or A matrix) not currently exposed by OSQP interface
-
-
 ## Solver-specific optimizer attributes:
 module OSQPSettings
 
 export OSQPAttribute, isupdatable
 
 using MathOptInterface, OSQP
-const MOI = MathOptInterface
 
-abstract type OSQPAttribute <: MOI.AbstractOptimizerAttribute end
+abstract type OSQPAttribute <: MathOptInterface.AbstractOptimizerAttribute end
 
 for setting in fieldnames(OSQP.Settings)
     Attribute = Symbol(mapreduce(ucfirst, *, split(String(setting), '_'))) # to camelcase
@@ -291,19 +287,17 @@ function MOI.set!(optimizer::OSQPOptimizer, a::OSQPAttribute, value)
     end
 end
 
-## Solver optimizer:
+## Optimizer methods:
 MOI.optimize!(optimizer::OSQPOptimizer) = (optimizer.results = OSQP.solve!(optimizer.inner))
 MOI.free!(optimizer::OSQPOptimizer) = OSQP.clean!(optimizer.inner)
 
 
-## Solver optimizer attributes:
+## Optimizer attributes:
 MOI.canget(optimizer::OSQPOptimizer, ::MOI.RawSolver) = true
 MOI.get(optimizer::OSQPOptimizer, ::MOI.RawSolver) = optimizer.inner
 
 MOI.canget(optimizer::OSQPOptimizer, ::MOI.ResultCount) = hasresults(optimizer) # TODO: or true?
 MOI.get(optimizer::OSQPOptimizer, ::MOI.ResultCount) = 1
-
-MOI.canget(optimizer::OSQPOptimizer, ::MOI.ObjectiveFunction) = false # currently not exposed
 
 MOI.canget(optimizer::OSQPOptimizer, ::MOI.ObjectiveValue) = hasresults(optimizer)
 function MOI.get(optimizer::OSQPOptimizer, ::MOI.ObjectiveValue)
@@ -311,8 +305,8 @@ function MOI.get(optimizer::OSQPOptimizer, ::MOI.ObjectiveValue)
     ifelse(optimizer.sense == MOI.MaxSense, -rawobj, rawobj)
 end
 
-MOI.canget(optimizer::OSQPOptimizer, ::MOI.ObjectiveBound) = false # currently not exposed
-MOI.canget(optimizer::OSQPOptimizer, ::MOI.RelativeGap) = false # currently not exposed
+MOI.canget(optimizer::OSQPOptimizer, ::MOI.ObjectiveBound) = false # TODO
+MOI.canget(optimizer::OSQPOptimizer, ::MOI.RelativeGap) = false # TODO
 
 MOI.canget(optimizer::OSQPOptimizer, ::MOI.SolveTime) = hasresults(optimizer)
 MOI.get(optimizer::OSQPOptimizer, ::MOI.SolveTime) = optimizer.results.info.run_time
@@ -379,36 +373,34 @@ function MOI.get(optimizer::OSQPOptimizer, ::MOI.DualStatus)
     end
 end
 
-# TODO: solver-specific attributes
-
 
 ## Variables and constraints:
-MOI.candelete(optimizer::OSQPOptimizer, index::MOI.Index) = false
 MOI.isvalid(optimizer::OSQPOptimizer, vi::VI) = vi.value ∈ 1 : get(optimizer, MOI.NumberOfVariables())
-MOI.canaddvariable(optimizer::OSQPOptimizer) = false
+MOI.canaddvariable(optimizer::OSQPOptimizer) = false # TODO: currently required by tests; should there be a default fallback in MOI, similar to canget?
 
 
 ## Variable attributes:
-MOI.canget(optimizer::OSQPOptimizer, ::MOI.VariablePrimalStart, ::Type{VI}) = false # currently not exposed, but could be
-MOI.canset(optimizer::OSQPOptimizer, ::MOI.VariablePrimalStart, ::Type{VI}) = false # TODO: need selective way of updating primal start
+function MOI.canget(optimizer::OSQPOptimizer, ::MOI.VariablePrimal, ::Type{VI})
+    hasresults(optimizer) || return false
+    optimizer.results.info.status ∈ OSQP.SOLUTION_PRESENT || optimizer.results.dual_inf_cert != nothing
+end
 
-MOI.canget(optimizer::OSQPOptimizer, ::MOI.VariablePrimal, ::Type{VI}) = hasresults(optimizer)
-function MOI.get(optimizer::OSQPOptimizer, ::MOI.VariablePrimal, vi::VI)
-    if optimizer.results.info.status in OSQP.SOLUTION_PRESENT
-        return optimizer.results.x[vi.value]
+function MOI.get(optimizer::OSQPOptimizer, a::MOI.VariablePrimal, vi::VI)
+    MOI.canget(optimizer, a, typeof(vi)) || error()
+    if optimizer.results.info.status ∈ OSQP.SOLUTION_PRESENT
+        optimizer.results.x[vi.value]
     else
-        if optimizer.results.dual_inf_cert != nothing
-            return optimizer.results.dual_inf_cert[vi.value]
-        else
-            error("Variable primal not available")
-        end
+        optimizer.results.dual_inf_cert[vi.value]
     end
 end
 
 
 ## Constraints:
-# MOI.isvalid(optimizer::OSQPOptimizer, ci::CI) = ci.value ∈ 1 : get(optimizer, MOI.NumberOfConstraints()) # FIXME
-MOI.canaddconstraint(optimizer::OSQPOptimizer, ::Type{F}, ::Type{S}) where {F <: MOI.AbstractFunction, S <: MOI.AbstractSet} = false
+function MOI.isvalid(optimizer::OSQPOptimizer, ci::CI)
+    MOI.isempty(optimizer) && return false
+    m = OSQP.dimensions(optimizer.model)[2]
+    ci.value ∈ 1 : m
+end
 
 # TODO: can't modifyconstraint! with AbstractFunction because selective way to update A not exposed
 MOI.canmodifyconstraint(optimizer::OSQPOptimizer, ci::CI{MOI.ScalarAffineFunction, MOI.Interval}, ::Type{MOI.ScalarAffineFunction}) = false
@@ -424,29 +416,24 @@ MOI.supportsconstraint(optimizer::OSQPOptimizer, ::Type{<:AffineConvertible}, ::
 
 
 ## Constraint attributes:
-MOI.canget(optimizer::OSQPOptimizer, ::MOI.ConstraintPrimalStart, ::Type{<:CI}) = false # currently not exposed, but could be
-MOI.canget(optimizer::OSQPOptimizer, ::MOI.ConstraintDualStart, ::Type{<:CI}) = false # currently not exposed, but could be
-MOI.canset(optimizer::OSQPOptimizer, ::MOI.ConstraintDualStart, ::Type{VI}) = false # TODO: need selective way of updating primal start
-MOI.canget(optimizer::OSQPOptimizer, ::MOI.ConstraintPrimal, ::Type{<:CI}) = false # currently not exposed, but could be
-MOI.canget(optimizer::OSQPOptimizer, ::MOI.ConstraintFunction, ::Type{<:CI}) = false # TODO
-MOI.canget(optimizer::OSQPOptimizer, ::MOI.ConstraintSet, ::Type{<:CI}) = false # TODO
+function MOI.canget(optimizer::OSQPOptimizer, ::MOI.ConstraintDual, ::Type{<:CI})
+    hasresults(optimizer) || return false
+    optimizer.results.info.status ∈ OSQP.SOLUTION_PRESENT || optimizer.results.prim_inf_cert != nothing
+end
 
-MOI.canget(optimizer::OSQPOptimizer, ::MOI.ConstraintDual, ::Type{<:CI}) = hasresults(optimizer)
-function MOI.get(optimizer::OSQPOptimizer, ::MOI.ConstraintDual, ci::CI)
+function MOI.get(optimizer::OSQPOptimizer, a::MOI.ConstraintDual, ci::CI)
     # MOI uses opposite dual convention
-    if optimizer.results.info.status in OSQP.SOLUTION_PRESENT
-        return -optimizer.results.y[ci.value]
+    MOI.canget(optimizer, a, typeof(ci)) || error()
+    if optimizer.results.info.status ∈ OSQP.SOLUTION_PRESENT
+        -optimizer.results.y[ci.value]
     else
-        if optimizer.results.prim_inf_cert != nothing
-            return -optimizer.results.prim_inf_cert[ci.value]
-        else
-            error("Constraint dual not available.")
-        end
+        -optimizer.results.prim_inf_cert[ci.value]
     end
 end
 
 
 # Objective modification
+# TODO: set! with ObjectiveFunction
 MOI.canmodifyobjective(optimizer::OSQPOptimizer, ::Type{MOI.ScalarCoefficientChange}) = false # TODO: selective way of updating objective coefficients not exposed
 
 end # module
