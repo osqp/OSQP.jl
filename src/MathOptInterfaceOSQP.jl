@@ -186,11 +186,11 @@ function processconstraints!(triplets::SparseTriplets, bounds::Tuple{<:Vector, <
         row = idxmap[ci].value
         l[row] = s.lower - constant(f)
         u[row] = s.upper - constant(f)
-        processconstraints!(triplets, f, row, idxmap)
+        processconstraintfun!(triplets, f, row, idxmap)
     end
 end
 
-function processconstraints!(triplets::SparseTriplets, f::MOI.SingleVariable, row::Int, idxmap)
+function processconstraintfun!(triplets::SparseTriplets, f::MOI.SingleVariable, row::Int, idxmap)
     (I, J, V) = triplets
     col = idxmap[f.variable].value
     push!(I, row)
@@ -199,7 +199,7 @@ function processconstraints!(triplets::SparseTriplets, f::MOI.SingleVariable, ro
     nothing
 end
 
-function processconstraints!(triplets::SparseTriplets, f::MOI.ScalarAffineFunction, row::Int, idxmap)
+function processconstraintfun!(triplets::SparseTriplets, f::MOI.ScalarAffineFunction, row::Int, idxmap)
     (I, J, V) = triplets
     ncoeff = length(f.coefficients)
     @assert length(f.variables) == ncoeff
