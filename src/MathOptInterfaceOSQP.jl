@@ -36,7 +36,14 @@ mutable struct VectorModificationCache{T}
     dirty::Bool
     VectorModificationCache(data::Vector{T}) where {T} = new{T}(copy(data), false)
 end
-Base.setindex!(c::VectorModificationCache, x, i::Integer) = (c.dirty = true; c.data[i] = x)
+Base.setindex!(cache::VectorModificationCache, x, i::Integer) = (cache.dirty = true; cache.data[i] = x)
+
+function processupdates!(model::OSQP.Model, cache::VectorModificationCache, sym::Symbol)
+    if cache.dirty
+        OSQP.update!(model; sym => cache.data)
+        cache.dirty = false
+    end
+end
 
 # FIXME: need the S that's passed in to be the upper triangle only. Should probably use Symmetric{T,SparseMatrixCSC{T,Int}}
 struct MatrixModificationCache{T}
@@ -62,6 +69,16 @@ function Base.setindex!(cache::MatrixModificationCache, x, row::Integer, col::In
     cache.modifications[modind] = x
 end
 
+function processupdates!(model::OSQP.Model, cache::MatrixModificationCache, datasym::Symbol, indexsym::Symbol)
+    dirty = nnz(cache.modifications) > 0
+    if dirty
+        # using internals of SparseVector here...
+        OSQP.update!(model; indexsym => cache.modifications.nzind, datasym => cache.modifications.nzval)
+        empty!(cache.modifications.nzind)
+        empty!(cache.modifications.nzval)
+    end
+end
+
 struct ProblemModificationCache{T}
     qcache::VectorModificationCache{T}
     lcache::VectorModificationCache{T}
@@ -78,6 +95,14 @@ struct ProblemModificationCache{T}
         Acache = MatrixModificationCache(A)
         new{T}(qcache, lcache, ucache, Pcache, Acache)
     end
+end
+
+function processupdates!(model::OSQP.Model, cache::ProblemModificationCache)
+    processupdates!(model, cache.qcache, :q)
+    processupdates!(model, cache.lcache, :l)
+    processupdates!(model, cache.ucache, :u)
+    processupdates!(model, cache.Pcache, :Px, :Px_ind)
+    processupdates!(model, cache.Pcache, :Ax, :Ax_ind)
 end
 
 mutable struct OSQPOptimizer <: MOI.AbstractOptimizer # TODO: name?
@@ -342,7 +367,11 @@ function MOI.set!(optimizer::OSQPOptimizer, a::OSQPAttribute, value)
 end
 
 ## Optimizer methods:
-MOI.optimize!(optimizer::OSQPOptimizer) = (optimizer.results = OSQP.solve!(optimizer.inner))
+function MOI.optimize!(optimizer::OSQPOptimizer)
+    processupdates!(optimizer.inner, optimizer.modificationcache)
+    optimizer.results = OSQP.solve!(optimizer.inner)
+end
+
 MOI.free!(optimizer::OSQPOptimizer) = OSQP.clean!(optimizer.inner)
 
 
