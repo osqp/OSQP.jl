@@ -45,7 +45,6 @@ function processupdates!(model::OSQP.Model, cache::VectorModificationCache, sym:
     end
 end
 
-# FIXME: need the S that's passed in to be the upper triangle only. Should probably use Symmetric{T,SparseMatrixCSC{T,Int}}
 struct MatrixModificationCache{T}
     cartesian_to_nzval_index::Dict{CartesianIndex{2}, Int}
     modifications::SparseVector{T, Int}
@@ -64,7 +63,7 @@ end
 
 function Base.setindex!(cache::MatrixModificationCache, x, row::Integer, col::Integer)
     I = CartesianIndex(row, col)
-    haskey(cache.cartesian_to_nzval_index, I) || error("Changing the sparsity pattern is not allowed.")
+    haskey(cache.cartesian_to_nzval_index, I) || throw(ArgumentError("Changing the sparsity pattern is not allowed."))
     modind = cache.cartesian_to_nzval_index[I]
     cache.modifications[modind] = x
 end
@@ -80,29 +79,29 @@ function processupdates!(model::OSQP.Model, cache::MatrixModificationCache, data
 end
 
 struct ProblemModificationCache{T}
+    Pcache::MatrixModificationCache{T}
     qcache::VectorModificationCache{T}
+    Acache::MatrixModificationCache{T}
     lcache::VectorModificationCache{T}
     ucache::VectorModificationCache{T}
-    Pcache::MatrixModificationCache{T}
-    Acache::MatrixModificationCache{T}
 
     ProblemModificationCache{T}() where {T} = new{T}()
-    function ProblemModificationCache(q::Vector{T}, l::Vector{T}, u::Vector{T}, P::SparseMatrixCSC, A::SparseMatrixCSC) where T
+    function ProblemModificationCache(P::SparseMatrixCSC, q::Vector{T}, A::SparseMatrixCSC, l::Vector{T}, u::Vector{T}) where T
+        Pcache = MatrixModificationCache(triu(P))
         qcache = VectorModificationCache(q)
+        Acache = MatrixModificationCache(A)
         lcache = VectorModificationCache(l)
         ucache = VectorModificationCache(u)
-        Pcache = MatrixModificationCache(P)
-        Acache = MatrixModificationCache(A)
-        new{T}(qcache, lcache, ucache, Pcache, Acache)
+        new{T}(Pcache, qcache, Acache, lcache, ucache)
     end
 end
 
 function processupdates!(model::OSQP.Model, cache::ProblemModificationCache)
+    processupdates!(model, cache.Pcache, :Px, :Px_idx)
     processupdates!(model, cache.qcache, :q)
+    processupdates!(model, cache.Acache, :Ax, :Ax_idx)
     processupdates!(model, cache.lcache, :l)
     processupdates!(model, cache.ucache, :u)
-    processupdates!(model, cache.Pcache, :Px, :Px_ind)
-    processupdates!(model, cache.Pcache, :Ax, :Ax_ind)
 end
 
 mutable struct OSQPOptimizer <: MOI.AbstractOptimizer # TODO: name?
@@ -143,7 +142,7 @@ function MOI.copy!(dest::OSQPOptimizer, src::MOI.ModelLike)
     end
     dest.sense, P, q, dest.objconstant = processobjective(src, idxmap)
     A, l, u = processconstraints(src, idxmap)
-    dest.modificationcache = ProblemModificationCache(q, l, u, P, A)
+    dest.modificationcache = ProblemModificationCache(P, q, A, l, u)
     OSQP.setup!(dest.inner; P = P, q = q, A = A, l = l, u = u, dest.settings...)
     processwarmstart!(dest, src, idxmap)
 
