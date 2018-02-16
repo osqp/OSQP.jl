@@ -69,12 +69,12 @@ end
 
 function Base.setindex!(cache::MatrixModificationCache, x, row::Integer, col::Integer)
     I = CartesianIndex(row, col)
-    I ∈ cache.cartesian_indices_set || throw(ArgumentError("Changing the sparsity pattern is not allowed."))
+    @boundscheck I ∈ cache.cartesian_indices_set || throw(ArgumentError("Changing the sparsity pattern is not allowed."))
     cache.modifications[I] = x
 end
 
 function Base.setindex!(cache::MatrixModificationCache, x::Real, ::Colon)
-    x == 0 || throw(ArgumentError("Changing the sparsity pattern is not allowed."))
+    @boundscheck x == 0 || throw(ArgumentError("Changing the sparsity pattern is not allowed."))
     for I in cache.cartesian_indices
         cache.modifications[I] = 0
     end
@@ -367,6 +367,7 @@ MOI.get(optimizer::OSQPOptimizer, ::MOI.NumberOfVariables) = OSQP.dimensions(opt
 MOI.canget(optimizer::OSQPOptimizer, ::MOI.ListOfVariableIndices) = MOI.canget(optimizer, MOI.NumberOfVariables())
 MOI.get(optimizer::OSQPOptimizer, ::MOI.ListOfVariableIndices) = [VI(i) for i = 1 : get(optimizer, MOI.NumberOfVariables())] # TODO: support for UnitRange would be nice
 
+
 ## Solver-specific optimizer attributes:
 module OSQPSettings
 
@@ -399,6 +400,7 @@ function MOI.set!(optimizer::OSQPOptimizer, a::OSQPAttribute, value)
     end
 end
 
+
 ## Optimizer methods:
 function MOI.optimize!(optimizer::OSQPOptimizer)
     processupdates!(optimizer.inner, optimizer.modcache)
@@ -415,7 +417,6 @@ MOI.get(optimizer::OSQPOptimizer, ::MOI.RawSolver) = optimizer.inner
 MOI.canget(optimizer::OSQPOptimizer, ::MOI.ResultCount) = hasresults(optimizer) # TODO: or true?
 MOI.get(optimizer::OSQPOptimizer, ::MOI.ResultCount) = 1
 
-# TODO: could be even more selective when updating P by taking non-structural zeros into account
 MOI.canset(optimizer::OSQPOptimizer, ::MOI.ObjectiveFunction{SingleVariable}) = !MOI.isempty(optimizer)
 function MOI.set!(optimizer::OSQPOptimizer, ::MOI.ObjectiveFunction{SingleVariable}, obj::SingleVariable)
     optimizer.modcache.Pcache[:] = 0
