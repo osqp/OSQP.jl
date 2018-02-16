@@ -5,8 +5,8 @@ using Base.Test
 using MathOptInterface
 const MOI = MathOptInterface
 
-using MathOptInterfaceTests
-const MOIT = MathOptInterfaceTests
+using MathOptInterface.Test
+const MOIT = MathOptInterface.Test
 
 using MathOptInterfaceUtilities
 const MOIU = MathOptInterfaceUtilities
