@@ -38,9 +38,9 @@ mutable struct VectorModificationCache{T}
 end
 Base.setindex!(cache::VectorModificationCache, x, i::Integer) = (cache.dirty = true; cache.data[i] = x)
 
-function processupdates!(model::OSQP.Model, cache::VectorModificationCache, sym::Symbol)
+function processupdates!(model::OSQP.Model, cache::VectorModificationCache, updatefun::Function)
     if cache.dirty
-        OSQP.update!(model; sym => cache.data)
+        updatefun(model, cache.data)
         cache.dirty = false
     end
 end
@@ -68,11 +68,23 @@ function Base.setindex!(cache::MatrixModificationCache, x, row::Integer, col::In
     cache.modifications[modind] = x
 end
 
-function processupdates!(model::OSQP.Model, cache::MatrixModificationCache, datasym::Symbol, indexsym::Symbol)
+function Base.setindex!(cache::MatrixModificationCache, x::Real, ::Colon)
+    x == 0 || throw(ArgumentError("Changing the sparsity pattern is not allowed."))
+    # using internals of SparseVector here...
+    ninds = length(cache.cartesian_to_nzval_index)
+    nzind = cache.modifications.nzind
+    nzval = cache.modifications.nzval
+    resize!(nzind, ninds)
+    resize!(nzval, ninds)
+    cache.modifications.nzind[:] = 1 : ninds
+    cache.modifications.nzval[:] = 0
+end
+
+function processupdates!(model::OSQP.Model, cache::MatrixModificationCache, updatefun::Function)
     dirty = nnz(cache.modifications) > 0
     if dirty
         # using internals of SparseVector here...
-        OSQP.update!(model; indexsym => cache.modifications.nzind, datasym => cache.modifications.nzval)
+        updatefun(model, cache.modifications.nzval, cache.modifications.nzind)
         empty!(cache.modifications.nzind)
         empty!(cache.modifications.nzval)
     end
@@ -97,11 +109,11 @@ struct ProblemModificationCache{T}
 end
 
 function processupdates!(model::OSQP.Model, cache::ProblemModificationCache)
-    processupdates!(model, cache.Pcache, :Px, :Px_idx)
-    processupdates!(model, cache.qcache, :q)
-    processupdates!(model, cache.Acache, :Ax, :Ax_idx)
-    processupdates!(model, cache.lcache, :l)
-    processupdates!(model, cache.ucache, :u)
+    processupdates!(model, cache.Pcache, OSQP.update_P!)
+    processupdates!(model, cache.qcache, OSQP.update_q!)
+    processupdates!(model, cache.Acache, OSQP.update_A!)
+    processupdates!(model, cache.lcache, OSQP.update_l!)
+    processupdates!(model, cache.ucache, OSQP.update_u!)
 end
 
 mutable struct OSQPOptimizer <: MOI.AbstractOptimizer # TODO: name?
@@ -111,7 +123,7 @@ mutable struct OSQPOptimizer <: MOI.AbstractOptimizer # TODO: name?
     settings::Dict{Symbol, Any} # need to store these, because they should be preserved if empty! is called
     sense::MOI.OptimizationSense
     objconstant::Float64
-    modificationcache::ProblemModificationCache{Float64}
+    modcache::ProblemModificationCache{Float64}
 
     function OSQPOptimizer()
         new(OSQP.Model(), nothing, true, Dict{Symbol, Any}(), MOI.MinSense, 0., ProblemModificationCache{Float64}())
@@ -126,7 +138,7 @@ function MOI.empty!(optimizer::OSQPOptimizer)
     optimizer.isempty = true
     optimizer.sense = MOI.MinSense # model parameter, so needs to be reset
     optimizer.objconstant = 0.
-    optimizer.modificationcache = ProblemModificationCache{Float64}()
+    optimizer.modcache = ProblemModificationCache{Float64}()
     optimizer
 end
 
@@ -142,7 +154,7 @@ function MOI.copy!(dest::OSQPOptimizer, src::MOI.ModelLike)
     end
     dest.sense, P, q, dest.objconstant = processobjective(src, idxmap)
     A, l, u = processconstraints(src, idxmap)
-    dest.modificationcache = ProblemModificationCache(P, q, A, l, u)
+    dest.modcache = ProblemModificationCache(P, q, A, l, u)
     OSQP.setup!(dest.inner; P = P, q = q, A = A, l = l, u = u, dest.settings...)
     processwarmstart!(dest, src, idxmap)
 
@@ -221,7 +233,7 @@ function processlinearterms(variables::Vector{VI}, coefficients::Vector, idxmap)
     q
 end
 
-# FIXME: set upper triangle only
+# TODO: set upper triangle only
 function symmetrize!(I::Vector{Int}, J::Vector{Int}, V::Vector)
     n = length(V)
     @assert length(I) == length(J) == n
@@ -367,7 +379,7 @@ end
 
 ## Optimizer methods:
 function MOI.optimize!(optimizer::OSQPOptimizer)
-    processupdates!(optimizer.inner, optimizer.modificationcache)
+    processupdates!(optimizer.inner, optimizer.modcache)
     optimizer.results = OSQP.solve!(optimizer.inner)
 end
 
@@ -380,6 +392,15 @@ MOI.get(optimizer::OSQPOptimizer, ::MOI.RawSolver) = optimizer.inner
 
 MOI.canget(optimizer::OSQPOptimizer, ::MOI.ResultCount) = hasresults(optimizer) # TODO: or true?
 MOI.get(optimizer::OSQPOptimizer, ::MOI.ResultCount) = 1
+
+MOI.canset(optimizer::OSQPOptimizer, ::MOI.ObjectiveFunction{SingleVariable}) = !MOI.isempty(optimizer)
+function MOI.set!(optimizer::OSQPOptimizer, ::MOI.ObjectiveFunction{SingleVariable}, obj::SingleVariable)
+    error()
+    # P = spzeros(n, n)
+    # q = zeros(n)
+    # q[idxmap[fsingle.variable.value]] = 1
+    # c = 0.
+end
 
 MOI.canget(optimizer::OSQPOptimizer, ::MOI.ObjectiveValue) = hasresults(optimizer)
 function MOI.get(optimizer::OSQPOptimizer, ::MOI.ObjectiveValue)
@@ -457,7 +478,7 @@ end
 
 
 ## Variables and constraints:
-MOI.isvalid(optimizer::OSQPOptimizer, vi::VI) = vi.value ∈ 1 : get(optimizer, MOI.NumberOfVariables())
+MOI.isvalid(optimizer::OSQPOptimizer, vi::VI) = MOI.canget(optimizer, MOI.NumberOfVariables()) && vi.value ∈ 1 : get(optimizer, MOI.NumberOfVariables())
 MOI.canaddvariable(optimizer::OSQPOptimizer) = false # TODO: currently required by tests; should there be a default fallback in MOI, similar to canget?
 
 
@@ -480,19 +501,39 @@ end
 ## Constraints:
 function MOI.isvalid(optimizer::OSQPOptimizer, ci::CI)
     MOI.isempty(optimizer) && return false
-    m = OSQP.dimensions(optimizer.model)[2]
+    m = OSQP.dimensions(optimizer.inner)[2]
     ci.value ∈ 1 : m
 end
 
-# TODO: can't modifyconstraint! with AbstractFunction because selective way to update A not exposed
-MOI.canmodifyconstraint(optimizer::OSQPOptimizer, ci::CI{MOI.ScalarAffineFunction, MOI.Interval}, ::Type{MOI.ScalarAffineFunction}) = false
-# MOI.modifyconstraint!(optimizer::OSQPOptimizer, ci::CI{MOI.ScalarAffineFunction, MOI.Interval}, func::MOI.ScalarAffineFunction)
+# function modification:
+MOI.canmodifyconstraint(optimizer::OSQPOptimizer, ci::CI{Affine, <:IntervalConvertible}, ::Type{Affine}) = MOI.isvalid(optimizer, ci)
+function modifyconstraint!(optimizer::OSQPOptimizer, ci::CI{Affine, <:IntervalConvertible}, f::Affine)
+    row = ci.value
+    ncoeff = length(f.coefficients)
+    @assert length(f.variables) == ncoeff
+    for i = 1 : ncoeff
+        col = f.variables[i].var.value
+        coeff = f.coefficients[i]
+        optimizer.modcache.Acache[row, col] = coeff
+    end
+end
 
-# TODO: can't modifyconstraint! with AbstractSet because selective way to update lb and ub not exposed
-MOI.canmodifyconstraint(optimizer::OSQPOptimizer, ci::CI{MOI.ScalarAffineFunction, MOI.Interval}, ::Type{MOI.Interval}) = false
-# MOI.modifyconstraint!(optimizer::OSQPOptimizer, ci::CI{MOI.ScalarAffineFunction, MOI.Interval}, set::MOI.Interval)
+# set modification:
+MOI.canmodifyconstraint(optimizer::OSQPOptimizer, ci::CI{<:AffineConvertible, S}, ::Type{S}) where {S <: IntervalConvertible} = MOI.isvalid(optimizer, ci)
+function MOI.modifyconstraint!(optimizer::OSQPOptimizer, ci::CI{<:AffineConvertible, S}, s::S) where {S <: IntervalConvertible}
+    interval = MOI.Interval(s)
+    row = ci.value
+    optimizer.modcache.lcache[row] = interval.lower
+    optimizer.modcache.ucache[row] = interval.upper
+end
 
-# TODO: partial change with MultirowChange
+# partial function modification:
+MOI.canmodifyconstraint(optimizer::OSQPOptimizer, ci::CI{Affine, <:IntervalConvertible}, ::Type{MOI.ScalarCoefficientChange{<:Real}}) = MOI.isvalid(optimizer, ci)
+function MOI.modifyconstraint!(optimizer::OSQPOptimizer, ci::CI{Affine, <:IntervalConvertible}, change::MOI.ScalarCoefficientChange{<:Real})
+    optimizer.modcache.Acache[ci.value, change.variable] = change.new_coefficient
+end
+
+# TODO: MultirowChange?
 
 MOI.supportsconstraint(optimizer::OSQPOptimizer, ::Type{<:AffineConvertible}, ::Type{<:IntervalConvertible}) = true
 

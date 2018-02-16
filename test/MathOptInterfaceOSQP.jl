@@ -1,3 +1,4 @@
+using Compat # for CartesianIndices
 using OSQP.MathOptInterfaceOSQP
 using Base.Test
 
@@ -16,6 +17,7 @@ const MOIU = MathOptInterfaceUtilities
     m = 10
     q = randn(rng, n)
     P = (X = sprandn(rng, n, n, 0.1); X' * X)
+    P += eps() * Base.I # needed for a test later on
     l = -rand(rng, m)
     u = rand(rng, m)
     A = sprandn(rng, m, n, 0.6)
@@ -64,12 +66,26 @@ const MOIU = MathOptInterfaceUtilities
     Amod_setup_results = OSQP.solve!(model3)
     @test Amod_update_results.x ≈ Amod_setup_results.x atol = 1e-8
 
+    # MatrixModificationCache: colon indexing
+    modcache.Pcache[:] = 0.
+    for i = 1 : n
+        modcache.Pcache[i, i] = 1.
+    end
+    MathOptInterfaceOSQP.processupdates!(model, modcache)
+    Pmod_update_results = OSQP.solve!(model)
+    model4 = OSQP.Model()
+    Pmod = speye(n, n)
+    OSQP.setup!(model4; P = Pmod, q = modcache.qcache.data, A = Amod, l = l, u = u, verbose = false, eps_abs = 1e-8, eps_rel = 1e-16)
+    Pmod_setup_results = OSQP.solve!(model4)
+    @test Pmod_update_results.x ≈ Pmod_setup_results.x atol = 1e-8
+
     # Modifying the sparsity pattern is not allowed
     nzinds = map(CartesianIndex, zip(I, J))
     zinds = zinds = setdiff(vec(CartesianIndices(A)), nzinds)
     for I in zinds
         @test_throws ArgumentError modcache.Acache[I[1], I[2]] = randn(rng)
     end
+    @test_throws ArgumentError modcache.Acache[:] = 1
 end
 
 MOIU.@model(OSQPCacheModel, # modelname
