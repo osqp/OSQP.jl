@@ -362,7 +362,7 @@ end
 MOI.canget(optimizer::OSQPOptimizer, ::MOI.ObjectiveSense) = true
 MOI.get(optimizer::OSQPOptimizer, ::MOI.ObjectiveSense) = optimizer.sense
 
-MOI.canget(optimizer::OSQPOptimizer, ::MOI.NumberOfVariables) = !optimizer.isempty # https://github.com/oxfordcontrol/OSQP.jl/issues/10
+MOI.canget(optimizer::OSQPOptimizer, ::MOI.NumberOfVariables) = !MOI.isempty(optimizer) # https://github.com/oxfordcontrol/OSQP.jl/issues/10
 MOI.get(optimizer::OSQPOptimizer, ::MOI.NumberOfVariables) = OSQP.dimensions(optimizer.model)[1]
 
 MOI.canget(optimizer::OSQPOptimizer, ::MOI.ListOfVariableIndices) = MOI.canget(optimizer, MOI.NumberOfVariables())
@@ -612,7 +612,16 @@ end
 
 
 # Objective modification
-# TODO: set! with ObjectiveFunction
-MOI.canmodifyobjective(optimizer::OSQPOptimizer, ::Type{MOI.ScalarCoefficientChange}) = false # TODO: selective way of updating objective coefficients not exposed
+MOI.canmodifyobjective(optimizer::OSQPOptimizer, ::Type{<:MOI.ScalarConstantChange}) = !MOI.isempty(optimizer)
+function MOI.modifyobjective!(optimizer::OSQPOptimizer, change::MOI.ScalarConstantChange)
+    optimizer.objconst = change.new_constant
+end
+
+MOI.canmodifyobjective(optimizer::OSQPOptimizer, ::Type{<:MOI.ScalarCoefficientChange}) = !MOI.isempty(optimizer)
+function MOI.modifyobjective!(optimizer::OSQPOptimizer, change::MOI.ScalarCoefficientChange)
+    optimizer.modcache.qcache[change.variable.value] = change.new_coefficient
+end
+
+# There is currently no ScalarQuadraticCoefficientChange.
 
 end # module
