@@ -163,8 +163,6 @@ end
 MOI.isempty(optimizer::OSQPOptimizer) = optimizer.isempty
 
 function MOI.copy!(dest::OSQPOptimizer, src::MOI.ModelLike)
-    # TODO: cangets (awaiting https://github.com/JuliaOpt/MathOptInterface.jl/pull/210)
-
     MOI.empty!(dest)
     idxmap = MOIU.IndexMap(dest, src)
     for (F, S) in MOI.get(src, MOI.ListOfConstraints())
@@ -362,10 +360,16 @@ MOI.canget(optimizer::OSQPOptimizer, ::MOI.ObjectiveSense) = true
 MOI.get(optimizer::OSQPOptimizer, ::MOI.ObjectiveSense) = optimizer.sense
 
 MOI.canget(optimizer::OSQPOptimizer, ::MOI.NumberOfVariables) = !MOI.isempty(optimizer) # https://github.com/oxfordcontrol/OSQP.jl/issues/10
-MOI.get(optimizer::OSQPOptimizer, ::MOI.NumberOfVariables) = OSQP.dimensions(optimizer.model)[1]
+function MOI.get(optimizer::OSQPOptimizer, a::MOI.NumberOfVariables)
+    MOI.canget(optimizer, a) || error()
+    OSQP.dimensions(optimizer.model)[1]
+end
 
 MOI.canget(optimizer::OSQPOptimizer, ::MOI.ListOfVariableIndices) = MOI.canget(optimizer, MOI.NumberOfVariables())
-MOI.get(optimizer::OSQPOptimizer, ::MOI.ListOfVariableIndices) = [VI(i) for i = 1 : get(optimizer, MOI.NumberOfVariables())] # TODO: support for UnitRange would be nice
+function MOI.get(optimizer::OSQPOptimizer, a::MOI.ListOfVariableIndices)
+    MOI.canget(optimizer, a) || error()
+    [VI(i) for i = 1 : get(optimizer, MOI.NumberOfVariables())] # TODO: support for UnitRange would be nice
+end
 
 
 ## Solver-specific optimizer attributes:
@@ -390,7 +394,7 @@ end # module
 
 using .OSQPSettings
 
-MOI.canset(optimizer::OSQPOptimizer, a::OSQPAttribute) = MOI.isempty(optimizer) || isupdatable(a)
+MOI.canset(optimizer::OSQPOptimizer, a::OSQPAttribute) = isupdatable(a) || MOI.isempty(optimizer)
 function MOI.set!(optimizer::OSQPOptimizer, a::OSQPAttribute, value)
     MOI.canset(optimizer, a) || error()
     setting = Symbol(a)
@@ -414,11 +418,12 @@ MOI.free!(optimizer::OSQPOptimizer) = OSQP.clean!(optimizer.inner)
 MOI.canget(optimizer::OSQPOptimizer, ::MOI.RawSolver) = true
 MOI.get(optimizer::OSQPOptimizer, ::MOI.RawSolver) = optimizer.inner
 
-MOI.canget(optimizer::OSQPOptimizer, ::MOI.ResultCount) = hasresults(optimizer) # TODO: or true?
+MOI.canget(optimizer::OSQPOptimizer, ::MOI.ResultCount) = true
 MOI.get(optimizer::OSQPOptimizer, ::MOI.ResultCount) = 1
 
 MOI.canset(optimizer::OSQPOptimizer, ::MOI.ObjectiveFunction{SingleVariable}) = !MOI.isempty(optimizer)
-function MOI.set!(optimizer::OSQPOptimizer, ::MOI.ObjectiveFunction{SingleVariable}, obj::SingleVariable)
+function MOI.set!(optimizer::OSQPOptimizer, a::MOI.ObjectiveFunction{SingleVariable}, obj::SingleVariable)
+    MOI.canset(optimizer, a) || error()
     optimizer.modcache.Pcache[:] = 0
     optimizer.modcache.qcache[obj.variable.value] = 1
     optimizer.objconstant = 0
@@ -426,7 +431,8 @@ function MOI.set!(optimizer::OSQPOptimizer, ::MOI.ObjectiveFunction{SingleVariab
 end
 
 MOI.canset(optimizer::OSQPOptimizer, ::MOI.ObjectiveFunction{Affine}) = !MOI.isempty(optimizer)
-function MOI.set!(optimizer::OSQPOptimizer, ::MOI.ObjectiveFunction{Affine}, obj::Affine)
+function MOI.set!(optimizer::OSQPOptimizer, a::MOI.ObjectiveFunction{Affine}, obj::Affine)
+    MOI.canset(optimizer, a) || error()
     optimizer.modcache.Pcache[:] = 0
     processlinearterms!(optimizer.modcache.qcache, obj.variables, obj.coefficients)
     optimizer.objconstant = obj.constant
@@ -434,7 +440,8 @@ function MOI.set!(optimizer::OSQPOptimizer, ::MOI.ObjectiveFunction{Affine}, obj
 end
 
 MOI.canset(optimizer::OSQPOptimizer, ::MOI.ObjectiveFunction{Quadratic}) = !MOI.isempty(optimizer)
-function MOI.set!(optimizer::OSQPOptimizer, ::MOI.ObjectiveFunction{Quadratic}, obj::Quadratic)
+function MOI.set!(optimizer::OSQPOptimizer, a::MOI.ObjectiveFunction{Quadratic}, obj::Quadratic)
+    MOI.canset(optimizer, a) || error()
     Pcache = optimizer.modcache.Pcache
     Pcache[:] = 0
     rows = obj.quadratic_rowvariables
@@ -460,7 +467,8 @@ function MOI.set!(optimizer::OSQPOptimizer, ::MOI.ObjectiveFunction{Quadratic}, 
 end
 
 MOI.canget(optimizer::OSQPOptimizer, ::MOI.ObjectiveValue) = hasresults(optimizer)
-function MOI.get(optimizer::OSQPOptimizer, ::MOI.ObjectiveValue)
+function MOI.get(optimizer::OSQPOptimizer, a::MOI.ObjectiveValue)
+    MOI.canget(optimizer, a) || error()
     rawobj = optimizer.results.info.obj_val + optimizer.objconstant
     ifelse(optimizer.sense == MOI.MaxSense, -rawobj, rawobj)
 end
@@ -469,14 +477,14 @@ MOI.canget(optimizer::OSQPOptimizer, ::MOI.ObjectiveBound) = false # TODO
 MOI.canget(optimizer::OSQPOptimizer, ::MOI.RelativeGap) = false # TODO
 
 MOI.canget(optimizer::OSQPOptimizer, ::MOI.SolveTime) = hasresults(optimizer)
-MOI.get(optimizer::OSQPOptimizer, ::MOI.SolveTime) = optimizer.results.info.run_time
+MOI.get(optimizer::OSQPOptimizer, a::MOI.SolveTime) = (MOI.canget(optimizer, a) || error(); optimizer.results.info.run_time)
 
 MOI.canget(optimizer::OSQPOptimizer, ::MOI.TerminationStatus) = hasresults(optimizer)
-function MOI.get(optimizer::OSQPOptimizer, ::MOI.TerminationStatus)
+function MOI.get(optimizer::OSQPOptimizer, a::MOI.TerminationStatus)
     # Note that the :Dual_infeasible and :Primal_infeasible are mapped to MOI.Success
     # because OSQP can return a proof of infeasibility. For the same reason,
     # :Primal_infeasible_inaccurate is mapped to MOI.AlmostSuccess
-
+    MOI.canget(optimizer, a) || error()
     osqpstatus = optimizer.results.info.status
     if osqpstatus == :Unsolved
         error("Problem is unsolved.") # TODO: good idea?
@@ -498,7 +506,8 @@ function MOI.get(optimizer::OSQPOptimizer, ::MOI.TerminationStatus)
 end
 
 MOI.canget(optimizer::OSQPOptimizer, ::MOI.PrimalStatus) = hasresults(optimizer)
-function MOI.get(optimizer::OSQPOptimizer, ::MOI.PrimalStatus)
+function MOI.get(optimizer::OSQPOptimizer, a::MOI.PrimalStatus)
+    MOI.canget(optimizer, a) || error()
     osqpstatus = optimizer.results.info.status
     if osqpstatus == :Unsolved
         error("Problem is unsolved.") # TODO: good idea?
@@ -516,7 +525,8 @@ function MOI.get(optimizer::OSQPOptimizer, ::MOI.PrimalStatus)
 end
 
 MOI.canget(optimizer::OSQPOptimizer, ::MOI.DualStatus) = hasresults(optimizer)
-function MOI.get(optimizer::OSQPOptimizer, ::MOI.DualStatus)
+function MOI.get(optimizer::OSQPOptimizer, a::MOI.DualStatus)
+    MOI.canget(optimizer, a) || error()
     osqpstatus = optimizer.results.info.status
     if osqpstatus == :Unsolved
         error("Problem is unsolved.") # TODO: good idea?
@@ -536,7 +546,7 @@ end
 
 ## Variables:
 MOI.isvalid(optimizer::OSQPOptimizer, vi::VI) = MOI.canget(optimizer, MOI.NumberOfVariables()) && vi.value ∈ 1 : get(optimizer, MOI.NumberOfVariables())
-MOI.canaddvariable(optimizer::OSQPOptimizer) = false # TODO: currently required by tests; should there be a default fallback in MOI, similar to canget?
+MOI.canaddvariable(optimizer::OSQPOptimizer) = false
 
 
 ## Variable attributes:
@@ -547,11 +557,8 @@ end
 
 function MOI.get(optimizer::OSQPOptimizer, a::MOI.VariablePrimal, vi::VI)
     MOI.canget(optimizer, a, typeof(vi)) || error()
-    if optimizer.results.info.status ∈ OSQP.SOLUTION_PRESENT
-        optimizer.results.x[vi.value]
-    else
-        optimizer.results.dual_inf_cert[vi.value]
-    end
+    x = ifelse(optimizer.results.info.status ∈ OSQP.SOLUTION_PRESENT, optimizer.results.x, optimizer.results.dual_inf_cert)
+    x[vi.value]
 end
 
 
@@ -565,6 +572,7 @@ end
 # function modification:
 MOI.canmodifyconstraint(optimizer::OSQPOptimizer, ci::CI{Affine, <:IntervalConvertible}, ::Type{Affine}) = MOI.isvalid(optimizer, ci)
 function modifyconstraint!(optimizer::OSQPOptimizer, ci::CI{Affine, <:IntervalConvertible}, f::Affine)
+    MOI.canmodifyconstraint(optimizer, ci, typeof(f)) || error()
     row = ci.value
     ncoeff = length(f.coefficients)
     @assert length(f.variables) == ncoeff
@@ -578,6 +586,7 @@ end
 # set modification:
 MOI.canmodifyconstraint(optimizer::OSQPOptimizer, ci::CI{<:AffineConvertible, S}, ::Type{S}) where {S <: IntervalConvertible} = MOI.isvalid(optimizer, ci)
 function MOI.modifyconstraint!(optimizer::OSQPOptimizer, ci::CI{<:AffineConvertible, S}, s::S) where {S <: IntervalConvertible}
+    MOI.canmodifyconstraint(optimizer, ci, typeof(s)) || error()
     interval = MOI.Interval(s)
     row = ci.value
     optimizer.modcache.lcache[row] = interval.lower
@@ -587,6 +596,7 @@ end
 # partial function modification:
 MOI.canmodifyconstraint(optimizer::OSQPOptimizer, ci::CI{Affine, <:IntervalConvertible}, ::Type{MOI.ScalarCoefficientChange{<:Real}}) = MOI.isvalid(optimizer, ci)
 function MOI.modifyconstraint!(optimizer::OSQPOptimizer, ci::CI{Affine, <:IntervalConvertible}, change::MOI.ScalarCoefficientChange{<:Real})
+    MOI.canmodifyconstraint(optimizer, ci, typeof(change)) || error()
     optimizer.modcache.Acache[ci.value, change.variable.value] = change.new_coefficient
 end
 
@@ -602,24 +612,22 @@ function MOI.canget(optimizer::OSQPOptimizer, ::MOI.ConstraintDual, ::Type{<:CI}
 end
 
 function MOI.get(optimizer::OSQPOptimizer, a::MOI.ConstraintDual, ci::CI)
-    # MOI uses opposite dual convention
     MOI.canget(optimizer, a, typeof(ci)) || error()
-    if optimizer.results.info.status ∈ OSQP.SOLUTION_PRESENT
-        -optimizer.results.y[ci.value]
-    else
-        -optimizer.results.prim_inf_cert[ci.value]
-    end
+    y = ifelse(optimizer.results.info.status ∈ OSQP.SOLUTION_PRESENT, optimizer.results.y, optimizer.results.prim_inf_cert)
+    -y[ci.value] # MOI uses opposite dual convention
 end
 
 
 # Objective modification
 MOI.canmodifyobjective(optimizer::OSQPOptimizer, ::Type{<:MOI.ScalarConstantChange}) = !MOI.isempty(optimizer)
 function MOI.modifyobjective!(optimizer::OSQPOptimizer, change::MOI.ScalarConstantChange)
+    MOI.canmodifyobjective(optimizer, typeof(change)) || error()
     optimizer.objconst = change.new_constant
 end
 
 MOI.canmodifyobjective(optimizer::OSQPOptimizer, ::Type{<:MOI.ScalarCoefficientChange}) = !MOI.isempty(optimizer)
 function MOI.modifyobjective!(optimizer::OSQPOptimizer, change::MOI.ScalarCoefficientChange)
+    MOI.canmodifyobjective(optimizer, typeof(change)) || error()
     optimizer.modcache.qcache[change.variable.value] = change.new_coefficient
 end
 
