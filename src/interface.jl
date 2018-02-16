@@ -278,14 +278,21 @@ function prep_idx_vector_for_ccall(idx::Vector{Int}, n::Int, namesym::Symbol)
     if length(idx) != n
         error("$(namesym) and $(namesym)_idx must have the same length")
     end
-    idx .-= 1
+    idx .-= 1 # Shift indexing to match C
     idx
+end
+
+restore_idx_vector_after_ccall!(idx::Nothing) = nothing
+function restore_idx_vector_after_ccall!(idx::Vector{Int})
+    idx .+= 1 # Unshift indexing
+    nothing
 end
 
 function update_P!(model::OSQP.Model, Px::Vector{Float64}, Px_idx::Union{Vector{Int}, Nothing})
     Px_idx_prepped = prep_idx_vector_for_ccall(Px_idx, length(Px), :P)
     exitflag = ccall((:osqp_update_P, OSQP.osqp), Cc_int, (Ptr{OSQP.Workspace}, Ptr{Cdouble}, Ptr{Cc_int}, Cc_int),
         model.workspace, Px, Px_idx_prepped, length(Px))
+    restore_idx_vector_after_ccall!(Px_idx)
     if exitflag != 0 error("Error updating P") end
 end
 
@@ -293,6 +300,7 @@ function update_A!(model::OSQP.Model, Ax::Vector{Float64}, Ax_idx::Union{Vector{
     Ax_idx_prepped = prep_idx_vector_for_ccall(Ax_idx, length(Ax), :A)
     exitflag = ccall((:osqp_update_A, OSQP.osqp), Cc_int, (Ptr{OSQP.Workspace}, Ptr{Cdouble}, Ptr{Cc_int}, Cc_int),
         model.workspace, Ax, Ax_idx_prepped, length(Ax))
+    restore_idx_vector_after_ccall!(Ax_idx)
     if exitflag != 0 error("Error updating A") end
 end
 
@@ -302,6 +310,8 @@ function update_P_A!(model::OSQP.Model, Px::Vector{Float64}, Px_idx::Union{Vecto
     exitflag = ccall((:osqp_update_P_A, OSQP.osqp), Cc_int, (Ptr{OSQP.Workspace}, Ptr{Cdouble},
         Ptr{Cc_int}, Cc_int, Ptr{Cdouble}, Ptr{Cc_int}, Cc_int),
         model.workspace, Px, Px_idx_prepped, length(Px), Ax, Ax_idx_prepped, length(Ax))
+    restore_idx_vector_after_ccall!(Ax_idx)
+    restore_idx_vector_after_ccall!(Px_idx)
     if exitflag != 0 error("Error updating P and A") end
 end
 
