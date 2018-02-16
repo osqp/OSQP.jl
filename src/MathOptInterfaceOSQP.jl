@@ -37,6 +37,8 @@ mutable struct VectorModificationCache{T}
     VectorModificationCache(data::Vector{T}) where {T} = new{T}(copy(data), false)
 end
 Base.setindex!(cache::VectorModificationCache, x, i::Integer) = (cache.dirty = true; cache.data[i] = x)
+Base.setindex!(cache::VectorModificationCache, x, ::Colon) = (cache.dirty = true; cache.data[:] = x)
+Base.getindex(cache::VectorModificationCache, i::Integer) = cache.data[i]
 
 function processupdates!(model::OSQP.Model, cache::VectorModificationCache, updatefun::Function)
     if cache.dirty
@@ -45,6 +47,7 @@ function processupdates!(model::OSQP.Model, cache::VectorModificationCache, upda
     end
 end
 
+# TODO: consider not storing modifications in a SparseVector
 struct MatrixModificationCache{T}
     cartesian_to_nzval_index::Dict{CartesianIndex{2}, Int}
     modifications::SparseVector{T, Int}
@@ -61,11 +64,14 @@ struct MatrixModificationCache{T}
     end
 end
 
-function Base.setindex!(cache::MatrixModificationCache, x, row::Integer, col::Integer)
+@inline function modification_index(cache::MatrixModificationCache, row::Integer, col::Integer)
     I = CartesianIndex(row, col)
-    haskey(cache.cartesian_to_nzval_index, I) || throw(ArgumentError("Changing the sparsity pattern is not allowed."))
-    modind = cache.cartesian_to_nzval_index[I]
-    cache.modifications[modind] = x
+    @boundscheck haskey(cache.cartesian_to_nzval_index, I) || throw(ArgumentError("Changing the sparsity pattern is not allowed."))
+    cache.cartesian_to_nzval_index[I]
+end
+
+Base.@propagate_inbounds function Base.setindex!(cache::MatrixModificationCache, x, row::Integer, col::Integer)
+    cache.modifications[modification_index(cache, row, col)] = x
 end
 
 function Base.setindex!(cache::MatrixModificationCache, x::Real, ::Colon)
@@ -80,13 +86,26 @@ function Base.setindex!(cache::MatrixModificationCache, x::Real, ::Colon)
     cache.modifications.nzval[:] = 0
 end
 
+Base.@propagate_inbounds function Base.getindex(cache::MatrixModificationCache, row::Integer, col::Integer)
+    cache.modifications[modification_index(cache, row, col)]
+end
+
+Base.@propagate_inbounds function isassigned(cache::MatrixModificationCache, row::Integer, col::Integer)
+    modification_index(cache, row, col) ∈ cache.modifications.nzind
+end
+
+function clearmodifications!(cache::MatrixModificationCache)
+    empty!(cache.modifications.nzind)
+    empty!(cache.modifications.nzval)
+    cache
+end
+
 function processupdates!(model::OSQP.Model, cache::MatrixModificationCache, updatefun::Function)
     dirty = nnz(cache.modifications) > 0
     if dirty
         # using internals of SparseVector here...
         updatefun(model, cache.modifications.nzval, cache.modifications.nzind)
-        empty!(cache.modifications.nzind)
-        empty!(cache.modifications.nzval)
+        clearmodifications!(cache)
     end
 end
 
@@ -189,18 +208,17 @@ Return objective sense, as well as matrix `P`, vector `q`, and scalar `c` such t
 function processobjective(src::MOI.ModelLike, idxmap)
     sense = MOI.get(src, MOI.ObjectiveSense())
     n = MOI.get(src, MOI.NumberOfVariables())
-
+    q = zeros(n)
     if sense != MOI.FeasibilitySense
         if MOI.canget(src, MOI.ObjectiveFunction{SingleVariable}())
             fsingle = MOI.get(src, MOI.ObjectiveFunction{SingleVariable}())
             P = spzeros(n, n)
-            q = zeros(n)
             q[idxmap[fsingle.variable.value]] = 1
             c = 0.
         elseif MOI.canget(src, MOI.ObjectiveFunction{Affine}())
             faffine = MOI.get(src, MOI.ObjectiveFunction{Affine}())
             P = spzeros(n, n)
-            q = processlinearterms(faffine.variables, faffine.coefficients, idxmap)
+            processlinearterms!(q, faffine.variables, faffine.coefficients, idxmap)
             c = faffine.constant
         elseif MOI.canget(src, MOI.ObjectiveFunction{Quadratic}())
             fquadratic = MOI.get(src, MOI.ObjectiveFunction{Quadratic}())
@@ -209,7 +227,7 @@ function processobjective(src::MOI.ModelLike, idxmap)
             V = fquadratic.quadratic_coefficients
             symmetrize!(I, J, V)
             P = sparse(I, J, V, n, n)
-            q = processlinearterms(fquadratic.affine_variables, fquadratic.affine_coefficients, idxmap)
+            processlinearterms!(q, fquadratic.affine_variables, fquadratic.affine_coefficients, idxmap)
             c = fquadratic.constant
         else
             error("No suitable objective function found")
@@ -223,14 +241,19 @@ function processobjective(src::MOI.ModelLike, idxmap)
     sense, P, q, c
 end
 
-function processlinearterms(variables::Vector{VI}, coefficients::Vector, idxmap)
-    q = zeros(length(idxmap.varmap))
+function processlinearterms!(q, variables::Vector{VI}, coefficients::Vector, idxmapfun::Function = identity)
+    q[:] = 0
     ncoeffs = length(coefficients)
     @assert length(variables) == ncoeffs
     for i = 1 : ncoeffs
-        q[idxmap[variables[i]].value] += coefficients[i]
+        var = variables[i]
+        coeff = coefficients[i]
+        q[idxmapfun(var).value] += coeff
     end
-    q
+end
+
+function processlinearterms!(q, variables::Vector{VI}, coefficients::Vector, idxmap::MOIU.IndexMap)
+    processlinearterms!(q, variables, coefficients, var -> idxmap[var])
 end
 
 # TODO: set upper triangle only
@@ -393,13 +416,46 @@ MOI.get(optimizer::OSQPOptimizer, ::MOI.RawSolver) = optimizer.inner
 MOI.canget(optimizer::OSQPOptimizer, ::MOI.ResultCount) = hasresults(optimizer) # TODO: or true?
 MOI.get(optimizer::OSQPOptimizer, ::MOI.ResultCount) = 1
 
+# TODO: could be even more selective when updating P by taking non-structural zeros into account
 MOI.canset(optimizer::OSQPOptimizer, ::MOI.ObjectiveFunction{SingleVariable}) = !MOI.isempty(optimizer)
 function MOI.set!(optimizer::OSQPOptimizer, ::MOI.ObjectiveFunction{SingleVariable}, obj::SingleVariable)
-    error()
-    # P = spzeros(n, n)
-    # q = zeros(n)
-    # q[idxmap[fsingle.variable.value]] = 1
-    # c = 0.
+    optimizer.modcache.Pcache[:] = 0
+    optimizer.modcache.qcache[obj.variable.value] = 1
+    optimizer.objconstant = 0
+    nothing
+end
+
+MOI.canset(optimizer::OSQPOptimizer, ::MOI.ObjectiveFunction{Affine}) = !MOI.isempty(optimizer)
+function MOI.set!(optimizer::OSQPOptimizer, ::MOI.ObjectiveFunction{Affine}, obj::Affine)
+    optimizer.modcache.Pcache[:] = 0
+    processlinearterms!(optimizer.modcache.qcache, obj.variables, obj.coefficients)
+    optimizer.objconstant = obj.constant
+    nothing
+end
+
+MOI.canset(optimizer::OSQPOptimizer, ::MOI.ObjectiveFunction{Quadratic}) = !MOI.isempty(optimizer)
+function MOI.set!(optimizer::OSQPOptimizer, ::MOI.ObjectiveFunction{Quadratic}, obj::Quadratic)
+    Pcache = optimizer.modcache.Pcache
+    Pcache[:] = 0
+    rows = obj.quadratic_rowvariables
+    cols = obj.quadratic_rowvariables
+    coeffs = obj.quadratic_coefficients
+    n = length(coeffs)
+    @assert length(rows) == length(cols) == n
+    for i = 1 : n
+        row = rows[i].value
+        col = cols[i].value
+        coeff = coeffs[i]
+        row > col && ((row, col) = (col, row)) # upper triangle only
+        if isassigned(Pcache, row, col)
+            @inbounds Pcache[row, col] += coeff
+        else
+            @inbounds Pcache[row, col] = coeff
+        end
+    end
+    processlinearterms!(optimizer.modcache.qcache, obj.affine_variables, obj.affine_coefficients)
+    optimizer.objconstant = obj.constant
+    nothing
 end
 
 MOI.canget(optimizer::OSQPOptimizer, ::MOI.ObjectiveValue) = hasresults(optimizer)
