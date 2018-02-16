@@ -29,7 +29,7 @@ import OSQP
 # TODO: consider moving to MOI:
 constant(f::SingleVariable) = 0
 constant(f::Affine) = f.constant
-constant(f::Quadratic) = f.constant
+# constant(f::Quadratic) = f.constant
 
 mutable struct VectorModificationCache{T}
     data::Vector{T}
@@ -47,10 +47,9 @@ function processupdates!(model::OSQP.Model, cache::VectorModificationCache, upda
     end
 end
 
-# TODO: consider not storing modifications in a SparseVector
 struct MatrixModificationCache{T}
     cartesian_indices::Vector{CartesianIndex{2}}
-    cartesian_indices_set::Set{CartesianIndex{2}} # to speed up checking whether indices are set out of bounds
+    cartesian_indices_set::Set{CartesianIndex{2}} # to speed up checking whether indices are out of bounds in setindex!
     modifications::Dict{CartesianIndex{2}, T}
     vals::Vector{T}
     inds::Vector{Int}
@@ -63,6 +62,7 @@ struct MatrixModificationCache{T}
             cartesian_indices[k] = I
         end
         modifications = Dict{CartesianIndex{2}, Int}()
+        sizehint!(modifications, nnz(S))
         new{T}(cartesian_indices, Set(cartesian_indices), modifications, T[], Int[])
     end
 end
@@ -89,7 +89,7 @@ function isassigned(cache::MatrixModificationCache, row::Integer, col::Integer)
 end
 
 function processupdates!(model::OSQP.Model, cache::MatrixModificationCache, updatefun::Function)
-    dirty = length(cache.modifications) > 0
+    dirty = !isempty(cache.modifications)
     if dirty
         nmods = length(cache.modifications)
         resize!(cache.vals, nmods)
@@ -134,7 +134,7 @@ function processupdates!(model::OSQP.Model, cache::ProblemModificationCache)
     processupdates!(model, cache.ucache, OSQP.update_u!)
 end
 
-mutable struct OSQPOptimizer <: MOI.AbstractOptimizer # TODO: name?
+mutable struct OSQPOptimizer <: MOI.AbstractOptimizer
     inner::OSQP.Model
     results::Union{OSQP.Results, Nothing}
     isempty::Bool
@@ -173,8 +173,6 @@ function MOI.copy!(dest::OSQPOptimizer, src::MOI.ModelLike)
     dest.modcache = ProblemModificationCache(P, q, A, l, u)
     OSQP.setup!(dest.inner; P = P, q = q, A = A, l = l, u = u, dest.settings...)
     processwarmstart!(dest, src, idxmap)
-
-    # Finish up
     dest.isempty = false
     return MOI.CopyResult(MOI.CopySuccess, "", idxmap)
 end
@@ -253,7 +251,6 @@ function processlinearterms!(q, variables::Vector{VI}, coefficients::Vector, idx
     processlinearterms!(q, variables, coefficients, var -> idxmap[var])
 end
 
-# TODO: set upper triangle only
 function symmetrize!(I::Vector{Int}, J::Vector{Int}, V::Vector)
     n = length(V)
     @assert length(I) == length(J) == n
@@ -328,13 +325,13 @@ function processwarmstart!(dest::OSQPOptimizer, src::MOI.ModelLike, idxmap)
         n = length(idxmap.varmap)
         x = zeros(n)
         processprimalstart!(x, src, idxmap)
-        OSQP.warm_start!(src, x = x)
+        OSQP.warm_start!(dest.inner, x = x)
     end
     if MOI.canget(src, MOI.ConstraintDualStart(), CI{Affine, Interval})
         m = length(idxmap.conmap)
         y = zeros(m)
         processdualstart!(y, src, idxmap)
-        OSQP.warm_start!(src, y = y)
+        OSQP.warm_start!(dest.inner, y = y) # opposite dual convention
     end
 end
 
@@ -349,7 +346,7 @@ function processdualstart!(y::Vector, src::MOI.ModelLike, idxmap)
     for (F, S) in MOI.get(src, MOI.ListOfConstraints())
         cis_src = MOI.get(src, MOI.ListOfConstraintIndices{F, S}())
         for ci in cis_src
-            y[idxmap[ci].value] = get(src, MOI.ConstraintDualStart(), ci)
+            y[idxmap[ci].value] = -get(src, MOI.ConstraintDualStart(), ci) # opposite dual convention
         end
     end
 end
