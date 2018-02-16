@@ -28,13 +28,11 @@ const MOIU = MathOptInterfaceUtilities
     baseresults = OSQP.solve!(model)
     @test baseresults.info.status == :Solved
 
-    # VectorModificationCache basics
+    # Modify q, ensure that updating results in the same solution as calling setup! with the modified q
     @test !modcache.qcache.dirty
     modcache.qcache[3] = 5.
     @test modcache.qcache.dirty
     @test modcache.qcache.data[3] == 5.
-
-    # Process q modifications, ensure that updating results in the same solution as calling setup! with the modified q
     MathOptInterfaceOSQP.processupdates!(model, modcache)
     @test !modcache.qcache.dirty
     qmod_update_results = OSQP.solve!(model)
@@ -44,18 +42,15 @@ const MOIU = MathOptInterfaceUtilities
     qmod_setup_results = OSQP.solve!(model2)
     @test qmod_update_results.x ≈ qmod_setup_results.x atol = 1e-8
 
-    # MatrixModificationCache basics
+    # Modify A, ensure that updating results in the same solution as calling setup! with the modified A and q
     (I, J) = findn(A)
     Amodindex = rand(rng, 1 : nnz(A))
     row = I[Amodindex]
     col = J[Amodindex]
     val = randn(rng)
     modcache.Acache[row, col] = val
-    @test any(x -> x == val, modcache.Acache.modifications)
-
-    # Process A modifications, ensure that updating results in the same solution as calling setup! with the modified A and q
     MathOptInterfaceOSQP.processupdates!(model, modcache)
-    @test all(iszero, modcache.Acache.modifications)
+    @test isempty(modcache.Acache.modifications)
     Amod_update_results = OSQP.solve!(model)
     @test !isapprox(baseresults.x, Amod_update_results.x; atol = 1e-1) # ensure that new results are significantly different
     @test !isapprox(qmod_update_results.x, Amod_update_results.x; atol = 1e-1) # ensure that new results are significantly different
