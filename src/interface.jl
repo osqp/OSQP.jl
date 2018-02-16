@@ -232,129 +232,112 @@ function clean!(model::OSQP.Model)
     end
 end
 
-
-function update!(model::OSQP.Model; kwargs...)
-    if isempty(kwargs)
-        return
-    else
-        data = Dict{Symbol,Any}()
-        for (key, value) in kwargs
-            if !(key in UPDATABLE_DATA)
-                error("$(key) field cannot be updated or is not recognized")
-            else
-                data[key] = value
-            end
-        end
-    end
-
-    # Get arguments
-    q = get(data, :q, nothing)
-    l = get(data, :l, nothing)
-    u = get(data, :u, nothing)
-    Px = get(data, :Px, nothing)
-    Px_idx = get(data, :Px_idx, C_NULL)
-    if (Px_idx != C_NULL)
-        Px_idx = Px_idx .- 1  # Shift indexing to match C one
-    end
-    Ax = get(data, :Ax, nothing)
-    Ax_idx = get(data, :Ax_idx, C_NULL)
-    if (Ax_idx != C_NULL)
-        Ax_idx = Ax_idx .- 1 # Shift indexing to match C one
-    end
-
-    # Get problem dimensions
+function update_q!(model::OSQP.Model, q::Vector{Float64})
     (n, m) = OSQP.dimensions(model)
+    if length(q) != n
+        error("q must have length n = $(n)")
+    end
+    exitflag = ccall((:osqp_update_lin_cost, OSQP.osqp), Cc_int, (Ptr{OSQP.Workspace}, Ptr{Cdouble}), model.workspace, q)
+    if exitflag != 0 error("Error updating q") end
+end
 
-    # Update linear cost
+function update_l!(model::OSQP.Model, l::Vector{Float64})
+    (n, m) = OSQP.dimensions(model)
+    if length(l) != m
+        error("l must have length m = $(m)")
+    end
+    l .= max.(l, -OSQP_INFTY) # Convert values to OSQP_INFTY
+    exitflag = ccall((:osqp_update_lower_bound, OSQP.osqp), Cc_int, (Ptr{OSQP.Workspace}, Ptr{Cdouble}), model.workspace, l)
+    if exitflag != 0 error("Error updating l") end
+end
+
+function update_u!(model::OSQP.Model, u::Vector{Float64})
+    (n, m) = OSQP.dimensions(model)
+    if length(u) != m
+        error("u must have length m = $(m)")
+    end
+    u .= min.(u, OSQP_INFTY) # Convert values to OSQP_INFTY
+    exitflag = ccall((:osqp_update_upper_bound, OSQP.osqp), Cc_int, (Ptr{OSQP.Workspace}, Ptr{Cdouble}), model.workspace, u)
+    if exitflag != 0 error("Error updating u") end
+end
+
+function update_bounds!(model::OSQP.Model, l::Vector{Float64}, u::Vector{Float64})
+    (n, m) = OSQP.dimensions(model)
+    if length(l) != m
+        error("l must have length m = $(m)")
+    end
+    if length(u) != m
+        error("u must have length m = $(m)")
+    end
+    exitflag = ccall((:osqp_update_bounds, OSQP.osqp), Cc_int, (Ptr{OSQP.Workspace}, Ptr{Cdouble}, Ptr{Cdouble}), model.workspace, l, u)
+    if exitflag != 0 error("Error updating bounds l and u") end
+end
+
+prep_idx_vector_for_ccall(idx::Nothing, n::Int, namesym::Symbol) = C_NULL
+function prep_idx_vector_for_ccall(idx::Vector{Int}, n::Int, namesym::Symbol)
+    if length(idx) != n
+        error("$(namesym) and $(namesym)_idx must have the same length")
+    end
+    idx .-= 1 # Shift indexing to match C
+    idx
+end
+
+restore_idx_vector_after_ccall!(idx::Nothing) = nothing
+function restore_idx_vector_after_ccall!(idx::Vector{Int})
+    idx .+= 1 # Unshift indexing
+    nothing
+end
+
+function update_P!(model::OSQP.Model, Px::Vector{Float64}, Px_idx::Union{Vector{Int}, Nothing})
+    Px_idx_prepped = prep_idx_vector_for_ccall(Px_idx, length(Px), :P)
+    exitflag = ccall((:osqp_update_P, OSQP.osqp), Cc_int, (Ptr{OSQP.Workspace}, Ptr{Cdouble}, Ptr{Cc_int}, Cc_int),
+        model.workspace, Px, Px_idx_prepped, length(Px))
+    restore_idx_vector_after_ccall!(Px_idx)
+    if exitflag != 0 error("Error updating P") end
+end
+
+function update_A!(model::OSQP.Model, Ax::Vector{Float64}, Ax_idx::Union{Vector{Int}, Nothing})
+    Ax_idx_prepped = prep_idx_vector_for_ccall(Ax_idx, length(Ax), :A)
+    exitflag = ccall((:osqp_update_A, OSQP.osqp), Cc_int, (Ptr{OSQP.Workspace}, Ptr{Cdouble}, Ptr{Cc_int}, Cc_int),
+        model.workspace, Ax, Ax_idx_prepped, length(Ax))
+    restore_idx_vector_after_ccall!(Ax_idx)
+    if exitflag != 0 error("Error updating A") end
+end
+
+function update_P_A!(model::OSQP.Model, Px::Vector{Float64}, Px_idx::Union{Vector{Int}, Nothing}, Ax::Vector{Float64}, Ax_idx::Union{Vector{Int}, Nothing})
+    Px_idx_prepped = prep_idx_vector_for_ccall(Px_idx, length(Px), :P)
+    Ax_idx_prepped = prep_idx_vector_for_ccall(Ax_idx, length(Ax), :A)
+    exitflag = ccall((:osqp_update_P_A, OSQP.osqp), Cc_int, (Ptr{OSQP.Workspace}, Ptr{Cdouble},
+        Ptr{Cc_int}, Cc_int, Ptr{Cdouble}, Ptr{Cc_int}, Cc_int),
+        model.workspace, Px, Px_idx_prepped, length(Px), Ax, Ax_idx_prepped, length(Ax))
+    restore_idx_vector_after_ccall!(Ax_idx)
+    restore_idx_vector_after_ccall!(Px_idx)
+    if exitflag != 0 error("Error updating P and A") end
+end
+
+function update!(model::OSQP.Model; q = nothing, l = nothing, u = nothing, Px = nothing, Px_idx = nothing, Ax = nothing, Ax_idx = nothing)
+    # q
     if q != nothing
-        if length(q) != n
-            error("q must have length n = $(n)")
-        end
-        exitflag = ccall((:osqp_update_lin_cost, OSQP.osqp), Cc_int, (Ptr{OSQP.Workspace}, Ptr{Cdouble}), model.workspace, pointer(q))
-        if exitflag != 0 error("Error updating q") end
+        update_q!(model, q)
     end
 
-
-    # Update lower bound
-    if l != nothing
-        if length(l) != m
-            error("l must have length m = $(m)")
-        end
-
-
-        # Convert values to OSQP_INFTY
-        l = max.(l, -OSQP_INFTY)
-
-        if u == nothing
-            exitflag = ccall((:osqp_update_lower_bound, OSQP.osqp), Cc_int, (Ptr{OSQP.Workspace}, Ptr{Cdouble}), model.workspace, pointer(l))
-            if exitflag != 0 error("Error updating l") end
-        end
+    # l and u
+    if l != nothing && u != nothing
+        update_bounds!(model, l, u)
+    elseif l != nothing
+        update_l!(model, l)
+    elseif u != nothing
+        update_u!(model, u)
     end
 
-
-    # Update upper bound
-    if u != nothing
-        if length(u) != m
-            error("u must have length m = $(m)")
-        end
-
-
-        # Convert values to OSQP_INFTY
-        u = min.(u, OSQP_INFTY)
-
-        if l == nothing
-            exitflag = ccall((:osqp_update_upper_bound, OSQP.osqp), Cc_int, (Ptr{OSQP.Workspace}, Ptr{Cdouble}), model.workspace, pointer(u))
-            if exitflag != 0 error("Error updating u") end
-        end
+    # P and A
+    if Px != nothing && Ax != nothing
+        update_P_A!(model, Px, Px_idx, Ax, Ax_idx)
+    elseif Px != nothing
+        update_P!(model, Px, Px_idx)
+    elseif Ax != nothing
+        update_A!(model, Ax, Ax_idx)
     end
-
-
-    # Update bounds
-    if (l != nothing) & (u != nothing)
-        exitflag = ccall((:osqp_update_bounds, OSQP.osqp), Cc_int, (Ptr{OSQP.Workspace}, Ptr{Cdouble}, Ptr{Cdouble}), model.workspace, pointer(l), pointer(u))
-        if exitflag != 0 error("Error updating bounds l and u") end
-    end
-
-
-    # Update matrix P
-    if Px != nothing
-        if (Px_idx != C_NULL)
-            if (length(Px_idx) != length(Px))
-                error("Px and Px_idx must have same length")
-            end
-            Px_idx = pointer(Px_idx)  # Get pointer to pass to the C function
-        end
-        if Ax == nothing
-            exitflag = ccall((:osqp_update_P, OSQP.osqp), Cc_int, (Ptr{OSQP.Workspace}, Ptr{Cdouble}, Ptr{Cc_int}, Cc_int),
-                     model.workspace, pointer(Px), Px_idx, length(Px))
-            if exitflag != 0 error("Error updating P") end
-        end
-    end
-
-    # Update matrix A
-    if Ax != nothing
-        if (Ax_idx != C_NULL)
-            if (length(Ax_idx) != length(Ax))
-                error("Ax and Ax_idx must have same length")
-            end
-            Ax_idx = pointer(Ax_idx)  # Get pointer to pass to the C function
-        end
-        if Px == nothing
-            exitflag = ccall((:osqp_update_A, OSQP.osqp), Cc_int, (Ptr{OSQP.Workspace}, Ptr{Cdouble}, Ptr{Cc_int}, Cc_int),
-                     model.workspace, pointer(Ax), Ax_idx, length(Ax))
-            if exitflag != 0 error("Error updating A") end
-        end
-    end
-
-    # Update both matrices P and A
-    if (Px != nothing) & (Ax != nothing)
-        exitflag = ccall((:osqp_update_P_A, OSQP.osqp), Cc_int,
-                 (Ptr{OSQP.Workspace}, Ptr{Cdouble}, Ptr{Cc_int}, Cc_int,
-                  Ptr{Cdouble}, Ptr{Cc_int}, Cc_int),
-                 model.workspace, pointer(Px), Px_idx, length(Px), pointer(Ax), Ax_idx, length(Ax))
-        if exitflag != 0 error("Error updating P and A") end
-    end
-
 end
 
 
