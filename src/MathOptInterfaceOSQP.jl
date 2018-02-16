@@ -586,7 +586,7 @@ end
 # partial function modification:
 MOI.canmodifyconstraint(optimizer::OSQPOptimizer, ci::CI{Affine, <:IntervalConvertible}, ::Type{MOI.ScalarCoefficientChange{<:Real}}) = MOI.isvalid(optimizer, ci)
 function MOI.modifyconstraint!(optimizer::OSQPOptimizer, ci::CI{Affine, <:IntervalConvertible}, change::MOI.ScalarCoefficientChange{<:Real})
-    optimizer.modcache.Acache[ci.value, change.variable] = change.new_coefficient
+    optimizer.modcache.Acache[ci.value, change.variable.value] = change.new_coefficient
 end
 
 # TODO: MultirowChange?
