@@ -8,8 +8,8 @@ const MOI = MathOptInterface
 using MathOptInterface.Test
 const MOIT = MathOptInterface.Test
 
-using MathOptInterfaceUtilities
-const MOIU = MathOptInterfaceUtilities
+using MathOptInterface.Utilities
+const MOIU = MathOptInterface.Utilities
 
 @testset "ProblemModificationCache" begin
     rng = MersenneTwister(1234)

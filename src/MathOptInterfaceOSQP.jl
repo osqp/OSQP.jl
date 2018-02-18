@@ -4,10 +4,10 @@ export OSQPOptimizer, OSQPSettings
 
 using Compat
 using MathOptInterface
-using MathOptInterfaceUtilities
+using MathOptInterface.Utilities
 
 const MOI = MathOptInterface
-const MOIU = MathOptInterfaceUtilities
+const MOIU = MathOptInterface.Utilities
 const CI = MOI.ConstraintIndex
 const VI = MOI.VariableIndex
 
