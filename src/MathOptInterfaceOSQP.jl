@@ -219,7 +219,7 @@ function processobjective(src::MOI.ModelLike, idxmap)
         if MOI.canget(src, MOI.ObjectiveFunction{SingleVariable}())
             fsingle = MOI.get(src, MOI.ObjectiveFunction{SingleVariable}())
             P = spzeros(n, n)
-            q[idxmap[fsingle.variable.value]] = 1
+            q[idxmap[fsingle.variable].value] = 1
             c = 0.
         elseif MOI.canget(src, MOI.ObjectiveFunction{Affine}())
             faffine = MOI.get(src, MOI.ObjectiveFunction{Affine}())
