@@ -95,17 +95,6 @@ MOI.canget(src::BadObjectiveModel, ::MOI.ObjectiveFunction{<:Any}) = false
     MOIT.failcopytest(optimizer, BadObjectiveModel(), MOI.CopyOtherError)
 end
 
-MOIU.@model(OSQPModel, # modelname
-    (), # scalarsets
-    (Interval, LessThan, GreaterThan, EqualTo), # typedscalarsets
-    (), # vectorsets
-    (), # typedvectorsets
-    (SingleVariable,), # scalarfunctions
-    (ScalarAffineFunction, ScalarQuadraticFunction), # typedscalarfunctions
-    (), # vectorfunctions
-    () # typedvectorfunctions
-)
-
 # FIXME: type piracy. Generalize and move to MOIU.
 MOI.canget(optimizer::MOIU.CachingOptimizer, ::MOI.ConstraintPrimal, ::Type{<:MOI.ConstraintIndex}) = true
 function MOI.get(optimizer::MOIU.CachingOptimizer, ::MOI.ConstraintPrimal, ci::MOI.ConstraintIndex{<:MOI.SingleVariable, <:Any})

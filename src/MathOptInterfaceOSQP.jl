@@ -1,6 +1,6 @@
 module MathOptInterfaceOSQP
 
-export OSQPOptimizer, OSQPSettings
+export OSQPOptimizer, OSQPSettings, OSQPModel
 
 using Compat
 using MathOptInterface
@@ -640,5 +640,16 @@ function MOI.modifyobjective!(optimizer::OSQPOptimizer, change::MOI.ScalarCoeffi
 end
 
 # There is currently no ScalarQuadraticCoefficientChange.
+
+MOIU.@model(OSQPModel, # modelname
+    (), # scalarsets
+    (Interval, LessThan, GreaterThan, EqualTo), # typedscalarsets
+    (), # vectorsets
+    (), # typedvectorsets
+    (SingleVariable,), # scalarfunctions
+    (ScalarAffineFunction, ScalarQuadraticFunction), # typedscalarfunctions
+    (), # vectorfunctions
+    () # typedvectorfunctions
+)
 
 end # module
