@@ -83,7 +83,19 @@ const MOIU = MathOptInterface.Utilities
     @test_throws ArgumentError modcache.Acache[:] = 1
 end
 
-MOIU.@model(OSQPCacheModel, # modelname
+# TODO: consider moving to MOIT. However, current defaultcopy! is fine with BadObjectiveModel.
+struct BadObjectiveModel <: MOIT.BadModel end # objective sense is not FeasibilitySense, but can't get objective function
+MOI.canget(src::BadObjectiveModel, ::MOI.ObjectiveSense) = true
+MOI.get(src::BadObjectiveModel, ::MOI.ObjectiveSense) = MOI.MinSense
+MOI.canget(src::BadObjectiveModel, ::MOI.ObjectiveFunction{<:Any}) = false
+
+@testset "failcopy" begin
+    optimizer = OSQPOptimizer()
+    MOIT.failcopytestc(optimizer)
+    MOIT.failcopytest(optimizer, BadObjectiveModel(), MOI.CopyOtherError)
+end
+
+MOIU.@model(OSQPModel, # modelname
     (), # scalarsets
     (Interval, LessThan, GreaterThan, EqualTo), # typedscalarsets
     (), # vectorsets
@@ -111,20 +123,19 @@ function MOI.get(optimizer::MOIU.CachingOptimizer, ::MOI.ConstraintPrimal, ci::M
     ret
 end
 
-
 const config = MOIT.TestConfig(atol=1e-4, rtol=1e-4)
 
-@testset "Continuous linear problems" begin
+@testset "CachingOptimizer: linear problems" begin
     excludes = String[]
     push!(excludes, "linear7") # vector constraints
     optimizer = OSQPOptimizer()
     MOI.set!(optimizer, OSQPSettings.Verbose(), false)
     MOI.set!(optimizer, OSQPSettings.EpsAbs(), 1e-8)
     MOI.set!(optimizer, OSQPSettings.EpsRel(), 1e-16)
-    MOIT.contlineartest(MOIU.CachingOptimizer(OSQPCacheModel{Float64}(), optimizer), config, excludes)
+    MOIT.contlineartest(MOIU.CachingOptimizer(OSQPModel{Float64}(), optimizer), config, excludes)
 end
 
-@testset "Continuous quadratic problems" begin
+@testset "CachingOptimizer: quadratic problems" begin
     excludes = String[]
     push!(excludes, "quadratic4") # QCP
     push!(excludes, "quadratic5") # QCP
@@ -134,5 +145,5 @@ end
     MOI.set!(optimizer, OSQPSettings.Verbose(), false)
     MOI.set!(optimizer, OSQPSettings.EpsAbs(), 1e-8)
     MOI.set!(optimizer, OSQPSettings.EpsRel(), 1e-16)
-    MOIT.contquadratictest(MOIU.CachingOptimizer(OSQPCacheModel{Float64}(), optimizer), config, excludes)
+    MOIT.contquadratictest(MOIU.CachingOptimizer(OSQPModel{Float64}(), optimizer), config, excludes)
 end

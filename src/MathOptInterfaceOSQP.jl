@@ -162,13 +162,20 @@ end
 
 MOI.isempty(optimizer::OSQPOptimizer) = optimizer.isempty
 
+struct UnsupportedObjectiveError <: Exception end
+
 function MOI.copy!(dest::OSQPOptimizer, src::MOI.ModelLike)
     MOI.empty!(dest)
     idxmap = MOIU.IndexMap(dest, src)
     for (F, S) in MOI.get(src, MOI.ListOfConstraints())
         MOI.supportsconstraint(dest, F, S) || return MOI.CopyResult(MOI.CopyUnsupportedConstraint, "Unsupported $F-in-$S constraint", idxmap)
     end
-    dest.sense, P, q, dest.objconstant = processobjective(src, idxmap)
+    dest.sense, P, q, dest.objconstant = try
+        processobjective(src, idxmap)
+    catch e
+        e isa UnsupportedObjectiveError && return MOI.CopyResult(MOI.CopyOtherError, "Unsupported objective", idxmap)
+        throw(e)
+    end
     A, l, u = processconstraints(src, idxmap)
     dest.modcache = ProblemModificationCache(P, q, A, l, u)
     OSQP.setup!(dest.inner; P = P, q = q, A = A, l = l, u = u, dest.settings...)
@@ -225,7 +232,7 @@ function processobjective(src::MOI.ModelLike, idxmap)
             processlinearterms!(q, fquadratic.affine_variables, fquadratic.affine_coefficients, idxmap)
             c = fquadratic.constant
         else
-            error("No suitable objective function found")
+            throw(UnsupportedObjectiveError())
         end
         sense == MOI.MaxSense && (scale!(P, -1); scale!(q, -1); c = -c)
     else
