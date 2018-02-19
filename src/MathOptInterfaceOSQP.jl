@@ -164,24 +164,27 @@ MOI.isempty(optimizer::OSQPOptimizer) = optimizer.isempty
 
 struct UnsupportedObjectiveError <: Exception end
 
+struct UnsupportedConstraintError
+    F::Type
+    S::Type
+end
+
 function MOI.copy!(dest::OSQPOptimizer, src::MOI.ModelLike)
-    MOI.empty!(dest)
-    idxmap = MOIU.IndexMap(dest, src)
-    for (F, S) in MOI.get(src, MOI.ListOfConstraints())
-        MOI.supportsconstraint(dest, F, S) || return MOI.CopyResult(MOI.CopyUnsupportedConstraint, "Unsupported $F-in-$S constraint", idxmap)
-    end
-    dest.sense, P, q, dest.objconstant = try
-        processobjective(src, idxmap)
+    try
+        MOI.empty!(dest)
+        idxmap = MOIU.IndexMap(dest, src)
+        dest.sense, P, q, dest.objconstant = processobjective(src, idxmap)
+        A, l, u = processconstraints(src, idxmap)
+        dest.modcache = ProblemModificationCache(P, q, A, l, u)
+        OSQP.setup!(dest.inner; P = P, q = q, A = A, l = l, u = u, dest.settings...)
+        processwarmstart!(dest, src, idxmap)
+        dest.isempty = false
+        return MOI.CopyResult(MOI.CopySuccess, "", idxmap)
     catch e
-        e isa UnsupportedObjectiveError && return MOI.CopyResult(MOI.CopyOtherError, "Unsupported objective", idxmap)
+        e isa UnsupportedObjectiveError && return MOI.CopyResult(MOI.CopyOtherError, "Unsupported objective", MOIU.IndexMap())
+        e isa UnsupportedConstraintError && return MOI.CopyResult(MOI.CopyUnsupportedConstraint, "Unsupported $(e.F)-in-$(e.S) constraint", MOIU.IndexMap())
         throw(e)
     end
-    A, l, u = processconstraints(src, idxmap)
-    dest.modcache = ProblemModificationCache(P, q, A, l, u)
-    OSQP.setup!(dest.inner; P = P, q = q, A = A, l = l, u = u, dest.settings...)
-    processwarmstart!(dest, src, idxmap)
-    dest.isempty = false
-    return MOI.CopyResult(MOI.CopySuccess, "", idxmap)
 end
 
 """
@@ -195,6 +198,7 @@ function MOIU.IndexMap(dest::OSQPOptimizer, src::MOI.ModelLike)
     end
     i = 0
     for (F, S) in MOI.get(src, MOI.ListOfConstraints())
+        MOI.supportsconstraint(dest, F, S) || throw(UnsupportedConstraintError(F, S))
         cis_src = MOI.get(src, MOI.ListOfConstraintIndices{F, S}())
         for ci in cis_src
             i += 1
