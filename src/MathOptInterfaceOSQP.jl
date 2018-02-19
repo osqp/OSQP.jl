@@ -50,20 +50,24 @@ end
 struct MatrixModificationCache{T}
     cartesian_indices::Vector{CartesianIndex{2}}
     cartesian_indices_set::Set{CartesianIndex{2}} # to speed up checking whether indices are out of bounds in setindex!
+    cartesian_indices_per_row::Dict{Int, Vector{CartesianIndex{2}}}
     modifications::Dict{CartesianIndex{2}, T}
     vals::Vector{T}
     inds::Vector{Int}
 
     function MatrixModificationCache(S::SparseMatrixCSC{T}) where T
         cartesian_indices = Vector{CartesianIndex{2}}(uninitialized, nnz(S))
+        cartesian_indices_per_row = Dict{Int, Vector{CartesianIndex{2}}}()
+        sizehint!(cartesian_indices_per_row, nnz(S))
         @inbounds for col = 1 : S.n, k = S.colptr[col] : (S.colptr[col+1]-1) # from sparse findn
             row = S.rowval[k]
             I = CartesianIndex(row, col)
             cartesian_indices[k] = I
+            push!(get!(() -> CartesianIndex{2}[], cartesian_indices_per_row, row), I)
         end
         modifications = Dict{CartesianIndex{2}, Int}()
         sizehint!(modifications, nnz(S))
-        new{T}(cartesian_indices, Set(cartesian_indices), modifications, T[], Int[])
+        new{T}(cartesian_indices, Set(cartesian_indices), cartesian_indices_per_row, modifications, T[], Int[])
     end
 end
 
@@ -74,8 +78,17 @@ function Base.setindex!(cache::MatrixModificationCache, x, row::Integer, col::In
 end
 
 function Base.setindex!(cache::MatrixModificationCache, x::Real, ::Colon)
+    # used to zero out the entire matrix
     @boundscheck x == 0 || throw(ArgumentError("Changing the sparsity pattern is not allowed."))
     for I in cache.cartesian_indices
+        cache.modifications[I] = 0
+    end
+end
+
+function Base.setindex!(cache::MatrixModificationCache, x::Real, row::Integer, ::Colon)
+    # used to zero out a row
+    @boundscheck x == 0 || throw(ArgumentError("Changing the sparsity pattern is not allowed."))
+    for I in cache.cartesian_indices_per_row[row]
         cache.modifications[I] = 0
     end
 end
@@ -109,29 +122,41 @@ function processupdates!(model::OSQP.Model, cache::MatrixModificationCache, upda
 end
 
 struct ProblemModificationCache{T}
-    Pcache::MatrixModificationCache{T}
-    qcache::VectorModificationCache{T}
-    Acache::MatrixModificationCache{T}
-    lcache::VectorModificationCache{T}
-    ucache::VectorModificationCache{T}
+    P::MatrixModificationCache{T}
+    q::VectorModificationCache{T}
+    A::MatrixModificationCache{T}
+    l::VectorModificationCache{T}
+    u::VectorModificationCache{T}
 
     ProblemModificationCache{T}() where {T} = new{T}()
     function ProblemModificationCache(P::SparseMatrixCSC, q::Vector{T}, A::SparseMatrixCSC, l::Vector{T}, u::Vector{T}) where T
-        Pcache = MatrixModificationCache(triu(P))
-        qcache = VectorModificationCache(q)
-        Acache = MatrixModificationCache(A)
-        lcache = VectorModificationCache(l)
-        ucache = VectorModificationCache(u)
-        new{T}(Pcache, qcache, Acache, lcache, ucache)
+        MC = MatrixModificationCache
+        VC = VectorModificationCache
+        new{T}(MC(triu(P)), VC(q), MC(A), VC(l), VC(u))
     end
 end
 
 function processupdates!(model::OSQP.Model, cache::ProblemModificationCache)
-    processupdates!(model, cache.Pcache, OSQP.update_P!)
-    processupdates!(model, cache.qcache, OSQP.update_q!)
-    processupdates!(model, cache.Acache, OSQP.update_A!)
-    processupdates!(model, cache.lcache, OSQP.update_l!)
-    processupdates!(model, cache.ucache, OSQP.update_u!)
+    processupdates!(model, cache.P, OSQP.update_P!)
+    processupdates!(model, cache.q, OSQP.update_q!)
+    processupdates!(model, cache.A, OSQP.update_A!)
+    processupdates!(model, cache.l, OSQP.update_l!)
+    processupdates!(model, cache.u, OSQP.update_u!)
+end
+
+struct WarmStartCache{T}
+    x::VectorModificationCache{T}
+    y::VectorModificationCache{T}
+
+    WarmStartCache{T}() where {T} = new{T}()
+    function WarmStartCache{T}(n::Integer, m::Integer) where T
+        new{T}(VectorModificationCache(zeros(T, n)), VectorModificationCache(zeros(T, m)))
+    end
+end
+
+function processupdates!(model::OSQP.Model, cache::WarmStartCache)
+    processupdates!(model, cache.x, (optimizer, xstart) -> (OSQP.warm_start!(optimizer; x = xstart))) # TODO: non-kwarg function would be preferable
+    processupdates!(model, cache.y, (optimizer, ystart) -> (OSQP.warm_start!(optimizer; y = ystart))) # TODO: non-kwarg function would be preferable
 end
 
 mutable struct OSQPOptimizer <: MOI.AbstractOptimizer
@@ -142,9 +167,10 @@ mutable struct OSQPOptimizer <: MOI.AbstractOptimizer
     sense::MOI.OptimizationSense
     objconstant::Float64
     modcache::ProblemModificationCache{Float64}
+    warmstartcache::WarmStartCache{Float64}
 
     function OSQPOptimizer()
-        new(OSQP.Model(), nothing, true, Dict{Symbol, Any}(), MOI.MinSense, 0., ProblemModificationCache{Float64}())
+        new(OSQP.Model(), nothing, true, Dict{Symbol, Any}(), MOI.MinSense, 0., ProblemModificationCache{Float64}(), WarmStartCache{Float64}())
     end
 end
 
@@ -157,6 +183,7 @@ function MOI.empty!(optimizer::OSQPOptimizer)
     optimizer.sense = MOI.MinSense # model parameter, so needs to be reset
     optimizer.objconstant = 0.
     optimizer.modcache = ProblemModificationCache{Float64}()
+    optimizer.warmstartcache = WarmStartCache{Float64}()
     optimizer
 end
 
@@ -175,15 +202,17 @@ function MOI.copy!(dest::OSQPOptimizer, src::MOI.ModelLike)
         idxmap = MOIU.IndexMap(dest, src)
         dest.sense, P, q, dest.objconstant = processobjective(src, idxmap)
         A, l, u = processconstraints(src, idxmap)
-        dest.modcache = ProblemModificationCache(P, q, A, l, u)
         OSQP.setup!(dest.inner; P = P, q = q, A = A, l = l, u = u, dest.settings...)
-        processwarmstart!(dest, src, idxmap)
+        dest.modcache = ProblemModificationCache(P, q, A, l, u)
+        dest.warmstartcache = WarmStartCache{Float64}(length(idxmap.varmap), length(idxmap.conmap))
+        processprimalstart!(dest.warmstartcache.x, src, idxmap)
+        processdualstart!(dest.warmstartcache.y, src, idxmap)
         dest.isempty = false
         return MOI.CopyResult(MOI.CopySuccess, "", idxmap)
     catch e
         e isa UnsupportedObjectiveError && return MOI.CopyResult(MOI.CopyOtherError, "Unsupported objective", MOIU.IndexMap())
         e isa UnsupportedConstraintError && return MOI.CopyResult(MOI.CopyUnsupportedConstraint, "Unsupported $(e.F)-in-$(e.S) constraint", MOIU.IndexMap())
-        throw(e)
+        rethrow(e)
     end
 end
 
@@ -331,33 +360,22 @@ function processconstraintfun!(triplets::SparseTriplets, f::MOI.ScalarAffineFunc
     end
 end
 
-function processwarmstart!(dest::OSQPOptimizer, src::MOI.ModelLike, idxmap)
+function processprimalstart!(x, src::MOI.ModelLike, idxmap)
     if MOI.canget(src, MOI.VariablePrimalStart(), VI)
-        n = length(idxmap.varmap)
-        x = zeros(n)
-        processprimalstart!(x, src, idxmap)
-        OSQP.warm_start!(dest.inner, x = x)
-    end
-    if MOI.canget(src, MOI.ConstraintDualStart(), CI{Affine, Interval})
-        m = length(idxmap.conmap)
-        y = zeros(m)
-        processdualstart!(y, src, idxmap)
-        OSQP.warm_start!(dest.inner, y = y) # opposite dual convention
+        vis_src = MOI.get(src, MOI.ListOfVariableIndices())
+        for vi in vis_src
+            x[idxmap[vi]] = get(src, MOI.VariablePrimalStart(), vi)
+        end
     end
 end
 
-function processprimalstart!(x::Vector, src::MOI.ModelLike, idxmap)
-    vis_src = MOI.get(src, MOI.ListOfVariableIndices())
-    for vi in vis_src
-        x[idxmap[vi]] = get(src, MOI.VariablePrimalStart(), vi)
-    end
-end
-
-function processdualstart!(y::Vector, src::MOI.ModelLike, idxmap)
+function processdualstart!(y, src::MOI.ModelLike, idxmap)
     for (F, S) in MOI.get(src, MOI.ListOfConstraints())
-        cis_src = MOI.get(src, MOI.ListOfConstraintIndices{F, S}())
-        for ci in cis_src
-            y[idxmap[ci].value] = -get(src, MOI.ConstraintDualStart(), ci) # opposite dual convention
+        if MOI.canget(src, MOI.ConstraintDualStart(), CI{F, S})
+            cis_src = MOI.get(src, MOI.ListOfConstraintIndices{F, S}())
+            for ci in cis_src
+                y[idxmap[ci].value] = -get(src, MOI.ConstraintDualStart(), ci) # opposite dual convention
+            end
         end
     end
 end
@@ -408,7 +426,7 @@ function MOI.set!(optimizer::OSQPOptimizer, a::OSQPAttribute, value)
     setting = Symbol(a)
     optimizer.settings[setting] = value
     if !MOI.isempty(optimizer)
-        OSQP.update_settings!(optimizer.inner; setting = value)
+        OSQP.update_settings!(optimizer.inner; setting => value)
     end
 end
 
@@ -416,6 +434,7 @@ end
 ## Optimizer methods:
 function MOI.optimize!(optimizer::OSQPOptimizer)
     processupdates!(optimizer.inner, optimizer.modcache)
+    processupdates!(optimizer.inner, optimizer.warmstartcache)
     optimizer.results = OSQP.solve!(optimizer.inner)
 end
 
@@ -432,8 +451,9 @@ MOI.get(optimizer::OSQPOptimizer, ::MOI.ResultCount) = 1
 MOI.canset(optimizer::OSQPOptimizer, ::MOI.ObjectiveFunction{SingleVariable}) = !MOI.isempty(optimizer)
 function MOI.set!(optimizer::OSQPOptimizer, a::MOI.ObjectiveFunction{SingleVariable}, obj::SingleVariable)
     MOI.canset(optimizer, a) || error()
-    optimizer.modcache.Pcache[:] = 0
-    optimizer.modcache.qcache[obj.variable.value] = 1
+    optimizer.modcache.P[:] = 0
+    optimizer.modcache.q[:] = 0
+    optimizer.modcache.q[obj.variable.value] = 1
     optimizer.objconstant = 0
     nothing
 end
@@ -441,8 +461,8 @@ end
 MOI.canset(optimizer::OSQPOptimizer, ::MOI.ObjectiveFunction{Affine}) = !MOI.isempty(optimizer)
 function MOI.set!(optimizer::OSQPOptimizer, a::MOI.ObjectiveFunction{Affine}, obj::Affine)
     MOI.canset(optimizer, a) || error()
-    optimizer.modcache.Pcache[:] = 0
-    processlinearterms!(optimizer.modcache.qcache, obj.variables, obj.coefficients)
+    optimizer.modcache.P[:] = 0
+    processlinearterms!(optimizer.modcache.q, obj.variables, obj.coefficients)
     optimizer.objconstant = obj.constant
     nothing
 end
@@ -450,8 +470,8 @@ end
 MOI.canset(optimizer::OSQPOptimizer, ::MOI.ObjectiveFunction{Quadratic}) = !MOI.isempty(optimizer)
 function MOI.set!(optimizer::OSQPOptimizer, a::MOI.ObjectiveFunction{Quadratic}, obj::Quadratic)
     MOI.canset(optimizer, a) || error()
-    Pcache = optimizer.modcache.Pcache
-    Pcache[:] = 0
+    cache = optimizer.modcache
+    cache.P[:] = 0
     rows = obj.quadratic_rowvariables
     cols = obj.quadratic_rowvariables
     coeffs = obj.quadratic_coefficients
@@ -463,13 +483,13 @@ function MOI.set!(optimizer::OSQPOptimizer, a::MOI.ObjectiveFunction{Quadratic},
         col = cols[i].value
         coeff = coeffs[i]
         row > col && ((row, col) = (col, row)) # upper triangle only
-        if isassigned(Pcache, row, col)
-            Pcache[row, col] += coeff
+        if isassigned(cache.P, row, col)
+            cache.P[row, col] += coeff
         else
-            Pcache[row, col] = coeff
+            cache.P[row, col] = coeff
         end
     end
-    processlinearterms!(optimizer.modcache.qcache, obj.affine_variables, obj.affine_coefficients)
+    processlinearterms!(optimizer.modcache.q, obj.affine_variables, obj.affine_coefficients)
     optimizer.objconstant = obj.constant
     nothing
 end
@@ -569,6 +589,17 @@ function MOI.get(optimizer::OSQPOptimizer, a::MOI.VariablePrimal, vi::VI)
     x[vi.value]
 end
 
+MOI.canset(optimizer::OSQPOptimizer, ::MOI.VariablePrimalStart, ::Type{VI}) = !MOI.isempty(optimizer)
+function MOI.set!(optimizer::OSQPOptimizer, a::MOI.VariablePrimalStart, vi::VI, value)
+    MOI.canset(optimizer, a, typeof(vi)) || error()
+    cache = optimizer.warmstartcache
+    if hasresults(optimizer) && !cache.x.dirty
+        # if warm start hasn't been set yet, update it to last solution to match OSQP's internal behavior
+        copy!(cache.x.data, optimizer.results.x)
+    end
+    cache.x[vi.value] = value
+end
+
 
 ## Constraints:
 function MOI.isvalid(optimizer::OSQPOptimizer, ci::CI)
@@ -577,17 +608,29 @@ function MOI.isvalid(optimizer::OSQPOptimizer, ci::CI)
     ci.value ∈ 1 : m
 end
 
+MOI.canset(optimizer::OSQPOptimizer, ::MOI.ConstraintDualStart, ::Type{<:CI}) = !MOI.isempty(optimizer)
+function MOI.set!(optimizer::OSQPOptimizer, a::MOI.ConstraintDualStart, ci::CI, value)
+    MOI.canset(optimizer, a, typeof(ci)) || error()
+    cache = optimizer.warmstartcache
+    if hasresults(optimizer) && !cache.y.dirty
+        # if warm start hasn't been set yet, update it to last solution to match OSQP's internal behavior
+        copy!(cache.y.data, optimizer.results.y)
+    end
+    cache.y[ci.value] = -value # opposite dual convention
+end
+
 # function modification:
 MOI.canmodifyconstraint(optimizer::OSQPOptimizer, ci::CI{Affine, <:IntervalConvertible}, ::Type{Affine}) = MOI.isvalid(optimizer, ci)
-function modifyconstraint!(optimizer::OSQPOptimizer, ci::CI{Affine, <:IntervalConvertible}, f::Affine)
+function MOI.modifyconstraint!(optimizer::OSQPOptimizer, ci::CI{Affine, <:IntervalConvertible}, f::Affine)
     MOI.canmodifyconstraint(optimizer, ci, typeof(f)) || error()
     row = ci.value
+    optimizer.modcache.A[row, :] = 0
     ncoeff = length(f.coefficients)
     @assert length(f.variables) == ncoeff
     for i = 1 : ncoeff
-        col = f.variables[i].var.value
+        col = f.variables[i].value
         coeff = f.coefficients[i]
-        optimizer.modcache.Acache[row, col] = coeff
+        optimizer.modcache.A[row, col] += coeff
     end
 end
 
@@ -597,15 +640,15 @@ function MOI.modifyconstraint!(optimizer::OSQPOptimizer, ci::CI{<:AffineConverti
     MOI.canmodifyconstraint(optimizer, ci, typeof(s)) || error()
     interval = MOI.Interval(s)
     row = ci.value
-    optimizer.modcache.lcache[row] = interval.lower
-    optimizer.modcache.ucache[row] = interval.upper
+    optimizer.modcache.l[row] = interval.lower
+    optimizer.modcache.u[row] = interval.upper
 end
 
 # partial function modification:
 MOI.canmodifyconstraint(optimizer::OSQPOptimizer, ci::CI{Affine, <:IntervalConvertible}, ::Type{MOI.ScalarCoefficientChange{<:Real}}) = MOI.isvalid(optimizer, ci)
 function MOI.modifyconstraint!(optimizer::OSQPOptimizer, ci::CI{Affine, <:IntervalConvertible}, change::MOI.ScalarCoefficientChange{<:Real})
     MOI.canmodifyconstraint(optimizer, ci, typeof(change)) || error()
-    optimizer.modcache.Acache[ci.value, change.variable.value] = change.new_coefficient
+    optimizer.modcache.A[ci.value, change.variable.value] = change.new_coefficient
 end
 
 # TODO: MultirowChange?
@@ -636,7 +679,7 @@ end
 MOI.canmodifyobjective(optimizer::OSQPOptimizer, ::Type{<:MOI.ScalarCoefficientChange}) = !MOI.isempty(optimizer)
 function MOI.modifyobjective!(optimizer::OSQPOptimizer, change::MOI.ScalarCoefficientChange)
     MOI.canmodifyobjective(optimizer, typeof(change)) || error()
-    optimizer.modcache.qcache[change.variable.value] = change.new_coefficient
+    optimizer.modcache.q[change.variable.value] = change.new_coefficient
 end
 
 # There is currently no ScalarQuadraticCoefficientChange.
