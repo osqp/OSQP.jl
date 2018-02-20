@@ -502,8 +502,9 @@ function MOI.get(optimizer::OSQPOptimizer, a::MOI.ObjectiveValue)
     ifelse(optimizer.sense == MOI.MaxSense, -rawobj, rawobj)
 end
 
-MOI.canget(optimizer::OSQPOptimizer, ::MOI.ObjectiveBound) = false # TODO
-MOI.canget(optimizer::OSQPOptimizer, ::MOI.RelativeGap) = false # TODO
+# Since these aren't explicitly returned by OSQP, I feel like it would be better to have a fallback method compute these:
+# MOI.canget(optimizer::OSQPOptimizer, ::MOI.ObjectiveBound) = false
+# MOI.canget(optimizer::OSQPOptimizer, ::MOI.RelativeGap) = false
 
 MOI.canget(optimizer::OSQPOptimizer, ::MOI.SolveTime) = hasresults(optimizer)
 MOI.get(optimizer::OSQPOptimizer, a::MOI.SolveTime) = (MOI.canget(optimizer, a) || error(); optimizer.results.info.run_time)
