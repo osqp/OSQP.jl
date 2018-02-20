@@ -216,7 +216,13 @@ end
     @test MOI.get(optimizer, MOI.ConstraintDual(), idxmap[vc1]) ≈ 0 atol=atol rtol=rtol
     @test MOI.get(optimizer, MOI.ConstraintDual(), idxmap[vc2]) ≈ 1 atol=atol rtol=rtol
 
-    # ensure that solving a second time results in the same answer (after zeroing warm start)
+    # test default warm start
+    tcold = MOI.get(optimizer, MOI.SolveTime())
+    MOI.optimize!(optimizer)
+    twarm = MOI.get(optimizer, MOI.SolveTime())
+    @test twarm < 0.5 * tcold # conservative; should be about an order of magnitude in this case
+
+    # ensure that solving a second time results in the same answer after zeroing warm start
     zero_warm_start!(optimizer, values(idxmap.varmap), values(idxmap.conmap))
     # TODO: I would have expected this to pass:
     # test_optimizer_modification(m -> (), model, optimizer, idxmap, defaultoptimizer(), MOIT.TestConfig(atol=0.0, rtol=0.0))
