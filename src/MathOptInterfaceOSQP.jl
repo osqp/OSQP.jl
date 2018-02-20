@@ -675,7 +675,7 @@ end
 MOI.canmodifyobjective(optimizer::OSQPOptimizer, ::Type{<:MOI.ScalarConstantChange}) = !MOI.isempty(optimizer)
 function MOI.modifyobjective!(optimizer::OSQPOptimizer, change::MOI.ScalarConstantChange)
     MOI.canmodifyobjective(optimizer, typeof(change)) || error()
-    optimizer.objconst = change.new_constant
+    optimizer.objconstant = change.new_constant
 end
 
 MOI.canmodifyobjective(optimizer::OSQPOptimizer, ::Type{<:MOI.ScalarCoefficientChange}) = !MOI.isempty(optimizer)

@@ -239,6 +239,15 @@ end
         MOI.set!(m, MOI.ObjectiveFunction{F}(), newobjf)
     end
 
+    # add a constant to the objective
+    objval_before = MOI.get(optimizer, MOI.ObjectiveValue())
+    test_optimizer_modification(model, optimizer, idxmap, defaultoptimizer(), config) do m
+        @test MOI.canmodifyobjective(m, MOI.ScalarConstantChange)
+        MOI.modifyobjective!(m, MOI.ScalarConstantChange(1.5))
+    end
+    objval_after = MOI.get(optimizer, MOI.ObjectiveValue())
+    @test objval_after ≈ objval_before + 1.5 atol = 1e-8
+
     # change x + y <= 1 to x + 2 y <= 1
     zero_warm_start!(optimizer, values(idxmap.varmap), values(idxmap.conmap))
     test_optimizer_modification(model, optimizer, idxmap, defaultoptimizer(), config) do m
