@@ -155,8 +155,12 @@ struct WarmStartCache{T}
 end
 
 function processupdates!(model::OSQP.Model, cache::WarmStartCache)
-    processupdates!(model, cache.x, (optimizer, xstart) -> (OSQP.warm_start!(optimizer; x = xstart))) # TODO: non-kwarg function would be preferable
-    processupdates!(model, cache.y, (optimizer, ystart) -> (OSQP.warm_start!(optimizer; y = ystart))) # TODO: non-kwarg function would be preferable
+    # Ugh. I would greatly prefer just doing this:
+    #   processupdates!(model, cache.x, (optimizer, xstart) -> (OSQP.warm_start!(optimizer; x = xstart))) # TODO: non-kwarg function would be preferable
+    #   processupdates!(model, cache.y, (optimizer, ystart) -> (OSQP.warm_start!(optimizer; y = ystart))) # TODO: non-kwarg function would be preferable
+    # but calling warm_start! with only one of x and y zeros the warm start for the other.
+    # For now, just set warm start for both *always*
+    OSQP.warm_start!(model; x = cache.x.data, y = cache.y.data)
 end
 
 mutable struct OSQPOptimizer <: MOI.AbstractOptimizer
@@ -436,6 +440,10 @@ function MOI.optimize!(optimizer::OSQPOptimizer)
     processupdates!(optimizer.inner, optimizer.modcache)
     processupdates!(optimizer.inner, optimizer.warmstartcache)
     optimizer.results = OSQP.solve!(optimizer.inner)
+    # TODO: remove this, see comment in processupdates!(model::OSQP.Model, cache::WarmStartCache):
+    # Use result as warm start for next solve to mimic what OSQP does normally.
+    copy!(optimizer.warmstartcache.x.data, optimizer.results.x)
+    copy!(optimizer.warmstartcache.y.data, optimizer.results.y)
 end
 
 MOI.free!(optimizer::OSQPOptimizer) = OSQP.clean!(optimizer.inner)
