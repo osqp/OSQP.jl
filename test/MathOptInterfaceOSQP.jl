@@ -241,7 +241,6 @@ end
 
     # change x + y <= 1 to x + 2 y <= 1
     zero_warm_start!(optimizer, values(idxmap.varmap), values(idxmap.conmap))
-    println("here")
     test_optimizer_modification(model, optimizer, idxmap, defaultoptimizer(), config) do m
         @test MOI.canmodifyconstraint(m, mapfrommodel(m, c), MOI.ScalarAffineFunction{Float64})
         MOI.modifyconstraint!(m, mapfrommodel(m, c), MOI.ScalarAffineFunction(mapfrommodel.(m, [x, x, y]), [1.0, 1.0, 1.0], 0.0))

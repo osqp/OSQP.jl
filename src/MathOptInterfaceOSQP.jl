@@ -97,10 +97,6 @@ function Base.getindex(cache::MatrixModificationCache, row::Integer, col::Intege
     cache.modifications[CartesianIndex(row, col)]
 end
 
-function isassigned(cache::MatrixModificationCache, row::Integer, col::Integer)
-    haskey(cache.modifications, CartesianIndex(row, col))
-end
-
 function processupdates!(model::OSQP.Model, cache::MatrixModificationCache, updatefun::Function)
     dirty = !isempty(cache.modifications)
     if dirty
@@ -480,23 +476,19 @@ MOI.canset(optimizer::OSQPOptimizer, ::MOI.ObjectiveFunction{Quadratic}) = !MOI.
 function MOI.set!(optimizer::OSQPOptimizer, a::MOI.ObjectiveFunction{Quadratic}, obj::Quadratic)
     MOI.canset(optimizer, a) || error()
     cache = optimizer.modcache
-    cache.P[:] = 0
     rows = obj.quadratic_rowvariables
     cols = obj.quadratic_rowvariables
     coeffs = obj.quadratic_coefficients
     n = length(coeffs)
     @assert length(rows) == length(cols) == n
 
+    cache.P[:] = 0
     for i = 1 : n
         row = rows[i].value
         col = cols[i].value
         coeff = coeffs[i]
         row > col && ((row, col) = (col, row)) # upper triangle only
-        if isassigned(cache.P, row, col)
-            cache.P[row, col] += coeff
-        else
-            cache.P[row, col] = coeff
-        end
+        cache.P[row, col] += coeff
     end
     processlinearterms!(optimizer.modcache.q, obj.affine_variables, obj.affine_coefficients)
     optimizer.objconstant = obj.constant
