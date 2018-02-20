@@ -241,12 +241,20 @@ end
 
     # add a constant to the objective
     objval_before = MOI.get(optimizer, MOI.ObjectiveValue())
+    objconstant = 1.5
     test_optimizer_modification(model, optimizer, idxmap, defaultoptimizer(), config) do m
         @test MOI.canmodifyobjective(m, MOI.ScalarConstantChange)
-        MOI.modifyobjective!(m, MOI.ScalarConstantChange(1.5))
+        MOI.modifyobjective!(m, MOI.ScalarConstantChange(objconstant))
     end
     objval_after = MOI.get(optimizer, MOI.ObjectiveValue())
-    @test objval_after ≈ objval_before + 1.5 atol = 1e-8
+    @test objval_after ≈ objval_before + objconstant atol = 1e-8
+
+    # change objective to min -y using ScalarCoefficientChange
+    test_optimizer_modification(model, optimizer, idxmap, defaultoptimizer(), config) do m
+        @test MOI.canmodifyobjective(m, MOI.ScalarCoefficientChange{Float64})
+        MOI.modifyobjective!(m, MOI.ScalarCoefficientChange(mapfrommodel(m, y), -1.0))
+    end
+    @test MOI.get(optimizer, MOI.ObjectiveValue()) ≈ 0.5 * objval_before + objconstant atol = 1e-8
 
     # change x + y <= 1 to x + 2 y <= 1
     zero_warm_start!(optimizer, values(idxmap.varmap), values(idxmap.conmap))
