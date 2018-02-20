@@ -446,7 +446,8 @@ function MOI.optimize!(optimizer::OSQPOptimizer)
     copy!(optimizer.warmstartcache.y.data, optimizer.results.y)
 end
 
-MOI.free!(optimizer::OSQPOptimizer) = OSQP.clean!(optimizer.inner)
+# OSQP.Model already sets up a finalizer that calls OSQP.clean!. Manually calling it would result in a double free.
+# MOI.free!(optimizer::OSQPOptimizer) = OSQP.clean!(optimizer.inner)
 
 
 ## Optimizer attributes:

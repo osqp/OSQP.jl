@@ -273,6 +273,25 @@ end
     @test MOI.get(optimizer, MOI.ConstraintDual(), idxmap[vc2]) ≈ -1 atol=atol rtol=rtol
 end
 
+@testset "RawSolver" begin
+    optimizer = defaultoptimizer()
+    @test MOI.canget(optimizer, MOI.RawSolver())
+    let inner = MOI.get(optimizer, MOI.RawSolver())
+        @test inner.workspace == C_NULL
+    end
+
+    model = OSQPModel{Float64}()
+    MOI.empty!(model)
+    x = MOI.addvariable!(model)
+    c = MOI.addconstraint!(model, x, MOI.GreaterThan(2.0))
+    MOI.set!(model, MOI.ObjectiveSense(), MOI.MinSense)
+    MOI.set!(model, MOI.ObjectiveFunction{MOI.SingleVariable}(), MOI.SingleVariable(x))
+
+    copyresult = MOI.copy!(optimizer, model)
+    inner = MOI.get(optimizer, MOI.RawSolver())
+    @test inner.workspace != C_NULL
+end
+
 # TODO: consider moving to MOIT. However, current defaultcopy! is fine with BadObjectiveModel.
 struct BadObjectiveModel <: MOIT.BadModel end # objective sense is not FeasibilitySense, but can't get objective function
 MOI.canget(src::BadObjectiveModel, ::MOI.ObjectiveSense) = true
