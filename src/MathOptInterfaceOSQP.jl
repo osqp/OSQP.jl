@@ -388,13 +388,13 @@ MOI.get(optimizer::OSQPOptimizer, ::MOI.ObjectiveSense) = optimizer.sense
 MOI.canget(optimizer::OSQPOptimizer, ::MOI.NumberOfVariables) = !MOI.isempty(optimizer) # https://github.com/oxfordcontrol/OSQP.jl/issues/10
 function MOI.get(optimizer::OSQPOptimizer, a::MOI.NumberOfVariables)
     MOI.canget(optimizer, a) || error()
-    OSQP.dimensions(optimizer.model)[1]
+    OSQP.dimensions(optimizer.inner)[1]
 end
 
 MOI.canget(optimizer::OSQPOptimizer, ::MOI.ListOfVariableIndices) = MOI.canget(optimizer, MOI.NumberOfVariables())
 function MOI.get(optimizer::OSQPOptimizer, a::MOI.ListOfVariableIndices)
     MOI.canget(optimizer, a) || error()
-    [VI(i) for i = 1 : get(optimizer, MOI.NumberOfVariables())] # TODO: support for UnitRange would be nice
+    [VI(i) for i = 1 : MOI.get(optimizer, MOI.NumberOfVariables())] # TODO: support for UnitRange would be nice
 end
 
 
@@ -575,7 +575,7 @@ end
 
 
 ## Variables:
-MOI.isvalid(optimizer::OSQPOptimizer, vi::VI) = MOI.canget(optimizer, MOI.NumberOfVariables()) && vi.value ∈ 1 : get(optimizer, MOI.NumberOfVariables())
+MOI.isvalid(optimizer::OSQPOptimizer, vi::VI) = MOI.canget(optimizer, MOI.NumberOfVariables()) && vi.value ∈ 1 : MOI.get(optimizer, MOI.NumberOfVariables())
 MOI.canaddvariable(optimizer::OSQPOptimizer) = false
 
 

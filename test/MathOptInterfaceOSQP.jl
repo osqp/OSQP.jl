@@ -199,9 +199,13 @@ end
     optimizer = defaultoptimizer()
     copyresult = MOI.copy!(optimizer, model)
     idxmap = copyresult.indexmap
+    @test MOI.canget(optimizer, MOI.ObjectiveSense())
+    @test MOI.get(optimizer, MOI.ObjectiveSense()) == MOI.MinSense
+    @test MOI.get(optimizer, MOI.NumberOfVariables()) == 2
+    @test MOI.get(optimizer, MOI.ListOfVariableIndices()) == [MOI.VariableIndex(1), MOI.VariableIndex(2)]
+    @test MOI.isvalid(optimizer, MOI.VariableIndex(2))
+    @test !MOI.isvalid(optimizer, MOI.VariableIndex(3))
 
-    # Since OSQP automatically warm starts, we need to manually zero to get repeatable results
-    zero_warm_start!(optimizer, values(idxmap.varmap), values(idxmap.conmap))
     MOI.optimize!(optimizer)
 
     # ensure that unmodified model is correct
