@@ -261,10 +261,15 @@ end
     @test MOI.get(optimizer, MOI.ObjectiveValue()) ≈ 0.5 * objval_before + objconstant atol = 1e-8
 
     # change x + y <= 1 to x + 2 y <= 1
-    zero_warm_start!(optimizer, values(idxmap.varmap), values(idxmap.conmap))
     test_optimizer_modification(model, optimizer, idxmap, defaultoptimizer(), config) do m
         @test MOI.canmodifyconstraint(m, mapfrommodel(m, c), MOI.ScalarAffineFunction{Float64})
         MOI.modifyconstraint!(m, mapfrommodel(m, c), MOI.ScalarAffineFunction(mapfrommodel.(m, [x, x, y]), [1.0, 1.0, 1.0], 0.0))
+    end
+
+    # change back to x + y <= 1 using ScalarCoefficientChange
+    test_optimizer_modification(model, optimizer, idxmap, defaultoptimizer(), config) do m
+        @test MOI.canmodifyconstraint(m, mapfrommodel(m, c), MOI.ScalarCoefficientChange{Float64})
+        MOI.modifyconstraint!(m, mapfrommodel(m, c), MOI.ScalarCoefficientChange(mapfrommodel(m, y), 1.0))
     end
 
     # flip the feasible set around from what it was originally and minimize +x

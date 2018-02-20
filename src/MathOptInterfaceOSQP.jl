@@ -647,8 +647,8 @@ function MOI.modifyconstraint!(optimizer::OSQPOptimizer, ci::CI{<:AffineConverti
 end
 
 # partial function modification:
-MOI.canmodifyconstraint(optimizer::OSQPOptimizer, ci::CI{Affine, <:IntervalConvertible}, ::Type{MOI.ScalarCoefficientChange{<:Real}}) = MOI.isvalid(optimizer, ci)
-function MOI.modifyconstraint!(optimizer::OSQPOptimizer, ci::CI{Affine, <:IntervalConvertible}, change::MOI.ScalarCoefficientChange{<:Real})
+MOI.canmodifyconstraint(optimizer::OSQPOptimizer, ci::CI{Affine, <:IntervalConvertible}, ::Type{<:MOI.ScalarCoefficientChange}) = MOI.isvalid(optimizer, ci)
+function MOI.modifyconstraint!(optimizer::OSQPOptimizer, ci::CI{Affine, <:IntervalConvertible}, change::MOI.ScalarCoefficientChange)
     MOI.canmodifyconstraint(optimizer, ci, typeof(change)) || error()
     optimizer.modcache.A[ci.value, change.variable.value] = change.new_coefficient
 end
