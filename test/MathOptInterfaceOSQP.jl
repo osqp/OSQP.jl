@@ -108,7 +108,7 @@ function defaultoptimizer()
     MOI.set!(optimizer, OSQPSettings.EpsAbs(), 1e-8)
     MOI.set!(optimizer, OSQPSettings.EpsRel(), 1e-16)
     MOI.set!(optimizer, OSQPSettings.MaxIter(), 10000)
-    MOI.set!(optimizer, OSQPSettings.CheckTermination(), true)
+    # MOI.set!(optimizer, OSQPSettings.CheckTermination(), true) # This seems to cause random test failures!
     optimizer
 end
 
@@ -175,7 +175,7 @@ function zero_warm_start!(optimizer::MOI.ModelLike, vars, cons)
         MOI.set!(optimizer, MOI.VariablePrimalStart(), vi, 0.0)
     end
     for ci in cons
-        MOI.set!(optimizer, MOI.ConstraintDualStart(), ci, 0.0)
+        MOI.set!(optimizer, MOI.ConstraintDualStart(), ci, -0.0)
     end
 end
 
@@ -241,6 +241,7 @@ end
 
     # change x + y <= 1 to x + 2 y <= 1
     zero_warm_start!(optimizer, values(idxmap.varmap), values(idxmap.conmap))
+    println("here")
     test_optimizer_modification(model, optimizer, idxmap, defaultoptimizer(), config) do m
         @test MOI.canmodifyconstraint(m, mapfrommodel(m, c), MOI.ScalarAffineFunction{Float64})
         MOI.modifyconstraint!(m, mapfrommodel(m, c), MOI.ScalarAffineFunction(mapfrommodel.(m, [x, x, y]), [1.0, 1.0, 1.0], 0.0))
