@@ -286,14 +286,25 @@ end
         MOI.modifyconstraint!(m, mapfrommodel(m, vc2), MOI.Interval(-Inf, 0.))
     end
 
-    @test MOI.get(optimizer, MOI.TerminationStatus()) == MOI.Success
-    @test MOI.get(optimizer, MOI.PrimalStatus()) == MOI.FeasiblePoint
-    @test MOI.get(optimizer, MOI.ObjectiveValue()) ≈ -1 atol=atol rtol=rtol
-    @test MOI.get(optimizer, MOI.VariablePrimal(), getindex.(idxmap, v)) ≈ [-1, 0] atol=atol rtol=rtol
-    @test MOI.get(optimizer, MOI.DualStatus()) == MOI.FeasiblePoint
-    @test MOI.get(optimizer, MOI.ConstraintDual(), idxmap[c]) ≈ 1 atol=atol rtol=rtol
-    @test MOI.get(optimizer, MOI.ConstraintDual(), idxmap[vc1]) ≈ 0 atol=atol rtol=rtol
-    @test MOI.get(optimizer, MOI.ConstraintDual(), idxmap[vc2]) ≈ -1 atol=atol rtol=rtol
+    testflipped = function ()
+        @test MOI.get(optimizer, MOI.TerminationStatus()) == MOI.Success
+        @test MOI.get(optimizer, MOI.PrimalStatus()) == MOI.FeasiblePoint
+        @test MOI.get(optimizer, MOI.ObjectiveValue()) ≈ -1 atol=atol rtol=rtol
+        @test MOI.get(optimizer, MOI.VariablePrimal(), getindex.(idxmap, v)) ≈ [-1, 0] atol=atol rtol=rtol
+        @test MOI.get(optimizer, MOI.DualStatus()) == MOI.FeasiblePoint
+        @test MOI.get(optimizer, MOI.ConstraintDual(), idxmap[c]) ≈ 1 atol=atol rtol=rtol
+        @test MOI.get(optimizer, MOI.ConstraintDual(), idxmap[vc1]) ≈ 0 atol=atol rtol=rtol
+        @test MOI.get(optimizer, MOI.ConstraintDual(), idxmap[vc2]) ≈ -1 atol=atol rtol=rtol
+    end
+    testflipped()
+
+    # update settings
+    @test optimizer.results.info.status_polish == 0
+    @test MOI.canset(optimizer, OSQPSettings.Polish())
+    MOI.set!(optimizer, OSQPSettings.Polish(), true)
+    MOI.optimize!(optimizer)
+    @test optimizer.results.info.status_polish == 1
+    testflipped()
 end
 
 @testset "RawSolver" begin
