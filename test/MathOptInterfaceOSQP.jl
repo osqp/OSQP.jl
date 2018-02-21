@@ -108,7 +108,8 @@ function defaultoptimizer()
     MOI.set!(optimizer, OSQPSettings.EpsAbs(), 1e-8)
     MOI.set!(optimizer, OSQPSettings.EpsRel(), 1e-16)
     MOI.set!(optimizer, OSQPSettings.MaxIter(), 10000)
-    # MOI.set!(optimizer, OSQPSettings.CheckTermination(), true) # This seems to cause random test failures!
+    MOI.set!(optimizer, OSQPSettings.AdaptiveRho(), false) # required for deterministic behavior
+    # MOI.set!(optimizer, OSQPSettings.AdaptiveRhoInterval(), 25)
     optimizer
 end
 
@@ -228,9 +229,7 @@ end
 
     # ensure that solving a second time results in the same answer after zeroing warm start
     zero_warm_start!(optimizer, values(idxmap.varmap), values(idxmap.conmap))
-    # TODO: I would have expected this to pass:
-    # test_optimizer_modification(m -> (), model, optimizer, idxmap, defaultoptimizer(), MOIT.TestConfig(atol=0.0, rtol=0.0))
-    test_optimizer_modification(m -> (), model, optimizer, idxmap, defaultoptimizer(), config)
+    test_optimizer_modification(m -> (), model, optimizer, idxmap, defaultoptimizer(), MOIT.TestConfig(atol=0.0, rtol=0.0))
 
     mapfrommodel(::MOI.AbstractOptimizer, x::Union{MOI.VariableIndex, <:MOI.ConstraintIndex}) = idxmap[x]
     mapfrommodel(::MOI.ModelLike, x::Union{MOI.VariableIndex, <:MOI.ConstraintIndex}) = x
