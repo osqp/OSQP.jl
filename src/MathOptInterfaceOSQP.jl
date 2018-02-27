@@ -151,12 +151,14 @@ struct WarmStartCache{T}
 end
 
 function processupdates!(model::OSQP.Model, cache::WarmStartCache)
-    # Ugh. I would greatly prefer just doing this:
-    #   processupdates!(model, cache.x, (optimizer, xstart) -> (OSQP.warm_start!(optimizer; x = xstart))) # TODO: non-kwarg function would be preferable
-    #   processupdates!(model, cache.y, (optimizer, ystart) -> (OSQP.warm_start!(optimizer; y = ystart))) # TODO: non-kwarg function would be preferable
-    # but calling warm_start! with only one of x and y zeros the warm start for the other.
-    # For now, just set warm start for both *always*
-    OSQP.warm_start!(model; x = cache.x.data, y = cache.y.data)
+    if cache.x.dirty && cache.y.dirty
+        # Special case because setting warm start for x only zeroes the stored warm start for y and vice versa.
+        OSQP.warm_start!(model; x = cache.x.data, y = cache.y.data)
+        cache.x.dirty = false
+        cache.y.dirty = false
+    end
+    processupdates!(model, cache.x, (optimizer, x) -> (OSQP.warm_start!(optimizer; x = x)))
+    processupdates!(model, cache.y, (optimizer, y) -> (OSQP.warm_start!(optimizer; x = y)))
 end
 
 mutable struct OSQPOptimizer <: MOI.AbstractOptimizer
@@ -436,10 +438,10 @@ function MOI.optimize!(optimizer::OSQPOptimizer)
     processupdates!(optimizer.inner, optimizer.modcache)
     processupdates!(optimizer.inner, optimizer.warmstartcache)
     optimizer.results = OSQP.solve!(optimizer.inner)
-    # TODO: remove this, see comment in processupdates!(model::OSQP.Model, cache::WarmStartCache):
-    # Use result as warm start for next solve to mimic what OSQP does normally.
+    # Copy previous solution into warm start cache without setting the dirty bit:
     copy!(optimizer.warmstartcache.x.data, optimizer.results.x)
     copy!(optimizer.warmstartcache.y.data, optimizer.results.y)
+    nothing
 end
 
 # OSQP.Model already sets up a finalizer that calls OSQP.clean!. Manually calling it would result in a double free.
@@ -594,12 +596,7 @@ end
 MOI.canset(optimizer::OSQPOptimizer, ::MOI.VariablePrimalStart, ::Type{VI}) = !MOI.isempty(optimizer)
 function MOI.set!(optimizer::OSQPOptimizer, a::MOI.VariablePrimalStart, vi::VI, value)
     MOI.canset(optimizer, a, typeof(vi)) || error()
-    cache = optimizer.warmstartcache
-    if hasresults(optimizer) && !cache.x.dirty
-        # if warm start hasn't been set yet, update it to last solution to match OSQP's internal behavior
-        copy!(cache.x.data, optimizer.results.x)
-    end
-    cache.x[vi.value] = value
+    optimizer.warmstartcache.x[vi.value] = value
 end
 
 
@@ -613,12 +610,7 @@ end
 MOI.canset(optimizer::OSQPOptimizer, ::MOI.ConstraintDualStart, ::Type{<:CI}) = !MOI.isempty(optimizer)
 function MOI.set!(optimizer::OSQPOptimizer, a::MOI.ConstraintDualStart, ci::CI, value)
     MOI.canset(optimizer, a, typeof(ci)) || error()
-    cache = optimizer.warmstartcache
-    if hasresults(optimizer) && !cache.y.dirty
-        # if warm start hasn't been set yet, update it to last solution to match OSQP's internal behavior
-        copy!(cache.y.data, optimizer.results.y)
-    end
-    cache.y[ci.value] = -value # opposite dual convention
+    optimizer.warmstartcache.y[ci.value] = -value # opposite dual convention
 end
 
 # function modification:
