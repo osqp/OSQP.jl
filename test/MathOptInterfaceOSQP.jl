@@ -108,8 +108,7 @@ function defaultoptimizer()
     MOI.set!(optimizer, OSQPSettings.EpsAbs(), 1e-8)
     MOI.set!(optimizer, OSQPSettings.EpsRel(), 1e-16)
     MOI.set!(optimizer, OSQPSettings.MaxIter(), 10000)
-    MOI.set!(optimizer, OSQPSettings.AdaptiveRho(), false) # required for deterministic behavior
-    # MOI.set!(optimizer, OSQPSettings.AdaptiveRhoInterval(), 25)
+    MOI.set!(optimizer, OSQPSettings.AdaptiveRhoInterval(), 25) # required for deterministic behavior
     optimizer
 end
 
