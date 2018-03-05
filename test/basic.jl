@@ -152,7 +152,7 @@ tol = 1e-5
         @test results.info.status == :Solved
 
         # Ensure solver will time out
-        OSQP.update_settings!(model, time_limit=1e-6, max_iter=1e10, check_termination=0)
+        OSQP.update_settings!(model, time_limit=1e-6, max_iter=1000000, check_termination=0)
 
         results_time_limit = OSQP.solve!(model)
 

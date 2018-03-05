@@ -3,3 +3,8 @@
 *.jl.mem
 *.swp
 *.DS_Store
+
+# Emacs stuff
+\#*\#
+.\#*
+*~
