@@ -1,3 +1,8 @@
+Version 0.1.3 (5 March 2018): OSQP v0.3.0
+-----------------------------------------
+* Updated OSQP version
+* Added `time_limit` option
+
 Version 0.1.2 (12 February 2018): OSQP v0.2.1
 ----------------------------------------------
 * Added MathProgBase interface
