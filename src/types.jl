@@ -114,11 +114,12 @@ struct Settings
     scaled_termination::Cc_int
     check_termination::Cc_int
     warm_start::Cc_int
+    time_limit::Cdouble
 end
 
 function Settings()
     s = Ref{OSQP.Settings}()
-    ccall((:set_default_settings, OSQP.osqp), Nothing,
+    ccall((:osqp_set_default_settings, OSQP.osqp), Nothing,
           (Ref{OSQP.Settings},), s)
     return s[]
 end

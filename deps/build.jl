@@ -9,7 +9,7 @@ using Compat.Libdl
 osqp = library_dependency("osqp", aliases=["libosqp"])
 
 # Current version
-version = "0.2.1"
+version = "0.3.0"
 
 # Get current operating system 
 osqp_platform =

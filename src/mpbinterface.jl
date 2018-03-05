@@ -152,6 +152,7 @@ function MathProgBase.status(model::OSQPMathProgModel)::Symbol
     osqpstatus == :Primal_infeasible_inaccurate && (status = :Infeasible)
     osqpstatus == :Dual_infeasible && (status = :Unbounded)
     osqpstatus == :Dual_infeasible_inaccurate && (status = :Unbounded)
+    osqpstatus == :Time_limit_reached && (status = :UserLimit)
 
     return status
 end
@@ -204,7 +205,7 @@ MathProgBase.setvartype!(model::OSQPMathProgModel, v::Vector{Symbol}) = any(x ->
 MathProgBase.getvartype(model::OSQPMathProgModel) = fill(:Cont, MathProgBase.numvar(model))
 
 # Set solver independent parameters: Silent is the only supported one for now
-function MathProgBase.setparameters!(x::OSQPMathProgModel; Silent = nothing)
+function MathProgBase.setparameters!(x::OSQPMathProgModel; Silent = nothing, TimeLimit = nothing)
     if Silent != nothing
         Silent::Bool
         x.settings[:verbose] = !Silent
@@ -215,15 +216,32 @@ function MathProgBase.setparameters!(x::OSQPMathProgModel; Silent = nothing)
         end
     end
 
+    if TimeLimit != nothing
+        TimeLimit::Float
+        x.settings[:time_limit] = !TimeLimit
+
+        # Update time_limit setting if setup has already been performed
+        if !x.perform_setup
+            update_settings!(x.inner, time_limit=TimeLimit)
+        end
+    end
+
+    
+
     x
 end
 
 # Do not update the problem instance settings using OSQP internal functions if the x is OSQPSolver and not OSQPMathProgModel
-function MathProgBase.setparameters!(x::OSQPSolver; Silent = nothing)  
+function MathProgBase.setparameters!(x::OSQPSolver; Silent = nothing, TimeLimit = nothing)  
     if Silent != nothing
         Silent::Bool
         x.settings[:verbose] = !Silent
     end
+    if TimeLimit != nothing
+        TimeLimit::Float
+        x.settings[:time_limit] = TimeLimit
+    end
+
     x
 end
 
@@ -457,7 +475,7 @@ function MathProgBase.getinfeasibilityray(model::OSQPMathProgModel)
     if model.results.info.status in [:Primal_infeasible, :Primal_infeasible_inaccurate]
         m = MathProgBase.numconstr(model)
         # Returns infeasibility ray taking into account both bounds and constraints
-        ray = -model.results.prim_inf_cert
+        ray = -model.results.prim_inf_cert[1:MathProgBase.numconstr(model)]
     else
         error("Problem not infeasible")
     end

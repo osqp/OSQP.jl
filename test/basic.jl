@@ -137,4 +137,28 @@ tol = 1e-5
 
         @test results_default.info.iter == results_new_rho.info.iter
     end
+
+
+    @testset "time_limit" begin
+        
+        problem, options = setup_basic()
+
+        model = OSQP.Model()
+        OSQP.setup!(model; P=problem[:P], q=problem[:q],
+                    A=problem[:A], l=problem[:l], u=problem[:u],  options...)
+        results = OSQP.solve!(model)
+
+
+        @test results.info.status == :Solved
+
+        # Ensure solver will time out
+        OSQP.update_settings!(model, time_limit=1e-6, max_iter=1e10, check_termination=0)
+
+        results_time_limit = OSQP.solve!(model)
+
+        @test results_time_limit.info.status == :Time_limit_reached
+
+
+    end
+    
 end

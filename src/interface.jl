@@ -166,13 +166,9 @@ end
 function solve!(model::OSQP.Model)
 
     # Solve problem
-    exitflag = ccall((:osqp_solve, OSQP.osqp), Cc_int,
+    ccall((:osqp_solve, OSQP.osqp), Cc_int,
              (Ptr{OSQP.Workspace}, ),
              model.workspace)
-
-    if exitflag != 0
-        error("Error in OSQP solution!")
-    end
 
     # Recover solution
     workspace = unsafe_load(model.workspace)
@@ -214,6 +210,9 @@ function solve!(model::OSQP.Model)
             unsafe_copyto!(pointer(dual_inf_cert), workspace.delta_x, data.n)
             # Return results
             return Results(x, y, info, nothing, dual_inf_cert)
+        else
+            # Other kind of exit reasons like time_limit or signal interrupt
+            return Results(x, y, info)            
         end
     end
     error() # fixes #4
@@ -389,6 +388,7 @@ function update_settings!(model::OSQP.Model; kwargs...)
     scaled_termination = get(data, :early_terminate, nothing)
     check_termination = get(data, :check_termination, nothing)
     warm_start = get(data, :warm_start, nothing)
+    time_limit = get(data, :time_limit, nothing)
 
     # Update individual settings
     if max_iter != nothing
@@ -460,6 +460,11 @@ function update_settings!(model::OSQP.Model; kwargs...)
     if warm_start != nothing
         exitflag = ccall((:osqp_update_warm_start, OSQP.osqp), Cc_int, (Ptr{OSQP.Workspace}, Cc_int), model.workspace, warm_start)
         if exitflag != 0 error("Error updating warm_start") end
+    end
+
+   if time_limit != nothing
+        exitflag = ccall((:osqp_update_time_limit, OSQP.osqp), Cc_int, (Ptr{OSQP.Workspace}, Cdouble), model.workspace, time_limit)
+        if exitflag != 0 error("Error updating time_limit") end
     end
 
     return nothing
