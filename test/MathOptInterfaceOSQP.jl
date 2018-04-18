@@ -121,12 +121,8 @@ end
 
 @testset "CachingOptimizer: quadratic problems" begin
     excludes = String[]
-    push!(excludes, "quadratic4") # QCP
-    push!(excludes, "quadratic5") # QCP
-    push!(excludes, "quadratic6") # QCP
-    push!(excludes, "quadratic7") # SOCP
     optimizer = defaultoptimizer()
-    MOIT.contquadratictest(MOIU.CachingOptimizer(OSQPModel{Float64}(), optimizer), config, excludes)
+    MOIT.qptest(MOIU.CachingOptimizer(OSQPModel{Float64}(), optimizer), config, excludes)
 end
 
 function test_optimizer_modification(modfun::Base.Callable, model::MOI.ModelLike, optimizer::T, idxmap::MOIU.IndexMap,
