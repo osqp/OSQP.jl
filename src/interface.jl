@@ -168,7 +168,39 @@ function solve!(model::OSQP.Model, results::Results = Results())
              (Ptr{OSQP.Workspace}, ),
              model.workspace)
     workspace = unsafe_load(model.workspace)
-    set!(results, workspace)
+    info = results.info
+    Compat.copyto!(info, unsafe_load(workspace.info))
+    solution = unsafe_load(workspace.solution)
+    data = unsafe_load(workspace.data)
+    n = data.n
+    m = data.m
+    resize!(results, n, m)
+    has_solution = false
+    for status in SOLUTION_PRESENT
+        info.status == status && (has_solution = true; break)
+    end
+    if has_solution
+        # If solution exists, copy it
+        unsafe_copyto!(pointer(results.x), solution.x, n)
+        unsafe_copyto!(pointer(results.y), solution.y, m)
+        fill!(results.prim_inf_cert, NaN)
+        fill!(results.dual_inf_cert, NaN)
+    else
+        # else fill with NaN and return certificates of infeasibility
+        fill!(results.x, NaN)
+        fill!(results.y, NaN)
+        if info.status == :Primal_infeasible || info.status == :Primal_infeasible_inaccurate
+            unsafe_copyto!(pointer(results.prim_inf_cert), workspace.delta_y, m)
+            fill!(results.dual_inf_cert, NaN)
+        elseif info.status == :Dual_infeasible || info.status == :Dual_infeasible_inaccurate
+            fill!(results.prim_inf_cert, NaN)
+            unsafe_copyto!(pointer(results.dual_inf_cert), workspace.delta_x, n)
+        else
+            fill!(results.prim_inf_cert, NaN)
+            fill!(results.dual_inf_cert, NaN)
+        end
+    end
+
     results
 end
 
