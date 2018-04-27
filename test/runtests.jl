@@ -12,7 +12,8 @@ tests = [
     "unconstrained.jl",
     "warm_start.jl",
     "update_matrices.jl",
-    "mpbinterface.jl"
+    "mpbinterface.jl",
+    "MathOptInterfaceOSQP.jl"
     ]
 
 println("Running tests:")

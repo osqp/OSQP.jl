@@ -34,5 +34,6 @@ include("constants.jl")
 include("types.jl")
 include("interface.jl")
 include("mpbinterface.jl")
+include("MathOptInterfaceOSQP.jl")
 
 end # module
