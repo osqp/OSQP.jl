@@ -20,10 +20,10 @@ addons:
     packages:
       - cmake
       - cmake-data
-script:
- - if [[ -a .git/shallow ]]; then git fetch --unshallow; fi
- - julia -e 'Pkg.clone("https://github.com/tkoolen/MathOptInterface.jl.git"); Pkg.checkout("MathOptInterface", "tk/osqp")'
- - julia -e 'Pkg.clone(pwd()); Pkg.build("OSQP"); Pkg.test("OSQP"; coverage=true)'
+# script:
+#  - if [[ -a .git/shallow ]]; then git fetch --unshallow; fi
+#  - julia -e 'Pkg.clone("https://github.com/tkoolen/MathOptInterface.jl.git"); Pkg.checkout("MathOptInterface", "tk/osqp")'
+#  - julia -e 'Pkg.clone(pwd()); Pkg.build("OSQP"); Pkg.test("OSQP"; coverage=true)'
 after_success:
   # # push coverage results to Coveralls
   # - julia -e 'cd(Pkg.dir("OSQP")); Pkg.add("Coverage"); using Coverage; Coveralls.submit(Coveralls.process_folder())'
