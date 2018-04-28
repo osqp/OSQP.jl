@@ -198,7 +198,8 @@ struct UnsupportedConstraintError
     S::Type
 end
 
-function MOI.copy!(dest::OSQPOptimizer, src::MOI.ModelLike)
+function MOI.copy!(dest::OSQPOptimizer, src::MOI.ModelLike; copynames=false)
+    copynames && error("Copying names is not supported.")
     try
         MOI.empty!(dest)
         idxmap = MOIU.IndexMap(dest, src)
@@ -454,6 +455,10 @@ MOI.get(optimizer::OSQPOptimizer, ::MOI.RawSolver) = optimizer.inner
 
 MOI.canget(optimizer::OSQPOptimizer, ::MOI.ResultCount) = true
 MOI.get(optimizer::OSQPOptimizer, ::MOI.ResultCount) = 1
+
+MOI.supports(::OSQPOptimizer, ::MOI.ObjectiveFunction{SingleVariable}) = true
+MOI.supports(::OSQPOptimizer, ::MOI.ObjectiveFunction{Affine}) = true
+MOI.supports(::OSQPOptimizer, ::MOI.ObjectiveFunction{Quadratic}) = true
 
 MOI.canset(optimizer::OSQPOptimizer, ::MOI.ObjectiveFunction{SingleVariable}) = !MOI.isempty(optimizer)
 function MOI.set!(optimizer::OSQPOptimizer, a::MOI.ObjectiveFunction{SingleVariable}, obj::SingleVariable)
