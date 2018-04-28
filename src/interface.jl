@@ -163,59 +163,13 @@ function setup!(model::OSQP.Model;
 end
 
 
-function solve!(model::OSQP.Model)
-
-    # Solve problem
+function solve!(model::OSQP.Model, results::Results = Results())
     ccall((:osqp_solve, OSQP.osqp), Cc_int,
              (Ptr{OSQP.Workspace}, ),
              model.workspace)
-
-    # Recover solution
     workspace = unsafe_load(model.workspace)
-    solution = unsafe_load(workspace.solution)
-    data = unsafe_load(workspace.data)
-
-    # Recover Cinfo structure
-    cinfo = unsafe_load(workspace.info)
-
-    # Construct C structure
-    info = OSQP.Info(cinfo)
-
-    # Do not use this anymore. We instead copy the solution
-    # x = unsafe_wrap(Array, solution.x, data.n)
-    # y = unsafe_wrap(Array, solution.y, data.m)
-
-    # Allocate solution vectors and copy solution
-    x = Array{Float64}(uninitialized, data.n)
-    y = Array{Float64}(uninitialized, data.m)
-
-    if info.status in SOLUTION_PRESENT
-        # If solution exists, copy it
-        unsafe_copyto!(pointer(x), solution.x, data.n)
-        unsafe_copyto!(pointer(y), solution.y, data.m)
-
-        # Return results
-        return Results(x, y, info)
-    else
-        # else fill with NaN and return certificates of infeasibility
-        x *= NaN
-        y *= NaN
-        if info.status == :Primal_infeasible || info.status == :Primal_infeasible_inaccurate
-            prim_inf_cert = Array{Float64}(uninitialized, data.m)
-            unsafe_copyto!(pointer(prim_inf_cert), workspace.delta_y, data.m)
-            # Return results
-            return Results(x, y, info, prim_inf_cert, nothing)
-        elseif info.status == :Dual_infeasible || info.status == :Dual_infeasible_inaccurate
-            dual_inf_cert = Array{Float64}(uninitialized, data.n)
-            unsafe_copyto!(pointer(dual_inf_cert), workspace.delta_x, data.n)
-            # Return results
-            return Results(x, y, info, nothing, dual_inf_cert)
-        else
-            # Other kind of exit reasons like time_limit or signal interrupt
-            return Results(x, y, info)            
-        end
-    end
-    error() # fixes #4
+    set!(results, workspace)
+    results
 end
 
 
