@@ -163,7 +163,8 @@ end
 
 mutable struct OSQPOptimizer <: MOI.AbstractOptimizer
     inner::OSQP.Model
-    results::Union{OSQP.Results, Nothing}
+    hasresults::Bool
+    results::OSQP.Results
     isempty::Bool
     settings::Dict{Symbol, Any} # need to store these, because they should be preserved if empty! is called
     sense::MOI.OptimizationSense
@@ -172,15 +173,25 @@ mutable struct OSQPOptimizer <: MOI.AbstractOptimizer
     warmstartcache::WarmStartCache{Float64}
 
     function OSQPOptimizer()
-        new(OSQP.Model(), nothing, true, Dict{Symbol, Any}(), MOI.MinSense, 0., ProblemModificationCache{Float64}(), WarmStartCache{Float64}())
+        inner = OSQP.Model()
+        hasresults = false
+        results = OSQP.Results()
+        isempty = true
+        settings = Dict{Symbol, Any}()
+        sense = MOI.MinSense
+        objconstant = 0.
+        modcache = ProblemModificationCache{Float64}()
+        warmstartcache = WarmStartCache{Float64}()
+        new(inner, hasresults, results, isempty, settings, sense, objconstant, modcache, warmstartcache)
     end
 end
 
-hasresults(optimizer::OSQPOptimizer) = optimizer.results != nothing
+hasresults(optimizer::OSQPOptimizer) = optimizer.hasresults
 
 function MOI.empty!(optimizer::OSQPOptimizer)
     optimizer.inner = OSQP.Model()
-    optimizer.results = nothing
+    optimizer.hasresults = false
+    optimizer.results = OSQP.Results()
     optimizer.isempty = true
     optimizer.sense = MOI.MinSense # model parameter, so needs to be reset
     optimizer.objconstant = 0.
@@ -438,7 +449,8 @@ end
 function MOI.optimize!(optimizer::OSQPOptimizer)
     processupdates!(optimizer.inner, optimizer.modcache)
     processupdates!(optimizer.inner, optimizer.warmstartcache)
-    optimizer.results = OSQP.solve!(optimizer.inner)
+    OSQP.solve!(optimizer.inner, optimizer.results)
+    optimizer.hasresults = true
     # Copy previous solution into warm start cache without setting the dirty bit:
     copy!(optimizer.warmstartcache.x.data, optimizer.results.x)
     copy!(optimizer.warmstartcache.y.data, optimizer.results.y)
