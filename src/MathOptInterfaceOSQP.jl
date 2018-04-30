@@ -2,6 +2,9 @@ module MathOptInterfaceOSQP
 
 export OSQPOptimizer, OSQPSettings, OSQPModel
 
+include("modcaches.jl")
+using .ModificationCaches
+
 using Compat
 using MathOptInterface
 using MathOptInterface.Utilities
@@ -30,136 +33,6 @@ import OSQP
 constant(f::SingleVariable) = 0
 constant(f::Affine) = f.constant
 # constant(f::Quadratic) = f.constant
-
-mutable struct VectorModificationCache{T}
-    data::Vector{T}
-    dirty::Bool
-    VectorModificationCache(data::Vector{T}) where {T} = new{T}(copy(data), false)
-end
-Base.setindex!(cache::VectorModificationCache, x, i::Integer) = (cache.dirty = true; cache.data[i] = x)
-Base.setindex!(cache::VectorModificationCache, x, ::Colon) = (cache.dirty = true; cache.data[:] = x)
-Base.getindex(cache::VectorModificationCache, i::Integer) = cache.data[i]
-
-function processupdates!(model::OSQP.Model, cache::VectorModificationCache, updatefun::Function)
-    if cache.dirty
-        updatefun(model, cache.data)
-        cache.dirty = false
-    end
-end
-
-struct MatrixModificationCache{T}
-    cartesian_indices::Vector{CartesianIndex{2}}
-    cartesian_indices_set::Set{CartesianIndex{2}} # to speed up checking whether indices are out of bounds in setindex!
-    cartesian_indices_per_row::Dict{Int, Vector{CartesianIndex{2}}}
-    modifications::Dict{CartesianIndex{2}, T}
-    vals::Vector{T}
-    inds::Vector{Int}
-
-    function MatrixModificationCache(S::SparseMatrixCSC{T}) where T
-        cartesian_indices = Vector{CartesianIndex{2}}(uninitialized, nnz(S))
-        cartesian_indices_per_row = Dict{Int, Vector{CartesianIndex{2}}}()
-        sizehint!(cartesian_indices_per_row, nnz(S))
-        @inbounds for col = 1 : S.n, k = S.colptr[col] : (S.colptr[col+1]-1) # from sparse findn
-            row = S.rowval[k]
-            I = CartesianIndex(row, col)
-            cartesian_indices[k] = I
-            push!(get!(() -> CartesianIndex{2}[], cartesian_indices_per_row, row), I)
-        end
-        modifications = Dict{CartesianIndex{2}, Int}()
-        sizehint!(modifications, nnz(S))
-        new{T}(cartesian_indices, Set(cartesian_indices), cartesian_indices_per_row, modifications, T[], Int[])
-    end
-end
-
-function Base.setindex!(cache::MatrixModificationCache, x, row::Integer, col::Integer)
-    I = CartesianIndex(row, col)
-    @boundscheck I ∈ cache.cartesian_indices_set || throw(ArgumentError("Changing the sparsity pattern is not allowed."))
-    cache.modifications[I] = x
-end
-
-function Base.setindex!(cache::MatrixModificationCache, x::Real, ::Colon)
-    # used to zero out the entire matrix
-    @boundscheck x == 0 || throw(ArgumentError("Changing the sparsity pattern is not allowed."))
-    for I in cache.cartesian_indices
-        cache.modifications[I] = 0
-    end
-end
-
-function Base.setindex!(cache::MatrixModificationCache, x::Real, row::Integer, ::Colon)
-    # used to zero out a row
-    @boundscheck x == 0 || throw(ArgumentError("Changing the sparsity pattern is not allowed."))
-    for I in cache.cartesian_indices_per_row[row]
-        cache.modifications[I] = 0
-    end
-end
-
-function Base.getindex(cache::MatrixModificationCache, row::Integer, col::Integer)
-    cache.modifications[CartesianIndex(row, col)]
-end
-
-function processupdates!(model::OSQP.Model, cache::MatrixModificationCache, updatefun::Function)
-    dirty = !isempty(cache.modifications)
-    if dirty
-        nmods = length(cache.modifications)
-        resize!(cache.vals, nmods)
-        resize!(cache.inds, nmods)
-        count = 1
-        for i in eachindex(cache.cartesian_indices)
-            I = cache.cartesian_indices[i]
-            if haskey(cache.modifications, I)
-                cache.vals[count] = cache.modifications[I]
-                cache.inds[count] = i
-                count += 1
-            end
-        end
-        updatefun(model, cache.vals, cache.inds)
-        empty!(cache.modifications)
-    end
-end
-
-struct ProblemModificationCache{T}
-    P::MatrixModificationCache{T}
-    q::VectorModificationCache{T}
-    A::MatrixModificationCache{T}
-    l::VectorModificationCache{T}
-    u::VectorModificationCache{T}
-
-    ProblemModificationCache{T}() where {T} = new{T}()
-    function ProblemModificationCache(P::SparseMatrixCSC, q::Vector{T}, A::SparseMatrixCSC, l::Vector{T}, u::Vector{T}) where T
-        MC = MatrixModificationCache
-        VC = VectorModificationCache
-        new{T}(MC(triu(P)), VC(q), MC(A), VC(l), VC(u))
-    end
-end
-
-function processupdates!(model::OSQP.Model, cache::ProblemModificationCache)
-    processupdates!(model, cache.P, OSQP.update_P!)
-    processupdates!(model, cache.q, OSQP.update_q!)
-    processupdates!(model, cache.A, OSQP.update_A!)
-    processupdates!(model, cache.l, OSQP.update_l!)
-    processupdates!(model, cache.u, OSQP.update_u!)
-end
-
-struct WarmStartCache{T}
-    x::VectorModificationCache{T}
-    y::VectorModificationCache{T}
-
-    WarmStartCache{T}() where {T} = new{T}()
-    function WarmStartCache{T}(n::Integer, m::Integer) where T
-        new{T}(VectorModificationCache(zeros(T, n)), VectorModificationCache(zeros(T, m)))
-    end
-end
-
-function processupdates!(model::OSQP.Model, cache::WarmStartCache)
-    if cache.x.dirty && cache.y.dirty
-        # Special case because setting warm start for x only zeroes the stored warm start for y and vice versa.
-        OSQP.warm_start!(model; x = cache.x.data, y = cache.y.data)
-        cache.x.dirty = false
-        cache.y.dirty = false
-    end
-    processupdates!(model, cache.x, (optimizer, x) -> (OSQP.warm_start!(optimizer; x = x)))
-    processupdates!(model, cache.y, (optimizer, y) -> (OSQP.warm_start!(optimizer; x = y)))
-end
 
 mutable struct OSQPOptimizer <: MOI.AbstractOptimizer
     inner::OSQP.Model
@@ -271,8 +144,8 @@ function processobjective(src::MOI.ModelLike, idxmap)
             c = faffine.constant
         elseif MOI.canget(src, MOI.ObjectiveFunction{Quadratic}())
             fquadratic = MOI.get(src, MOI.ObjectiveFunction{Quadratic}())
-            I = [idxmap[var].value for var in fquadratic.quadratic_rowvariables]
-            J = [idxmap[var].value for var in fquadratic.quadratic_colvariables]
+            I = [Int(idxmap[var].value) for var in fquadratic.quadratic_rowvariables]
+            J = [Int(idxmap[var].value) for var in fquadratic.quadratic_colvariables]
             V = fquadratic.quadratic_coefficients
             symmetrize!(I, J, V)
             P = sparse(I, J, V, n, n)
@@ -319,8 +192,8 @@ end
 
 function processconstraints(src::MOI.ModelLike, idxmap)
     m = length(idxmap.conmap)
-    l = Vector{Float64}(uninitialized, m)
-    u = Vector{Float64}(uninitialized, m)
+    l = Vector{Float64}(undef, m)
+    u = Vector{Float64}(undef, m)
     bounds = (l, u)
 
     I = Int[]
@@ -344,7 +217,7 @@ function processconstraints!(triplets::SparseTriplets, bounds::Tuple{<:Vector, <
     for ci in cis_src
         s = MOI.Interval(MOI.get(src, MOI.ConstraintSet(), ci))
         f = MOI.get(src, MOI.ConstraintFunction(), ci)
-        row = idxmap[ci].value
+        row = Int(idxmap[ci].value)
         l[row] = s.lower - constant(f)
         u[row] = s.upper - constant(f)
         processconstraintfun!(triplets, f, row, idxmap)
