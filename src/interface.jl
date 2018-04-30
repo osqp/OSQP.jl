@@ -439,40 +439,40 @@ function update_settings!(model::OSQP.Model; kwargs...)
     return nothing
 end
 
+function warm_start_x!(model::OSQP.Model, x::Vector{Float64})
+    (n, m) = OSQP.dimensions(model)
+    length(x) == n || error("Wrong dimension for variable x")
+    exitflag = ccall((:osqp_warm_start_x, OSQP.osqp), Cc_int, (Ptr{OSQP.Workspace}, Ptr{Cdouble}), model.workspace, x)
+    exitflag == 0  || error("Error in warm starting x")
+    nothing
+end
+
+function warm_start_y!(model::OSQP.Model, y::Vector{Float64})
+    (n, m) = OSQP.dimensions(model)
+    length(y) == m || error("Wrong dimension for variable y")
+    exitflag = ccall((:osqp_warm_start_y, OSQP.osqp), Cc_int, (Ptr{OSQP.Workspace}, Ptr{Cdouble}), model.workspace, y)
+    exitflag == 0 || error("Error in warm starting y")
+    nothing
+end
+
+function warm_start_x_y!(model::OSQP.Model, x::Vector{Float64}, y::Vector{Float64})
+    (n, m) = OSQP.dimensions(model)
+    length(x) == n || error("Wrong dimension for variable x")
+    length(y) == m || error("Wrong dimension for variable y")
+    exitflag = ccall((:osqp_warm_start, OSQP.osqp), Cc_int, (Ptr{OSQP.Workspace}, Ptr{Cdouble}, Ptr{Cdouble}), model.workspace, x, y)
+    exitflag == 0 || error("Error in warm starting x and y")
+    nothing
+end
 
 
 function warm_start!(model::OSQP.Model; x::Union{Vector{Float64}, Nothing} = nothing, y::Union{Vector{Float64}, Nothing} = nothing)
-    # Get problem dimensions
-    (n, m) = OSQP.dimensions(model)
-
-    if x != nothing
-        if length(x) != n
-            error("Wrong dimension for variable x")
-        end
-
-        if y == nothing
-            exitflag = ccall((:osqp_warm_start_x, OSQP.osqp), Cc_int, (Ptr{OSQP.Workspace}, Ptr{Cdouble}), model.workspace, x)
-            if exitflag != 0 error("Error in warm starting x") end
-        end
+    if x isa Vector{Float64} && y isa Vector{Float64}
+        warm_start_x_y!(model, x, y)
+    elseif x isa Vector{Float64}
+        warm_start_x!(model, x)
+    elseif y isa Vector{Float64}
+        warm_start_y!(model, y)
     end
-
-
-    if y != nothing
-        if length(y) != m
-            error("Wrong dimension for variable y")
-        end
-
-        if x == nothing
-            exitflag = ccall((:osqp_warm_start_y, OSQP.osqp), Cc_int, (Ptr{OSQP.Workspace}, Ptr{Cdouble}), model.workspace, y)
-            if exitflag != 0 error("Error in warm starting y") end
-        end
-    end
-
-    if (x != nothing) & (y != nothing)
-        exitflag = ccall((:osqp_warm_start, OSQP.osqp), Cc_int, (Ptr{OSQP.Workspace}, Ptr{Cdouble}, Ptr{Cdouble}), model.workspace, x, y)
-        if exitflag != 0 error("Error in warm starting x and y") end
-    end
-
 end
 
 
