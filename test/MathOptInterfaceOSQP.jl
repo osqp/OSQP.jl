@@ -114,7 +114,6 @@ end
 
 @testset "CachingOptimizer: linear problems" begin
     excludes = String[]
-    push!(excludes, "linear7") # vector constraints
     optimizer = defaultoptimizer()
     MOIT.contlineartest(MOIU.CachingOptimizer(OSQPModel{Float64}(), optimizer), config, excludes)
 end
@@ -258,10 +257,10 @@ end
     end
     @test MOI.get(optimizer, MOI.ObjectiveValue()) ≈ 0.5 * objval_before + objconstant atol = 1e-8
 
-    # change x + y <= 1 to x + 2 y <= 1
+    # change x + y <= 1 to x + 2 y + 0.5 <= 1
     test_optimizer_modification(model, optimizer, idxmap, defaultoptimizer(), config) do m
         @test MOI.canmodifyconstraint(m, mapfrommodel(m, c), MOI.ScalarAffineFunction{Float64})
-        MOI.modifyconstraint!(m, mapfrommodel(m, c), MOI.ScalarAffineFunction(mapfrommodel.(m, [x, x, y]), [1.0, 1.0, 1.0], 0.0))
+        MOI.modifyconstraint!(m, mapfrommodel(m, c), MOI.ScalarAffineFunction(mapfrommodel.(m, [x, x, y]), [1.0, 1.0, 1.0], 0.5))
     end
 
     # change back to x + y <= 1 using ScalarCoefficientChange
