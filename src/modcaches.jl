@@ -133,12 +133,12 @@ end
 function processupdates!(model::OSQP.Model, cache::WarmStartCache)
     if cache.x.dirty && cache.y.dirty
         # Special case because setting warm start for x only zeroes the stored warm start for y and vice versa.
-        OSQP.warm_start!(model; x = cache.x.data, y = cache.y.data)
+        OSQP.warm_start_x_y!(model, cache.x.data, cache.y.data)
         cache.x.dirty = false
         cache.y.dirty = false
     end
-    processupdates!(model, cache.x, (optimizer, x) -> (OSQP.warm_start!(optimizer; x = x)))
-    processupdates!(model, cache.y, (optimizer, y) -> (OSQP.warm_start!(optimizer; x = y)))
+    processupdates!(model, cache.x, OSQP.warm_start_x!)
+    processupdates!(model, cache.y, OSQP.warm_start_y!)
 end
 
 end
