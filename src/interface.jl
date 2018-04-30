@@ -13,6 +13,8 @@ end
 
 mutable struct Model
     workspace::Ptr{OSQP.Workspace}
+    lcache::Vector{Float64} # to facilitate converting l to use OSQP_INFTY
+    ucache::Vector{Float64} # to facilitate converting u to use OSQP_INFTY
 
     """
         Module()
@@ -20,16 +22,8 @@ mutable struct Model
     Initialize OSQP module
     """
     function Model()
-            # TODO: Change me to more elegant way
-            # a = Array{Ptr{OSQP.Workspace}}(1)[1]
-        a = C_NULL
-
-            # Create new model
-        model = new(a)
-
-            # Add finalizer
+        model = new(C_NULL, Float64[], Float64[])
         @compat finalizer(OSQP.clean!, model)
-
         return model
 
     end
@@ -123,6 +117,10 @@ function setup!(model::OSQP.Model;
     u = min.(u, OSQP_INFTY)
     l = max.(l, -OSQP_INFTY)
 
+    # Resize caches
+    resize!(model.lcache, m)
+    resize!(model.ucache, m)
+
     # Create managed matrices to avoid segfaults (See SCS.jl)
     managedP = OSQP.ManagedCcsc(P)
     managedA = OSQP.ManagedCcsc(A)
@@ -150,10 +148,8 @@ function setup!(model::OSQP.Model;
 
     # Perform setup
     @compat_gc_preserve managedP Pdata managedA Adata q l u begin
-        model.workspace = ccall((:osqp_setup, OSQP.osqp),
-                    Ptr{OSQP.Workspace}, (Ptr{OSQP.Data},
-                                          Ptr{OSQP.Settings}),
-                    Ref(data), Ref(stgs))
+        model.workspace = ccall((:osqp_setup, OSQP.osqp), Ptr{OSQP.Workspace},
+            (Ptr{OSQP.Data}, Ptr{OSQP.Settings}), Ref(data), Ref(stgs))
     end
 
     if model.workspace == C_NULL
@@ -231,8 +227,8 @@ function update_l!(model::OSQP.Model, l::Vector{Float64})
     if length(l) != m
         error("l must have length m = $(m)")
     end
-    l .= max.(l, -OSQP_INFTY) # Convert values to OSQP_INFTY
-    exitflag = ccall((:osqp_update_lower_bound, OSQP.osqp), Cc_int, (Ptr{OSQP.Workspace}, Ptr{Cdouble}), model.workspace, l)
+    model.lcache .= max.(l, -OSQP_INFTY)
+    exitflag = ccall((:osqp_update_lower_bound, OSQP.osqp), Cc_int, (Ptr{OSQP.Workspace}, Ptr{Cdouble}), model.workspace, model.lcache)
     if exitflag != 0 error("Error updating l") end
 end
 
@@ -241,8 +237,8 @@ function update_u!(model::OSQP.Model, u::Vector{Float64})
     if length(u) != m
         error("u must have length m = $(m)")
     end
-    u .= min.(u, OSQP_INFTY) # Convert values to OSQP_INFTY
-    exitflag = ccall((:osqp_update_upper_bound, OSQP.osqp), Cc_int, (Ptr{OSQP.Workspace}, Ptr{Cdouble}), model.workspace, u)
+    model.ucache .= min.(u, OSQP_INFTY)
+    exitflag = ccall((:osqp_update_upper_bound, OSQP.osqp), Cc_int, (Ptr{OSQP.Workspace}, Ptr{Cdouble}), model.workspace, model.ucache)
     if exitflag != 0 error("Error updating u") end
 end
 
@@ -254,7 +250,10 @@ function update_bounds!(model::OSQP.Model, l::Vector{Float64}, u::Vector{Float64
     if length(u) != m
         error("u must have length m = $(m)")
     end
-    exitflag = ccall((:osqp_update_bounds, OSQP.osqp), Cc_int, (Ptr{OSQP.Workspace}, Ptr{Cdouble}, Ptr{Cdouble}), model.workspace, l, u)
+    model.lcache .= max.(l, -OSQP_INFTY)
+    model.ucache .= min.(u, OSQP_INFTY)
+    exitflag = ccall((:osqp_update_bounds, OSQP.osqp), Cc_int, (Ptr{OSQP.Workspace}, Ptr{Cdouble}, Ptr{Cdouble}),
+        model.workspace, model.lcache, model.ucache)
     if exitflag != 0 error("Error updating bounds l and u") end
 end
 
