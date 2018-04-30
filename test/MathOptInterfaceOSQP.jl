@@ -147,22 +147,27 @@ function test_optimizer_modification(modfun::Base.Callable, model::MOI.ModelLike
     @test MOI.get(optimizer, MOI.PrimalStatus()) == MOI.get(cleanoptimizer, MOI.PrimalStatus())
     @test MOI.get(optimizer, MOI.ObjectiveValue()) ≈ MOI.get(cleanoptimizer, MOI.ObjectiveValue()) atol=atol rtol=rtol
 
-    modelvars = MOI.get(model, MOI.ListOfVariableIndices())
-    for v_model in modelvars
-        v_optimizer = idxmap[v_model]
-        @test MOI.get(optimizer, MOI.VariablePrimal(), v_optimizer) ≈ MOI.get(cleanoptimizer, MOI.VariablePrimal(), v_optimizer) atol=atol rtol=rtol
+    if MOI.get(optimizer, MOI.PrimalStatus()) == MOI.FeasiblePoint
+        modelvars = MOI.get(model, MOI.ListOfVariableIndices())
+        for v_model in modelvars
+            v_optimizer = idxmap[v_model]
+            @test MOI.get(optimizer, MOI.VariablePrimal(), v_optimizer) ≈ MOI.get(cleanoptimizer, MOI.VariablePrimal(), v_optimizer) atol=atol rtol=rtol
+        end
     end
 
     if config.duals
         @test MOI.get(optimizer, MOI.DualStatus()) == MOI.get(cleanoptimizer, MOI.DualStatus())
-        for (F, S) in MOI.get(model, MOI.ListOfConstraints())
-            cis_model = MOI.get(model, MOI.ListOfConstraintIndices{F, S}())
-            for ci_model in cis_model
-                ci_optimizer = idxmap[ci_model]
-                @test MOI.get(optimizer, MOI.ConstraintDual(), ci_optimizer) ≈ MOI.get(cleanoptimizer, MOI.ConstraintDual(), ci_optimizer) atol=atol rtol=rtol
+        if MOI.get(optimizer, MOI.DualStatus()) == MOI.FeasiblePoint
+            for (F, S) in MOI.get(model, MOI.ListOfConstraints())
+                cis_model = MOI.get(model, MOI.ListOfConstraintIndices{F, S}())
+                for ci_model in cis_model
+                    ci_optimizer = idxmap[ci_model]
+                    @test MOI.get(optimizer, MOI.ConstraintDual(), ci_optimizer) ≈ MOI.get(cleanoptimizer, MOI.ConstraintDual(), ci_optimizer) atol=atol rtol=rtol
+                end
             end
         end
     end
+    println()
 end
 
 function zero_warm_start!(optimizer::MOI.ModelLike, vars, cons)
@@ -311,6 +316,110 @@ end
     MOI.optimize!(optimizer)
     @test optimizer.results.info.status_polish == 1
     testflipped()
+end
+
+@testset "No CachingOptimizer: Vector problem modification after copy!" begin
+    # from basic.jl:
+    model = OSQPModel{Float64}()
+    x = MOI.addvariables!(model, 2)
+    P11 = 11.
+    q = [3., 4.]
+    u = [0., 0., -15, 100, 80]
+    A = sparse(Float64[-1 0; 0 -1; -1 -3; 2 5; 3 4])
+    I, J, coeffs = findnz(A)
+    objf = MOI.ScalarQuadraticFunction(x, q, [x[1]], [x[1]], [2 * P11], 0.0)
+    MOI.set!(model, MOI.ObjectiveFunction{MOI.ScalarAffineFunction{Float64}}(), objf)
+    MOI.set!(model, MOI.ObjectiveSense(), MOI.MinSense)
+    cf = MOI.VectorAffineFunction(I, map(j -> getindex(x, j), J), coeffs, -u)
+    c = MOI.addconstraint!(model, cf, MOI.Nonpositives(length(u)))
+
+    optimizer = defaultoptimizer()
+    copyresult = MOI.copy!(optimizer, model)
+    idxmap = copyresult.indexmap
+    @test MOI.canget(optimizer, MOI.ObjectiveSense())
+    @test MOI.get(optimizer, MOI.ObjectiveSense()) == MOI.MinSense
+    @test MOI.get(optimizer, MOI.NumberOfVariables()) == 2
+    @test MOI.get(optimizer, MOI.ListOfVariableIndices()) == [MOI.VariableIndex(1), MOI.VariableIndex(2)]
+    @test MOI.isvalid(optimizer, MOI.VariableIndex(2))
+    @test !MOI.isvalid(optimizer, MOI.VariableIndex(3))
+
+    MOI.optimize!(optimizer)
+
+    # check result before modification
+    atol = config.atol
+    rtol = config.rtol
+    @test MOI.get(optimizer, MOI.TerminationStatus()) == MOI.Success
+    @test MOI.get(optimizer, MOI.PrimalStatus()) == MOI.FeasiblePoint
+    @test MOI.get(optimizer, MOI.ObjectiveValue()) ≈ 20. atol=atol rtol=rtol
+    @test MOI.get(optimizer, MOI.VariablePrimal(), getindex.(idxmap, x)) ≈ [0.; 5.] atol=atol rtol=rtol
+    @test MOI.get(optimizer, MOI.DualStatus()) == MOI.FeasiblePoint
+    @test MOI.get(optimizer, MOI.ConstraintDual(), idxmap[c]) ≈ -[1.666666666666; 0.; 1.3333333; 0.; 0.] atol=atol rtol=rtol
+
+    # test allocations
+    allocs = @allocated MOI.optimize!(optimizer)
+    @test allocs == 0
+
+    mapfrommodel(::MOI.AbstractOptimizer, x::Union{MOI.VariableIndex, <:MOI.ConstraintIndex}) = idxmap[x]
+    mapfrommodel(::MOI.ModelLike, x::Union{MOI.VariableIndex, <:MOI.ConstraintIndex}) = x
+
+    # make random modifications to constraints
+    randvectorconfig = MOIT.TestConfig(atol=Inf, rtol=1e-4)
+    rng = MersenneTwister(1234)
+    for i = 1 : 100
+        newcoeffs = copy(coeffs)
+        modindex = rand(rng, 1 : length(newcoeffs))
+        newcoeffs[modindex] = 0
+        newconst = 5 .* (rand(rng, length(u)) .- 0.5)
+        test_optimizer_modification(model, optimizer, idxmap, defaultoptimizer(), randvectorconfig) do m
+            @test MOI.canmodifyconstraint(m, mapfrommodel(m, c), MOI.VectorAffineFunction{Float64})
+            newcf = MOI.VectorAffineFunction(I, map(j -> getindex(x, j), J), newcoeffs, newconst)
+            MOI.modifyconstraint!(m, mapfrommodel(m, c), newcf)
+        end
+    end
+end
+
+@testset "Vector equality constraint" begin
+    # Minimize ||A x - b||^2 = x' A' A x - (2 * A' * b)' x + b' * b
+    # subject to C x = d
+    n = 8
+    m = 2
+    rng = MersenneTwister(1234)
+    A = rand(rng, n, n)
+    b = rand(rng, n)
+    C = rand(rng, m, n)
+    d = rand(rng, m)
+    C⁺ = pinv(C)
+    Q = I - C⁺ * C
+    expected = Q * (pinv(A * Q) * (b - A * C⁺ * d)) + C⁺ * d # note: can be quite badly conditioned
+    @test C * expected ≈ d atol = 1e-12
+
+    P = Symmetric(sparse(triu(A' * A)))
+    q = -2 * A' * b
+    r = b' * b
+
+    model = OSQPModel{Float64}()
+    x = MOI.addvariables!(model, n)
+    IP, JP, coeffsP = findnz(P.data)
+    objf = MOI.ScalarQuadraticFunction(x, q, map(i -> x[i]::MOI.VariableIndex, IP), map(j -> x[j]::MOI.VariableIndex, JP), 2 * coeffsP, r)
+    MOI.set!(model, MOI.ObjectiveFunction{MOI.ScalarAffineFunction{Float64}}(), objf)
+    MOI.set!(model, MOI.ObjectiveSense(), MOI.MinSense)
+    IA, JA, coeffsA = findnz(sparse(C))
+    cf = MOI.VectorAffineFunction(IA, map(j -> getindex(x, j)::MOI.VariableIndex, JA), coeffsA, -d)
+    c = MOI.addconstraint!(model, cf, MOI.Zeros(length(d)))
+
+    optimizer = defaultoptimizer()
+    copyresult = MOI.copy!(optimizer, model)
+    idxmap = copyresult.indexmap
+    MOI.optimize!(optimizer)
+
+    @test MOI.get(optimizer, MOI.TerminationStatus()) == MOI.Success
+    @test MOI.get(optimizer, MOI.PrimalStatus()) == MOI.FeasiblePoint
+    @test MOI.get.(optimizer, MOI.VariablePrimal(), getindex.(idxmap, x)) ≈ expected atol = 1e-4
+    @test MOI.get(optimizer, MOI.ObjectiveValue()) ≈ norm(A * expected - b)^2 atol = 1e-4
+
+    MOI.modifyconstraint!(optimizer, idxmap[c], MOI.Zeros(length(d))) # noop, but ok
+    MOI.optimize!(optimizer)
+
 end
 
 @testset "RawSolver" begin

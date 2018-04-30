@@ -114,7 +114,7 @@ function MOI.copy!(dest::OSQPOptimizer, src::MOI.ModelLike; copynames=false)
         A, l, u, dest.constrconstant = processconstraints(src, idxmap, dest.rowranges)
         OSQP.setup!(dest.inner; P = P, q = q, A = A, l = l, u = u, dest.settings...)
         dest.modcache = ProblemModificationCache(P, q, A, l, u)
-        dest.warmstartcache = WarmStartCache{Float64}(length(idxmap.varmap), length(idxmap.conmap))
+        dest.warmstartcache = WarmStartCache{Float64}(size(A, 2), size(A, 1))
         processprimalstart!(dest.warmstartcache.x, src, idxmap)
         processdualstart!(dest.warmstartcache.y, src, idxmap, dest.rowranges)
         dest.isempty = false
