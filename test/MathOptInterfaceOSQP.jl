@@ -222,6 +222,10 @@ end
     twarm = MOI.get(optimizer, MOI.SolveTime())
     @test twarm < 0.5 * tcold # conservative; should be about an order of magnitude in this case
 
+    # test allocations
+    allocs = @allocated MOI.optimize!(optimizer)
+    @test allocs == 0
+
     # ensure that solving a second time results in the same answer after zeroing warm start
     zero_warm_start!(optimizer, values(idxmap.varmap), values(idxmap.conmap))
     test_optimizer_modification(m -> (), model, optimizer, idxmap, defaultoptimizer(), MOIT.TestConfig(atol=0.0, rtol=0.0))
