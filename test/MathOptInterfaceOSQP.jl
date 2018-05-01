@@ -419,7 +419,10 @@ end
 
     MOI.modifyconstraint!(optimizer, idxmap[c], MOI.Zeros(length(d))) # noop, but ok
     MOI.optimize!(optimizer)
-
+    @test MOI.get(optimizer, MOI.TerminationStatus()) == MOI.Success
+    @test MOI.get(optimizer, MOI.PrimalStatus()) == MOI.FeasiblePoint
+    @test MOI.get.(optimizer, MOI.VariablePrimal(), getindex.(idxmap, x)) ≈ expected atol = 1e-4
+    @test MOI.get(optimizer, MOI.ObjectiveValue()) ≈ norm(A * expected - b)^2 atol = 1e-4
 end
 
 @testset "RawSolver" begin
