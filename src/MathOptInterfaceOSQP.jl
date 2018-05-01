@@ -460,7 +460,7 @@ function MOI.set!(optimizer::OSQPOptimizer, a::MOI.ObjectiveFunction{Quadratic},
     MOI.canset(optimizer, a) || error()
     cache = optimizer.modcache
     rows = obj.quadratic_rowvariables
-    cols = obj.quadratic_rowvariables
+    cols = obj.quadratic_colvariables
     coeffs = obj.quadratic_coefficients
     n = length(coeffs)
     @assert length(rows) == length(cols) == n
