@@ -381,48 +381,67 @@ end
 @testset "Vector equality constraint" begin
     # Minimize ||A x - b||^2 = x' A' A x - (2 * A' * b)' x + b' * b
     # subject to C x = d
+
+    generate_problem_data = function (rng, n, m)
+        A = rand(rng, n, n)
+        b = rand(rng, n)
+        C = rand(rng, m, n)
+        d = rand(rng, m)
+        C⁺ = pinv(C)
+        Q = I - C⁺ * C
+        expected = Q * (pinv(A * Q) * (b - A * C⁺ * d)) + C⁺ * d # note: can be quite badly conditioned
+        @test C * expected ≈ d atol = 1e-12
+
+        P = Symmetric(sparse(triu(A' * A)))
+        q = -2 * A' * b
+        r = b' * b
+
+        A, b, C, d, P, q, r, expected
+    end
+
+    make_objective = function (P, q, r, x)
+        I, J, coeffs = findnz(P.data)
+        MOI.ScalarQuadraticFunction(x, q, map(i -> x[i]::MOI.VariableIndex, I), map(j -> x[j]::MOI.VariableIndex, J), 2 * coeffs, r)
+    end
+
+    make_constraint_fun = function (C, d, x)
+        I, J, coeffs = findnz(sparse(C))
+        cf = MOI.VectorAffineFunction(I, map(j -> getindex(x, j)::MOI.VariableIndex, J), coeffs, -d)
+    end
+
+    check_results = function (optimizer, idxmap, x, A, b, expected)
+        @test MOI.get(optimizer, MOI.TerminationStatus()) == MOI.Success
+        @test MOI.get(optimizer, MOI.PrimalStatus()) == MOI.FeasiblePoint
+        @test MOI.get.(optimizer, MOI.VariablePrimal(), getindex.(idxmap, x)) ≈ expected atol = 1e-4
+        @test MOI.get(optimizer, MOI.ObjectiveValue()) ≈ norm(A * expected - b)^2 atol = 1e-4
+    end
+
     n = 8
     m = 2
     rng = MersenneTwister(1234)
-    A = rand(rng, n, n)
-    b = rand(rng, n)
-    C = rand(rng, m, n)
-    d = rand(rng, m)
-    C⁺ = pinv(C)
-    Q = I - C⁺ * C
-    expected = Q * (pinv(A * Q) * (b - A * C⁺ * d)) + C⁺ * d # note: can be quite badly conditioned
-    @test C * expected ≈ d atol = 1e-12
 
-    P = Symmetric(sparse(triu(A' * A)))
-    q = -2 * A' * b
-    r = b' * b
-
+    A, b, C, d, P, q, r, expected = generate_problem_data(rng, n, m)
     model = OSQPModel{Float64}()
     x = MOI.addvariables!(model, n)
-    IP, JP, coeffsP = findnz(P.data)
-    objf = MOI.ScalarQuadraticFunction(x, q, map(i -> x[i]::MOI.VariableIndex, IP), map(j -> x[j]::MOI.VariableIndex, JP), 2 * coeffsP, r)
-    MOI.set!(model, MOI.ObjectiveFunction{MOI.ScalarAffineFunction{Float64}}(), objf)
+    MOI.set!(model, MOI.ObjectiveFunction{MOI.ScalarQuadraticFunction{Float64}}(), make_objective(P, q, r, x))
     MOI.set!(model, MOI.ObjectiveSense(), MOI.MinSense)
-    IA, JA, coeffsA = findnz(sparse(C))
-    cf = MOI.VectorAffineFunction(IA, map(j -> getindex(x, j)::MOI.VariableIndex, JA), coeffsA, -d)
-    c = MOI.addconstraint!(model, cf, MOI.Zeros(length(d)))
+    c = MOI.addconstraint!(model, make_constraint_fun(C, d, x), MOI.Zeros(length(d)))
 
     optimizer = defaultoptimizer()
     copyresult = MOI.copy!(optimizer, model)
     idxmap = copyresult.indexmap
     MOI.optimize!(optimizer)
+    check_results(optimizer, idxmap, x, A, b, expected)
 
-    @test MOI.get(optimizer, MOI.TerminationStatus()) == MOI.Success
-    @test MOI.get(optimizer, MOI.PrimalStatus()) == MOI.FeasiblePoint
-    @test MOI.get.(optimizer, MOI.VariablePrimal(), getindex.(idxmap, x)) ≈ expected atol = 1e-4
-    @test MOI.get(optimizer, MOI.ObjectiveValue()) ≈ norm(A * expected - b)^2 atol = 1e-4
-
-    MOI.modifyconstraint!(optimizer, idxmap[c], MOI.Zeros(length(d))) # noop, but ok
-    MOI.optimize!(optimizer)
-    @test MOI.get(optimizer, MOI.TerminationStatus()) == MOI.Success
-    @test MOI.get(optimizer, MOI.PrimalStatus()) == MOI.FeasiblePoint
-    @test MOI.get.(optimizer, MOI.VariablePrimal(), getindex.(idxmap, x)) ≈ expected atol = 1e-4
-    @test MOI.get(optimizer, MOI.ObjectiveValue()) ≈ norm(A * expected - b)^2 atol = 1e-4
+    x = [idxmap[xi] for xi in x]
+    for i = 1 : 10
+        A, b, C, d, P, q, r, expected = generate_problem_data(rng, n, m)
+        MOI.set!(optimizer, MOI.ObjectiveFunction{MOI.ScalarQuadraticFunction{Float64}}(), make_objective(P, q, r, x))
+        MOI.modifyconstraint!(optimizer, idxmap[c], make_constraint_fun(C, d, x))
+        MOI.modifyconstraint!(optimizer, idxmap[c], MOI.Zeros(length(d))) # noop, but ok
+        MOI.optimize!(optimizer)
+        check_results(optimizer, idxmap, x, A, b, expected)
+    end
 end
 
 @testset "RawSolver" begin
