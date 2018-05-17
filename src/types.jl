@@ -199,7 +199,7 @@ struct Workspace
 end
 
 
-struct Info
+mutable struct Info
     iter::Int64
     status::Symbol
     status_val::Int64
@@ -214,33 +214,40 @@ struct Info
     rho_updates::Int64
     rho_estimate::Float64
 
-    function Info(cinfo::CInfo)
-        status = OSQP.status_map[cinfo.status_val]
-        return new(cinfo.iter,
-                   status,
-                   cinfo.status_val,
-                   cinfo.status_polish,
-                   cinfo.obj_val,
-                   cinfo.pri_res,
-                   cinfo.dua_res,
-                   cinfo.setup_time,
-                   cinfo.solve_time,
-                   cinfo.polish_time,
-                   cinfo.run_time,
-               cinfo.rho_updates,
-               cinfo.rho_estimate)
-    end
+    Info() = new()
 end
 
-struct Results
+function Compat.copyto!(info::Info, cinfo::CInfo)
+    info.iter = cinfo.iter
+    info.status = OSQP.status_map[cinfo.status_val]
+    info.status_val = cinfo.status_val
+    info.status_polish = cinfo.status_polish
+    info.obj_val = cinfo.obj_val
+    info.pri_res = cinfo.pri_res
+    info.dua_res = cinfo.dua_res
+    info.setup_time = cinfo.setup_time
+    info.solve_time = cinfo.solve_time
+    info.polish_time = cinfo.polish_time
+    info.run_time = cinfo.run_time
+    info.rho_updates = cinfo.rho_updates
+    info.rho_estimate
+    info
+end
+
+mutable struct Results
     x::Vector{Float64}
     y::Vector{Float64}
     info::OSQP.Info
-    prim_inf_cert::Union{Vector{Float64},Nothing}
-    dual_inf_cert::Union{Vector{Float64},Nothing}
-
+    prim_inf_cert::Vector{Float64}
+    dual_inf_cert::Vector{Float64}
 end
-Results(x, y, info) = Results(x, y, info, nothing, nothing)
 
+Results() = Results(Float64[], Float64[], Info(), Float64[], Float64[])
 
-
+function Base.resize!(results::Results, n::Int, m::Int)
+    resize!(results.x, n)
+    resize!(results.y, m)
+    resize!(results.prim_inf_cert, m)
+    resize!(results.dual_inf_cert, n)
+    results
+end

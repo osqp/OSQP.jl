@@ -6,13 +6,17 @@ os:
 julia:
   - 0.6
   - nightly
+branches:
+  only:
+    - master
+    - /^v[0-9]+\.[0-9]+\.[0-9]+$/ # version tags
 notifications:
   email: false
-
+git:
+  depth: 99999999
 matrix:
   allow_failures:
   - julia: nightly
-
 addons:
   apt:
     sources:
@@ -21,8 +25,8 @@ addons:
       - cmake
       - cmake-data
 script:
- - if [[ -a .git/shallow ]]; then git fetch --unshallow; fi
- - julia -e 'Pkg.clone(pwd()); Pkg.build("OSQP"); Pkg.test("OSQP"; coverage=true)'
+- if [[ -a .git/shallow ]]; then git fetch --unshallow; fi
+- julia -e 'Pkg.clone(pwd()); Pkg.build("OSQP"); Pkg.test("OSQP"; coverage=true)'
 after_success:
   # # push coverage results to Coveralls
   # - julia -e 'cd(Pkg.dir("OSQP")); Pkg.add("Coverage"); using Coverage; Coveralls.submit(Coveralls.process_folder())'

@@ -13,6 +13,8 @@ end
 
 mutable struct Model
     workspace::Ptr{OSQP.Workspace}
+    lcache::Vector{Float64} # to facilitate converting l to use OSQP_INFTY
+    ucache::Vector{Float64} # to facilitate converting u to use OSQP_INFTY
 
     """
         Module()
@@ -20,16 +22,8 @@ mutable struct Model
     Initialize OSQP module
     """
     function Model()
-            # TODO: Change me to more elegant way
-            # a = Array{Ptr{OSQP.Workspace}}(1)[1]
-        a = C_NULL
-
-            # Create new model
-        model = new(a)
-
-            # Add finalizer
+        model = new(C_NULL, Float64[], Float64[])
         @compat finalizer(OSQP.clean!, model)
-
         return model
 
     end
@@ -123,6 +117,10 @@ function setup!(model::OSQP.Model;
     u = min.(u, OSQP_INFTY)
     l = max.(l, -OSQP_INFTY)
 
+    # Resize caches
+    resize!(model.lcache, m)
+    resize!(model.ucache, m)
+
     # Create managed matrices to avoid segfaults (See SCS.jl)
     managedP = OSQP.ManagedCcsc(P)
     managedA = OSQP.ManagedCcsc(A)
@@ -150,10 +148,8 @@ function setup!(model::OSQP.Model;
 
     # Perform setup
     @compat_gc_preserve managedP Pdata managedA Adata q l u begin
-        model.workspace = ccall((:osqp_setup, OSQP.osqp),
-                    Ptr{OSQP.Workspace}, (Ptr{OSQP.Data},
-                                          Ptr{OSQP.Settings}),
-                    Ref(data), Ref(stgs))
+        model.workspace = ccall((:osqp_setup, OSQP.osqp), Ptr{OSQP.Workspace},
+            (Ptr{OSQP.Data}, Ptr{OSQP.Settings}), Ref(data), Ref(stgs))
     end
 
     if model.workspace == C_NULL
@@ -163,59 +159,45 @@ function setup!(model::OSQP.Model;
 end
 
 
-function solve!(model::OSQP.Model)
-
-    # Solve problem
+function solve!(model::OSQP.Model, results::Results = Results())
     ccall((:osqp_solve, OSQP.osqp), Cc_int,
              (Ptr{OSQP.Workspace}, ),
              model.workspace)
-
-    # Recover solution
     workspace = unsafe_load(model.workspace)
+    info = results.info
+    Compat.copyto!(info, unsafe_load(workspace.info))
     solution = unsafe_load(workspace.solution)
     data = unsafe_load(workspace.data)
-
-    # Recover Cinfo structure
-    cinfo = unsafe_load(workspace.info)
-
-    # Construct C structure
-    info = OSQP.Info(cinfo)
-
-    # Do not use this anymore. We instead copy the solution
-    # x = unsafe_wrap(Array, solution.x, data.n)
-    # y = unsafe_wrap(Array, solution.y, data.m)
-
-    # Allocate solution vectors and copy solution
-    x = Array{Float64}(uninitialized, data.n)
-    y = Array{Float64}(uninitialized, data.m)
-
-    if info.status in SOLUTION_PRESENT
+    n = data.n
+    m = data.m
+    resize!(results, n, m)
+    has_solution = false
+    for status in SOLUTION_PRESENT
+        info.status == status && (has_solution = true; break)
+    end
+    if has_solution
         # If solution exists, copy it
-        unsafe_copyto!(pointer(x), solution.x, data.n)
-        unsafe_copyto!(pointer(y), solution.y, data.m)
-
-        # Return results
-        return Results(x, y, info)
+        unsafe_copyto!(pointer(results.x), solution.x, n)
+        unsafe_copyto!(pointer(results.y), solution.y, m)
+        fill!(results.prim_inf_cert, NaN)
+        fill!(results.dual_inf_cert, NaN)
     else
         # else fill with NaN and return certificates of infeasibility
-        x *= NaN
-        y *= NaN
+        fill!(results.x, NaN)
+        fill!(results.y, NaN)
         if info.status == :Primal_infeasible || info.status == :Primal_infeasible_inaccurate
-            prim_inf_cert = Array{Float64}(uninitialized, data.m)
-            unsafe_copyto!(pointer(prim_inf_cert), workspace.delta_y, data.m)
-            # Return results
-            return Results(x, y, info, prim_inf_cert, nothing)
+            unsafe_copyto!(pointer(results.prim_inf_cert), workspace.delta_y, m)
+            fill!(results.dual_inf_cert, NaN)
         elseif info.status == :Dual_infeasible || info.status == :Dual_infeasible_inaccurate
-            dual_inf_cert = Array{Float64}(uninitialized, data.n)
-            unsafe_copyto!(pointer(dual_inf_cert), workspace.delta_x, data.n)
-            # Return results
-            return Results(x, y, info, nothing, dual_inf_cert)
+            fill!(results.prim_inf_cert, NaN)
+            unsafe_copyto!(pointer(results.dual_inf_cert), workspace.delta_x, n)
         else
-            # Other kind of exit reasons like time_limit or signal interrupt
-            return Results(x, y, info)            
+            fill!(results.prim_inf_cert, NaN)
+            fill!(results.dual_inf_cert, NaN)
         end
     end
-    error() # fixes #4
+
+    results
 end
 
 
@@ -245,8 +227,8 @@ function update_l!(model::OSQP.Model, l::Vector{Float64})
     if length(l) != m
         error("l must have length m = $(m)")
     end
-    l .= max.(l, -OSQP_INFTY) # Convert values to OSQP_INFTY
-    exitflag = ccall((:osqp_update_lower_bound, OSQP.osqp), Cc_int, (Ptr{OSQP.Workspace}, Ptr{Cdouble}), model.workspace, l)
+    model.lcache .= max.(l, -OSQP_INFTY)
+    exitflag = ccall((:osqp_update_lower_bound, OSQP.osqp), Cc_int, (Ptr{OSQP.Workspace}, Ptr{Cdouble}), model.workspace, model.lcache)
     if exitflag != 0 error("Error updating l") end
 end
 
@@ -255,8 +237,8 @@ function update_u!(model::OSQP.Model, u::Vector{Float64})
     if length(u) != m
         error("u must have length m = $(m)")
     end
-    u .= min.(u, OSQP_INFTY) # Convert values to OSQP_INFTY
-    exitflag = ccall((:osqp_update_upper_bound, OSQP.osqp), Cc_int, (Ptr{OSQP.Workspace}, Ptr{Cdouble}), model.workspace, u)
+    model.ucache .= min.(u, OSQP_INFTY)
+    exitflag = ccall((:osqp_update_upper_bound, OSQP.osqp), Cc_int, (Ptr{OSQP.Workspace}, Ptr{Cdouble}), model.workspace, model.ucache)
     if exitflag != 0 error("Error updating u") end
 end
 
@@ -268,7 +250,10 @@ function update_bounds!(model::OSQP.Model, l::Vector{Float64}, u::Vector{Float64
     if length(u) != m
         error("u must have length m = $(m)")
     end
-    exitflag = ccall((:osqp_update_bounds, OSQP.osqp), Cc_int, (Ptr{OSQP.Workspace}, Ptr{Cdouble}, Ptr{Cdouble}), model.workspace, l, u)
+    model.lcache .= max.(l, -OSQP_INFTY)
+    model.ucache .= min.(u, OSQP_INFTY)
+    exitflag = ccall((:osqp_update_bounds, OSQP.osqp), Cc_int, (Ptr{OSQP.Workspace}, Ptr{Cdouble}, Ptr{Cdouble}),
+        model.workspace, model.lcache, model.ucache)
     if exitflag != 0 error("Error updating bounds l and u") end
 end
 
@@ -453,40 +438,40 @@ function update_settings!(model::OSQP.Model; kwargs...)
     return nothing
 end
 
+function warm_start_x!(model::OSQP.Model, x::Vector{Float64})
+    (n, m) = OSQP.dimensions(model)
+    length(x) == n || error("Wrong dimension for variable x")
+    exitflag = ccall((:osqp_warm_start_x, OSQP.osqp), Cc_int, (Ptr{OSQP.Workspace}, Ptr{Cdouble}), model.workspace, x)
+    exitflag == 0  || error("Error in warm starting x")
+    nothing
+end
+
+function warm_start_y!(model::OSQP.Model, y::Vector{Float64})
+    (n, m) = OSQP.dimensions(model)
+    length(y) == m || error("Wrong dimension for variable y")
+    exitflag = ccall((:osqp_warm_start_y, OSQP.osqp), Cc_int, (Ptr{OSQP.Workspace}, Ptr{Cdouble}), model.workspace, y)
+    exitflag == 0 || error("Error in warm starting y")
+    nothing
+end
+
+function warm_start_x_y!(model::OSQP.Model, x::Vector{Float64}, y::Vector{Float64})
+    (n, m) = OSQP.dimensions(model)
+    length(x) == n || error("Wrong dimension for variable x")
+    length(y) == m || error("Wrong dimension for variable y")
+    exitflag = ccall((:osqp_warm_start, OSQP.osqp), Cc_int, (Ptr{OSQP.Workspace}, Ptr{Cdouble}, Ptr{Cdouble}), model.workspace, x, y)
+    exitflag == 0 || error("Error in warm starting x and y")
+    nothing
+end
 
 
 function warm_start!(model::OSQP.Model; x::Union{Vector{Float64}, Nothing} = nothing, y::Union{Vector{Float64}, Nothing} = nothing)
-    # Get problem dimensions
-    (n, m) = OSQP.dimensions(model)
-
-    if x != nothing
-        if length(x) != n
-            error("Wrong dimension for variable x")
-        end
-
-        if y == nothing
-            exitflag = ccall((:osqp_warm_start_x, OSQP.osqp), Cc_int, (Ptr{OSQP.Workspace}, Ptr{Cdouble}), model.workspace, x)
-            if exitflag != 0 error("Error in warm starting x") end
-        end
+    if x isa Vector{Float64} && y isa Vector{Float64}
+        warm_start_x_y!(model, x, y)
+    elseif x isa Vector{Float64}
+        warm_start_x!(model, x)
+    elseif y isa Vector{Float64}
+        warm_start_y!(model, y)
     end
-
-
-    if y != nothing
-        if length(y) != m
-            error("Wrong dimension for variable y")
-        end
-
-        if x == nothing
-            exitflag = ccall((:osqp_warm_start_y, OSQP.osqp), Cc_int, (Ptr{OSQP.Workspace}, Ptr{Cdouble}), model.workspace, y)
-            if exitflag != 0 error("Error in warm starting y") end
-        end
-    end
-
-    if (x != nothing) & (y != nothing)
-        exitflag = ccall((:osqp_warm_start, OSQP.osqp), Cc_int, (Ptr{OSQP.Workspace}, Ptr{Cdouble}, Ptr{Cdouble}), model.workspace, x, y)
-        if exitflag != 0 error("Error in warm starting x and y") end
-    end
-
 end
 
 
