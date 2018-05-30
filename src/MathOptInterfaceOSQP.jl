@@ -185,16 +185,16 @@ function processobjective(src::MOI.ModelLike, idxmap)
         elseif MOI.canget(src, MOI.ObjectiveFunction{MOI.ScalarAffineFunction{Float64}}())
             faffine = MOI.get(src, MOI.ObjectiveFunction{MOI.ScalarAffineFunction{Float64}}())
             P = spzeros(n, n)
-            processlinearterms!(q, faffine.variables, faffine.coefficients, idxmap)
+            processlinearterms!(q, faffine.terms, idxmap)
             c = faffine.constant
         elseif MOI.canget(src, MOI.ObjectiveFunction{Quadratic}())
             fquadratic = MOI.get(src, MOI.ObjectiveFunction{Quadratic}())
-            I = [Int(idxmap[var].value) for var in fquadratic.quadratic_rowvariables]
-            J = [Int(idxmap[var].value) for var in fquadratic.quadratic_colvariables]
-            V = fquadratic.quadratic_coefficients
+            I = [Int(idxmap[term.variable_index_1].value) for term in fquadratic.quadratic_terms]
+            J = [Int(idxmap[term.variable_index_2].value) for term in fquadratic.quadratic_terms]
+            V = [term.coefficient for term in fquadratic.quadratic_terms]
             symmetrize!(I, J, V)
             P = sparse(I, J, V, n, n)
-            processlinearterms!(q, fquadratic.affine_variables, fquadratic.affine_coefficients, idxmap)
+            processlinearterms!(q, fquadratic.affine_terms, idxmap)
             c = fquadratic.constant
         else
             throw(UnsupportedObjectiveError())
@@ -208,19 +208,17 @@ function processobjective(src::MOI.ModelLike, idxmap)
     sense, P, q, c
 end
 
-function processlinearterms!(q, variables::Vector{VI}, coefficients::Vector, idxmapfun::Function = identity)
+function processlinearterms!(q, terms::Vector{<:MOI.ScalarAffineTerm}, idxmapfun::Function = identity)
     q[:] = 0
-    ncoeffs = length(coefficients)
-    length(variables) == ncoeffs || error()
-    for i = 1 : ncoeffs
-        var = variables[i]
-        coeff = coefficients[i]
+    for term in terms
+        var = term.variable_index
+        coeff = term.coefficient
         q[idxmapfun(var).value] += coeff
     end
 end
 
-function processlinearterms!(q, variables::Vector{VI}, coefficients::Vector, idxmap::MOIU.IndexMap)
-    processlinearterms!(q, variables, coefficients, var -> idxmap[var])
+function processlinearterms!(q, terms::Vector{<:MOI.ScalarAffineTerm}, idxmap::MOIU.IndexMap)
+    processlinearterms!(q, terms, var -> idxmap[var])
 end
 
 function symmetrize!(I::Vector{Int}, J::Vector{Int}, V::Vector)
@@ -276,7 +274,7 @@ end
 
 function processconstant!(c::Vector{Float64}, rows::UnitRange{Int}, f::VectorAffine)
     for (i, row) in enumerate(rows)
-        c[row] = f.constant[i]
+        c[row] = f.constants[i]
     end
 end
 
@@ -291,11 +289,9 @@ end
 
 function processlinearpart!(triplets::SparseTriplets, f::MOI.ScalarAffineFunction, row::Int, idxmap)
     (I, J, V) = triplets
-    ncoeff = length(f.coefficients)
-    length(f.variables) == ncoeff || error()
-    for i = 1 : ncoeff
-        var = f.variables[i]
-        coeff = f.coefficients[i]
+    for term in f.terms
+        var = term.variable_index
+        coeff = term.coefficient
         col = idxmap[var].value
         push!(I, row)
         push!(J, col)
@@ -305,13 +301,11 @@ end
 
 function processlinearpart!(triplets::SparseTriplets, f::MOI.VectorAffineFunction, rows::UnitRange{Int}, idxmap)
     (I, J, V) = triplets
-    ncoeff = length(f.coefficients)
-    (length(f.variables) == length(f.outputindex) == ncoeff) || error()
-    for i = 1 : ncoeff
-        row = rows[f.outputindex[i]]
-        var = f.variables[i]
+    for term in f.terms
+        row = rows[term.output_index]
+        var = term.scalar_term.variable_index
+        coeff = term.scalar_term.coefficient
         col = idxmap[var].value
-        coeff = f.coefficients[i]
         push!(I, row)
         push!(J, col)
         push!(V, coeff)
@@ -450,7 +444,7 @@ MOI.canset(optimizer::OSQPOptimizer, ::MOI.ObjectiveFunction{MOI.ScalarAffineFun
 function MOI.set!(optimizer::OSQPOptimizer, a::MOI.ObjectiveFunction{MOI.ScalarAffineFunction{Float64}}, obj::MOI.ScalarAffineFunction{Float64})
     MOI.canset(optimizer, a) || error()
     optimizer.modcache.P[:] = 0
-    processlinearterms!(optimizer.modcache.q, obj.variables, obj.coefficients)
+    processlinearterms!(optimizer.modcache.q, obj.terms)
     optimizer.objconstant = obj.constant
     nothing
 end
@@ -459,21 +453,15 @@ MOI.canset(optimizer::OSQPOptimizer, ::MOI.ObjectiveFunction{Quadratic}) = !MOI.
 function MOI.set!(optimizer::OSQPOptimizer, a::MOI.ObjectiveFunction{Quadratic}, obj::Quadratic)
     MOI.canset(optimizer, a) || error()
     cache = optimizer.modcache
-    rows = obj.quadratic_rowvariables
-    cols = obj.quadratic_colvariables
-    coeffs = obj.quadratic_coefficients
-    n = length(coeffs)
-    @assert length(rows) == length(cols) == n
-
     cache.P[:] = 0
-    for i = 1 : n
-        row = rows[i].value
-        col = cols[i].value
-        coeff = coeffs[i]
+    for term in obj.quadratic_terms
+        row = term.variable_index_1.value
+        col = term.variable_index_2.value
+        coeff = term.coefficient
         row > col && ((row, col) = (col, row)) # upper triangle only
         cache.P[row, col] += coeff
     end
-    processlinearterms!(optimizer.modcache.q, obj.affine_variables, obj.affine_coefficients)
+    processlinearterms!(optimizer.modcache.q, obj.affine_terms)
     optimizer.objconstant = obj.constant
     nothing
 end
@@ -604,13 +592,11 @@ MOI.canmodifyconstraint(optimizer::OSQPOptimizer, ci::CI{Affine, <:IntervalConve
     MOI.isvalid(optimizer, ci)
 function MOI.modifyconstraint!(optimizer::OSQPOptimizer, ci::CI{Affine, <:IntervalConvertible}, f::Affine)
     MOI.canmodifyconstraint(optimizer, ci, typeof(f)) || error()
-    ncoeff = length(f.coefficients)
-    length(f.variables) == ncoeff || error()
     row = constraint_rows(optimizer, ci)
     optimizer.modcache.A[row, :] = 0
-    for i = 1 : ncoeff
-        col = f.variables[i].value
-        coeff = f.coefficients[i]
+    for term in f.terms
+        col = term.variable_index.value
+        coeff = term.coefficient
         optimizer.modcache.A[row, col] += coeff
     end
     Δconstant = optimizer.constrconstant[row] - f.constant
@@ -624,22 +610,19 @@ MOI.canmodifyconstraint(optimizer::OSQPOptimizer, ci::CI{VectorAffine, <:Support
     MOI.isvalid(optimizer, ci)
 function MOI.modifyconstraint!(optimizer::OSQPOptimizer, ci::CI{VectorAffine, <:SupportedVectorSets}, f::VectorAffine)
     MOI.canmodifyconstraint(optimizer, ci, typeof(f)) || error()
-    ncoeff = length(f.coefficients)
-    (length(f.variables) == length(f.outputindex) == ncoeff) || error()
     rows = constraint_rows(optimizer, ci)
-    length(f.constant) == length(rows) || error()
     for row in rows
         optimizer.modcache.A[row, :] = 0
     end
-    for i = 1 : ncoeff
-        row = rows[f.outputindex[i]]
-        col = f.variables[i].value
-        coeff = f.coefficients[i]
+    for term in f.terms
+        row = rows[term.output_index]
+        col = term.scalar_term.variable_index.value
+        coeff = term.scalar_term.coefficient
         optimizer.modcache.A[row, col] += coeff
     end
     for (i, row) in enumerate(rows)
-        Δconstant = optimizer.constrconstant[row] - f.constant[i]
-        optimizer.constrconstant[row] = f.constant[i]
+        Δconstant = optimizer.constrconstant[row] - f.constants[i]
+        optimizer.constrconstant[row] = f.constants[i]
         optimizer.modcache.l[row] += Δconstant
         optimizer.modcache.u[row] += Δconstant
     end
