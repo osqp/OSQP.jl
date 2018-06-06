@@ -92,10 +92,8 @@ end
 function MOI.get(optimizer::MOIU.CachingOptimizer, ::MOI.ConstraintPrimal, ci::MOI.ConstraintIndex{<:MOI.ScalarAffineFunction, <:Any})
     f = MOI.get(optimizer, MOI.ConstraintFunction(), ci)
     ret = f.constant
-    n = length(f.variables)
-    length(f.coefficients) == n || error()
-    for i = 1 : n
-        ret += f.coefficients[i] * MOI.get(optimizer, MOI.VariablePrimal(), f.variables[i])
+    for term in f.terms
+        ret += term.coefficient * MOI.get(optimizer, MOI.VariablePrimal(), term.variable_index)
     end
     ret
 end
@@ -113,7 +111,11 @@ function defaultoptimizer()
 end
 
 @testset "CachingOptimizer: linear problems" begin
-    excludes = String[]
+    excludes = if Int == Int32
+        ["linear7"] # https://github.com/JuliaOpt/MathOptInterface.jl/issues/377#issuecomment-394912761
+    else
+        String[]
+    end
     optimizer = defaultoptimizer()
     MOIT.contlineartest(MOIU.CachingOptimizer(OSQPModel{Float64}(), optimizer), config, excludes)
 end
@@ -167,7 +169,6 @@ function test_optimizer_modification(modfun::Base.Callable, model::MOI.ModelLike
             end
         end
     end
-    println()
 end
 
 function zero_warm_start!(optimizer::MOI.ModelLike, vars, cons)
@@ -179,6 +180,9 @@ function zero_warm_start!(optimizer::MOI.ModelLike, vars, cons)
     end
 end
 
+term(c, x::MOI.VariableIndex) = MOI.ScalarAffineTerm(c, x)
+term(c, x::MOI.VariableIndex, y::MOI.VariableIndex) = MOI.ScalarQuadraticTerm(c, x, y)
+
 @testset "No CachingOptimizer: problem modification after copy!" begin
     # Initial setup: modified version of MOIT.linear1test
     # min -x
@@ -188,11 +192,11 @@ end
     MOI.empty!(model)
     v = MOI.addvariables!(model, 2)
     x, y = v
-    cf = MOI.ScalarAffineFunction([v; v; v], [0.0,0.0,1.0,1.0,0.0,0.0], 0.0)
+    cf = MOI.ScalarAffineFunction([term.([0.0, 0.0], v); term.([1.0, 1.0], v); term.([0.0, 0.0], v)], 0.0)
     c = MOI.addconstraint!(model, cf, MOI.Interval(-Inf, 1.0))
     vc1 = MOI.addconstraint!(model, MOI.SingleVariable(v[1]), MOI.Interval(0.0, Inf))
     vc2 = MOI.addconstraint!(model, v[2], MOI.Interval(0.0, Inf))
-    objf = MOI.ScalarAffineFunction([v; v; v], [0.0,0.0,-1.0,0.0,0.0,0.0], 0.0)
+    objf = MOI.ScalarAffineFunction([term.([0.0, 0.0], v); term.([-1.0, 0.0], v); term.([0.0, 0.0], v)], 0.0)
     MOI.set!(model, MOI.ObjectiveFunction{MOI.ScalarAffineFunction{Float64}}(), objf)
     MOI.set!(model, MOI.ObjectiveSense(), MOI.MinSense)
 
@@ -239,7 +243,7 @@ end
 
     # change objective to min -2y
     test_optimizer_modification(model, optimizer, idxmap, defaultoptimizer(), config) do m
-        newobjf = MOI.ScalarAffineFunction([mapfrommodel(m, y)], [-2.0], 0.0)
+        newobjf = MOI.ScalarAffineFunction([term(-2.0, mapfrommodel(m, y))], 0.0)
         F = typeof(newobjf)
         @test MOI.canset(m, MOI.ObjectiveFunction{F}())
         MOI.set!(m, MOI.ObjectiveFunction{F}(), newobjf)
@@ -265,7 +269,7 @@ end
     # change x + y <= 1 to x + 2 y + 0.5 <= 1
     test_optimizer_modification(model, optimizer, idxmap, defaultoptimizer(), config) do m
         @test MOI.canmodifyconstraint(m, mapfrommodel(m, c), MOI.ScalarAffineFunction{Float64})
-        MOI.modifyconstraint!(m, mapfrommodel(m, c), MOI.ScalarAffineFunction(mapfrommodel.(m, [x, x, y]), [1.0, 1.0, 1.0], 0.5))
+        MOI.modifyconstraint!(m, mapfrommodel(m, c), MOI.ScalarAffineFunction(term.([1.0, 1.0, 1.0], mapfrommodel.(m, [x, x, y])), 0.5))
     end
 
     # change back to x + y <= 1 using ScalarCoefficientChange
@@ -284,7 +288,7 @@ end
 
         # c
         @test MOI.canmodifyconstraint(m, mapfrommodel(m, c), MOI.ScalarAffineFunction{Float64})
-        MOI.modifyconstraint!(m, mapfrommodel(m, c), MOI.ScalarAffineFunction(mapfrommodel.(m, [x, y]), [1.0, 1.0], 0.0))
+        MOI.modifyconstraint!(m, mapfrommodel(m, c), MOI.ScalarAffineFunction(term.([1.0, 1.0], mapfrommodel.(m, [x, y])), 0.0))
         @test MOI.canmodifyconstraint(m, mapfrommodel(m, c), MOI.Interval{Float64})
         MOI.modifyconstraint!(m, mapfrommodel(m, c), MOI.Interval(-1.0, Inf))
 
@@ -327,10 +331,10 @@ end
     u = [0., 0., -15, 100, 80]
     A = sparse(Float64[-1 0; 0 -1; -1 -3; 2 5; 3 4])
     I, J, coeffs = findnz(A)
-    objf = MOI.ScalarQuadraticFunction(x, q, [x[1]], [x[1]], [2 * P11], 0.0)
+    objf = MOI.ScalarQuadraticFunction(term.(q, x), [term(2 * P11, x[1], x[1])], 0.0)
     MOI.set!(model, MOI.ObjectiveFunction{MOI.ScalarAffineFunction{Float64}}(), objf)
     MOI.set!(model, MOI.ObjectiveSense(), MOI.MinSense)
-    cf = MOI.VectorAffineFunction(I, map(j -> getindex(x, j), J), coeffs, -u)
+    cf = MOI.VectorAffineFunction(MOI.VectorAffineTerm.(Int64.(I), term.(coeffs, map(j -> getindex(x, j), J))), -u)
     c = MOI.addconstraint!(model, cf, MOI.Nonpositives(length(u)))
 
     optimizer = defaultoptimizer()
@@ -372,7 +376,7 @@ end
         newconst = 5 .* (rand(rng, length(u)) .- 0.5)
         test_optimizer_modification(model, optimizer, idxmap, defaultoptimizer(), randvectorconfig) do m
             @test MOI.canmodifyconstraint(m, mapfrommodel(m, c), MOI.VectorAffineFunction{Float64})
-            newcf = MOI.VectorAffineFunction(I, map(j -> getindex(x, j), J), newcoeffs, newconst)
+            newcf = MOI.VectorAffineFunction(MOI.VectorAffineTerm.(Int64.(I), term.(newcoeffs, map(j -> getindex(x, j), J))), newconst)
             MOI.modifyconstraint!(m, mapfrommodel(m, c), newcf)
         end
     end
@@ -401,12 +405,12 @@ end
 
     make_objective = function (P, q, r, x)
         I, J, coeffs = findnz(P.data)
-        MOI.ScalarQuadraticFunction(x, q, map(i -> x[i]::MOI.VariableIndex, I), map(j -> x[j]::MOI.VariableIndex, J), 2 * coeffs, r)
+        MOI.ScalarQuadraticFunction(term.(q, x), term.(2 * coeffs, map(i -> x[i]::MOI.VariableIndex, I), map(j -> x[j]::MOI.VariableIndex, J)), r)
     end
 
     make_constraint_fun = function (C, d, x)
         I, J, coeffs = findnz(sparse(C))
-        cf = MOI.VectorAffineFunction(I, map(j -> getindex(x, j)::MOI.VariableIndex, J), coeffs, -d)
+        cf = MOI.VectorAffineFunction(MOI.VectorAffineTerm.(Int64.(I), term.(coeffs, map(j -> getindex(x, j)::MOI.VariableIndex, J))), -d)
     end
 
     check_results = function (optimizer, idxmap, x, A, b, expected)
