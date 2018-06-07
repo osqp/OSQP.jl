@@ -1,3 +1,8 @@
+Version 0.1.5 (7 June 2018): OSQP v0.3.0
+-----------------------------------------
+* Added support for MathOptInterface 0.3 (adapted to https://github.com/JuliaOpt/MathOptInterface.jl/pull/351)
+* Dropped support for MathOptInterface 0.2
+
 Version 0.1.4 (5 March 2018): OSQP v0.3.0
 -----------------------------------------
 * Updated OSQP version
