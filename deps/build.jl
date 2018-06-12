@@ -9,9 +9,9 @@ using Compat.Libdl
 osqp = library_dependency("osqp", aliases=["libosqp"])
 
 # Current version
-version = "0.3.0"
+version = "0.3.1"
 
-# Get current operating system 
+# Get current operating system
 osqp_platform =
 if Sys.is_linux()
     "linux"
@@ -19,7 +19,7 @@ elseif Sys.is_apple()
     "mac"
 elseif Sys.is_windows()
     "windows"
-else 
+else
     error("Platform not supported!")
 end
 
