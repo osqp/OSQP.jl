@@ -1,3 +1,7 @@
+Version 0.1.5 (12 June 2018): OSQP v0.3.1
+-----------------------------------------
+* Upgraded OSQP to 0.3.1 version
+
 Version 0.1.5 (7 June 2018): OSQP v0.3.0
 -----------------------------------------
 * Added support for MathOptInterface 0.3 (adapted to https://github.com/JuliaOpt/MathOptInterface.jl/pull/351)
@@ -14,7 +18,7 @@ Version 0.1.3 (12 February 2018): OSQP v0.2.1
 
 Version 0.1.2 (30 January 2018): OSQP v0.2.1
 ----------------------------------------------
-* Updated matrix updates indexing to match Julia one 
+* Updated matrix updates indexing to match Julia one
 * Fixed issue [#2](https://github.com/oxfordcontrol/OSQP.jl/issues/2)
 
 Version 0.1.1 (25 November 2017): OSQP v0.2.1
