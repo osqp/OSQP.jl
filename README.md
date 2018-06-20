@@ -3,7 +3,7 @@
 [![Build status](https://ci.appveyor.com/api/projects/status/t9t79ncgl9449k1a/branch/master?svg=true)](https://ci.appveyor.com/project/bstellato/osqp-jl-v2y0g/branch/master)
 [![codecov.io](http://codecov.io/github/oxfordcontrol/OSQP.jl/coverage.svg?branch=master)](http://codecov.io/github/oxfordcontrol/OSQP.jl?branch=master)
 
-Julia wrapper for [OSQP](http://osqp.readthedocs.io/): the Operator Splitting QP Solver.
+Julia wrapper for [OSQP](https://osqp.org/): the Operator Splitting QP Solver.
 
 The OSQP (Operator Splitting Quadratic Program) solver is a numerical optimization package for solving problems in the form
 ```
