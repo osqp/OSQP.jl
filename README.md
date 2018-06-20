@@ -16,4 +16,4 @@ where `x in R^n` is the optimization variable. The objective function is defined
 
 
 ## Documentation
-The interface is documented [here](http://osqp.readthedocs.io/).
+The interface is documented [here](https://osqp.org/).
