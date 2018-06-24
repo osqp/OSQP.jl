@@ -11,6 +11,8 @@ const MOIT = MathOptInterface.Test
 using MathOptInterface.Utilities
 const MOIU = MathOptInterface.Utilities
 
+const Affine = MOI.ScalarAffineFunction{Float64}
+
 @testset "ProblemModificationCache" begin
     rng = MersenneTwister(1234)
     n = 15
@@ -253,29 +255,34 @@ term(c, x::MOI.VariableIndex, y::MOI.VariableIndex) = MOI.ScalarQuadraticTerm(c,
     objval_before = MOI.get(optimizer, MOI.ObjectiveValue())
     objconstant = 1.5
     test_optimizer_modification(model, optimizer, idxmap, defaultoptimizer(), config) do m
-        @test MOI.canmodifyobjective(m, MOI.ScalarConstantChange)
-        MOI.modifyobjective!(m, MOI.ScalarConstantChange(objconstant))
+        attr = MOI.ObjectiveFunction{Affine}()
+        @test MOI.canmodify(m, attr, MOI.ScalarConstantChange)
+        MOI.modify!(m, attr, MOI.ScalarConstantChange(objconstant))
     end
     objval_after = MOI.get(optimizer, MOI.ObjectiveValue())
     @test objval_after ≈ objval_before + objconstant atol = 1e-8
 
     # change objective to min -y using ScalarCoefficientChange
     test_optimizer_modification(model, optimizer, idxmap, defaultoptimizer(), config) do m
-        @test MOI.canmodifyobjective(m, MOI.ScalarCoefficientChange{Float64})
-        MOI.modifyobjective!(m, MOI.ScalarCoefficientChange(mapfrommodel(m, y), -1.0))
+        attr = MOI.ObjectiveFunction{Affine}()
+        @test MOI.canmodify(m, attr, MOI.ScalarCoefficientChange{Float64})
+        MOI.modify!(m, attr, MOI.ScalarCoefficientChange(mapfrommodel(m, y), -1.0))
     end
     @test MOI.get(optimizer, MOI.ObjectiveValue()) ≈ 0.5 * objval_before + objconstant atol = 1e-8
 
     # change x + y <= 1 to x + 2 y + 0.5 <= 1
     test_optimizer_modification(model, optimizer, idxmap, defaultoptimizer(), config) do m
-        @test MOI.canmodifyconstraint(m, mapfrommodel(m, c), MOI.ScalarAffineFunction{Float64})
-        MOI.modifyconstraint!(m, mapfrommodel(m, c), MOI.ScalarAffineFunction(term.([1.0, 1.0, 1.0], mapfrommodel.(m, [x, x, y])), 0.5))
+        attr = MOI.ConstraintFunction()
+        ci =  mapfrommodel(m, c)
+        @test MOI.canset(m, attr, typeof(ci))
+        MOI.set!(m, attr, ci, MOI.ScalarAffineFunction(term.([1.0, 1.0, 1.0], mapfrommodel.(m, [x, x, y])), 0.5))
     end
 
     # change back to x + y <= 1 using ScalarCoefficientChange
     test_optimizer_modification(model, optimizer, idxmap, defaultoptimizer(), config) do m
-        @test MOI.canmodifyconstraint(m, mapfrommodel(m, c), MOI.ScalarCoefficientChange{Float64})
-        MOI.modifyconstraint!(m, mapfrommodel(m, c), MOI.ScalarCoefficientChange(mapfrommodel(m, y), 1.0))
+        ci = mapfrommodel(m, c)
+        @test MOI.canmodify(m, typeof(ci), MOI.ScalarCoefficientChange{Float64})
+        MOI.modify!(m, ci, MOI.ScalarCoefficientChange(mapfrommodel(m, y), 1.0))
     end
 
     # flip the feasible set around from what it was originally and minimize +x
@@ -287,18 +294,26 @@ term(c, x::MOI.VariableIndex, y::MOI.VariableIndex) = MOI.ScalarQuadraticTerm(c,
         MOI.set!(m, MOI.ObjectiveFunction{F}(), newobjf)
 
         # c
-        @test MOI.canmodifyconstraint(m, mapfrommodel(m, c), MOI.ScalarAffineFunction{Float64})
-        MOI.modifyconstraint!(m, mapfrommodel(m, c), MOI.ScalarAffineFunction(term.([1.0, 1.0], mapfrommodel.(m, [x, y])), 0.0))
-        @test MOI.canmodifyconstraint(m, mapfrommodel(m, c), MOI.Interval{Float64})
-        MOI.modifyconstraint!(m, mapfrommodel(m, c), MOI.Interval(-1.0, Inf))
+        attr = MOI.ConstraintFunction()
+        ci = mapfrommodel(m, c)
+        @test MOI.canset(m, attr, typeof(ci))
+        MOI.set!(m, attr, ci, MOI.ScalarAffineFunction(term.([1.0, 1.0], mapfrommodel.(m, [x, y])), 0.0))
+
+        attr = MOI.ConstraintSet()
+        @test MOI.canset(m, attr, typeof(ci))
+        MOI.set!(m, attr, ci, MOI.Interval(-1.0, Inf))
 
         # vc1
-        @test MOI.canmodifyconstraint(m, mapfrommodel(m, vc1), MOI.Interval{Float64})
-        MOI.modifyconstraint!(m, mapfrommodel(m, vc1), MOI.Interval(-Inf, 0.))
+        attr = MOI.ConstraintSet()
+        ci = mapfrommodel(m, vc1)
+        @test MOI.canset(m, attr, typeof(ci))
+        MOI.set!(m, attr, ci, MOI.Interval(-Inf, 0.))
 
         # vc2
-        @test MOI.canmodifyconstraint(m, mapfrommodel(m, vc2), MOI.Interval{Float64})
-        MOI.modifyconstraint!(m, mapfrommodel(m, vc2), MOI.Interval(-Inf, 0.))
+        attr = MOI.ConstraintSet()
+        ci = mapfrommodel(m, vc2)
+        @test MOI.canset(m, attr, typeof(ci))
+        MOI.set!(m, attr, ci, MOI.Interval(-Inf, 0.))
     end
 
     testflipped = function ()
@@ -375,9 +390,11 @@ end
         newcoeffs[modindex] = 0
         newconst = 5 .* (rand(rng, length(u)) .- 0.5)
         test_optimizer_modification(model, optimizer, idxmap, defaultoptimizer(), randvectorconfig) do m
-            @test MOI.canmodifyconstraint(m, mapfrommodel(m, c), MOI.VectorAffineFunction{Float64})
+            attr = MOI.ConstraintFunction()
+            ci = mapfrommodel(m, c)
+            @test MOI.canset(m, attr, typeof(ci))
             newcf = MOI.VectorAffineFunction(MOI.VectorAffineTerm.(Int64.(I), term.(newcoeffs, map(j -> getindex(x, j), J))), newconst)
-            MOI.modifyconstraint!(m, mapfrommodel(m, c), newcf)
+            MOI.set!(m, attr, ci, newcf)
         end
     end
 end
@@ -441,8 +458,10 @@ end
     for i = 1 : 10
         A, b, C, d, P, q, r, expected = generate_problem_data(rng, n, m)
         MOI.set!(optimizer, MOI.ObjectiveFunction{MOI.ScalarQuadraticFunction{Float64}}(), make_objective(P, q, r, x))
-        MOI.modifyconstraint!(optimizer, idxmap[c], make_constraint_fun(C, d, x))
-        MOI.modifyconstraint!(optimizer, idxmap[c], MOI.Zeros(length(d))) # noop, but ok
+        attr = MOI.ConstraintFunction()
+        MOI.set!(optimizer, attr, idxmap[c], make_constraint_fun(C, d, x))
+        attr = MOI.ConstraintSet()
+        MOI.set!(optimizer, attr, idxmap[c], MOI.Zeros(length(d))) # noop, but ok
         MOI.optimize!(optimizer)
         check_results(optimizer, idxmap, x, A, b, expected)
     end

@@ -588,10 +588,10 @@ function MOI.set!(optimizer::OSQPOptimizer, a::MOI.ConstraintDualStart, ci::CI, 
 end
 
 # function modification:
-MOI.canmodifyconstraint(optimizer::OSQPOptimizer, ci::CI{Affine, <:IntervalConvertible}, ::Type{Affine}) =
-    MOI.isvalid(optimizer, ci)
-function MOI.modifyconstraint!(optimizer::OSQPOptimizer, ci::CI{Affine, <:IntervalConvertible}, f::Affine)
-    MOI.canmodifyconstraint(optimizer, ci, typeof(f)) || error()
+MOI.canset(optimizer::OSQPOptimizer, ::MOI.ConstraintFunction, ::Type{<:CI{Affine, <:IntervalConvertible}}) = true
+function MOI.set!(optimizer::OSQPOptimizer, attr::MOI.ConstraintFunction, ci::CI{Affine, <:IntervalConvertible}, f::Affine)
+    MOI.canset(optimizer, attr, typeof(ci)) || error()
+    MOI.isvalid(optimizer, ci) || error("Invalid constraint index")
     row = constraint_rows(optimizer, ci)
     optimizer.modcache.A[row, :] = 0
     for term in f.terms
@@ -606,10 +606,10 @@ function MOI.modifyconstraint!(optimizer::OSQPOptimizer, ci::CI{Affine, <:Interv
     nothing
 end
 
-MOI.canmodifyconstraint(optimizer::OSQPOptimizer, ci::CI{VectorAffine, <:SupportedVectorSets}, ::Type{VectorAffine}) =
-    MOI.isvalid(optimizer, ci)
-function MOI.modifyconstraint!(optimizer::OSQPOptimizer, ci::CI{VectorAffine, <:SupportedVectorSets}, f::VectorAffine)
-    MOI.canmodifyconstraint(optimizer, ci, typeof(f)) || error()
+MOI.canset(optimizer::OSQPOptimizer, ::MOI.ConstraintFunction, ::Type{<:CI{VectorAffine, <:SupportedVectorSets}}) = true
+function MOI.set!(optimizer::OSQPOptimizer, attr::MOI.ConstraintFunction, ci::CI{VectorAffine, <:SupportedVectorSets}, f::VectorAffine)
+    MOI.canset(optimizer, attr, typeof(ci)) || error()
+    MOI.isvalid(optimizer, ci) || error("Invalid constraint index")
     rows = constraint_rows(optimizer, ci)
     for row in rows
         optimizer.modcache.A[row, :] = 0
@@ -629,10 +629,10 @@ function MOI.modifyconstraint!(optimizer::OSQPOptimizer, ci::CI{VectorAffine, <:
 end
 
 # set modification:
-MOI.canmodifyconstraint(optimizer::OSQPOptimizer, ci::CI{<:AffineConvertible, S}, ::Type{S}) where {S <: IntervalConvertible} =
-    MOI.isvalid(optimizer, ci)
-function MOI.modifyconstraint!(optimizer::OSQPOptimizer, ci::CI{<:AffineConvertible, S}, s::S) where {S <: IntervalConvertible}
-    MOI.canmodifyconstraint(optimizer, ci, S) || error()
+MOI.canset(optimizer::OSQPOptimizer, ::MOI.ConstraintSet, ::Type{<:CI{<:AffineConvertible, S}}) where {S <: IntervalConvertible} = true
+function MOI.set!(optimizer::OSQPOptimizer, attr::MOI.ConstraintSet, ci::CI{<:AffineConvertible, S}, s::S) where {S <: IntervalConvertible}
+    MOI.canset(optimizer, attr, typeof(ci)) || error()
+    MOI.isvalid(optimizer, ci) || error("Invalid constraint index")
     interval = MOI.Interval(s)
     row = constraint_rows(optimizer, ci)
     constant = optimizer.constrconstant[row]
@@ -641,10 +641,10 @@ function MOI.modifyconstraint!(optimizer::OSQPOptimizer, ci::CI{<:AffineConverti
     nothing
 end
 
-MOI.canmodifyconstraint(optimizer::OSQPOptimizer, ci::CI{<:VectorAffine, S}, ::Type{S}) where {S <: SupportedVectorSets} =
-    MOI.isvalid(optimizer, ci)
-function MOI.modifyconstraint!(optimizer::OSQPOptimizer, ci::CI{<:VectorAffine, S}, s::S) where {S <: SupportedVectorSets}
-    MOI.canmodifyconstraint(optimizer, ci, S) || error()
+MOI.canset(optimizer::OSQPOptimizer, ::MOI.ConstraintSet, ::Type{<:CI{<:VectorAffine, S}}) where {S <: SupportedVectorSets} = true
+function MOI.set!(optimizer::OSQPOptimizer,  attr::MOI.ConstraintSet, ci::CI{<:VectorAffine, S}, s::S) where {S <: SupportedVectorSets}
+    MOI.canset(optimizer, attr, typeof(ci)) || error()
+    MOI.isvalid(optimizer, ci) || error("Invalid constraint index")
     rows = constraint_rows(optimizer, ci)
     for (i, row) in enumerate(rows)
         constant = optimizer.constrconstant[row]
@@ -655,10 +655,10 @@ function MOI.modifyconstraint!(optimizer::OSQPOptimizer, ci::CI{<:VectorAffine, 
 end
 
 # partial function modification:
-MOI.canmodifyconstraint(optimizer::OSQPOptimizer, ci::CI{Affine, <:IntervalConvertible}, ::Type{<:MOI.ScalarCoefficientChange}) =
-    MOI.isvalid(optimizer, ci)
-function MOI.modifyconstraint!(optimizer::OSQPOptimizer, ci::CI{Affine, <:IntervalConvertible}, change::MOI.ScalarCoefficientChange)
-    MOI.canmodifyconstraint(optimizer, ci, typeof(change)) || error()
+MOI.canmodify(optimizer::OSQPOptimizer, ::Type{<:CI{Affine, <:IntervalConvertible}}, ::Type{<:MOI.ScalarCoefficientChange}) = true
+function MOI.modify!(optimizer::OSQPOptimizer, ci::CI{Affine, <:IntervalConvertible}, change::MOI.ScalarCoefficientChange)
+    MOI.canmodify(optimizer, typeof(ci), typeof(change)) || error()
+    MOI.isvalid(optimizer, ci) || error("Invalid constraint index")
     row = constraint_rows(optimizer, ci)
     optimizer.modcache.A[row, change.variable.value] = change.new_coefficient
     nothing
@@ -684,15 +684,15 @@ end
 
 
 # Objective modification
-MOI.canmodifyobjective(optimizer::OSQPOptimizer, ::Type{<:MOI.ScalarConstantChange}) = !MOI.isempty(optimizer)
-function MOI.modifyobjective!(optimizer::OSQPOptimizer, change::MOI.ScalarConstantChange)
-    MOI.canmodifyobjective(optimizer, typeof(change)) || error()
+MOI.canmodify(optimizer::OSQPOptimizer, ::MOI.ObjectiveFunction, ::Type{<:MOI.ScalarConstantChange}) = !MOI.isempty(optimizer)
+function MOI.modify!(optimizer::OSQPOptimizer, attr::MOI.ObjectiveFunction, change::MOI.ScalarConstantChange)
+    MOI.canmodify(optimizer, attr, typeof(change)) || error()
     optimizer.objconstant = change.new_constant
 end
 
-MOI.canmodifyobjective(optimizer::OSQPOptimizer, ::Type{<:MOI.ScalarCoefficientChange}) = !MOI.isempty(optimizer)
-function MOI.modifyobjective!(optimizer::OSQPOptimizer, change::MOI.ScalarCoefficientChange)
-    MOI.canmodifyobjective(optimizer, typeof(change)) || error()
+MOI.canmodify(optimizer::OSQPOptimizer, ::MOI.ObjectiveFunction, ::Type{<:MOI.ScalarCoefficientChange}) = !MOI.isempty(optimizer)
+function MOI.modify!(optimizer::OSQPOptimizer, attr::MOI.ObjectiveFunction, change::MOI.ScalarCoefficientChange)
+    MOI.canmodify(optimizer, attr, typeof(change)) || error()
     optimizer.modcache.q[change.variable.value] = change.new_coefficient
 end
 
