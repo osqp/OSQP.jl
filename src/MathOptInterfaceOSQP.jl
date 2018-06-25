@@ -385,7 +385,7 @@ for setting in fieldnames(OSQP.Settings)
         export $Attribute
         struct $Attribute <: OSQPAttribute end
         Base.Symbol(::$Attribute) = $(QuoteNode(setting))
-        isupdatable(::$Attribute) = $(setting ∈ OSQP.UPDATABLE_SETTINGS)
+        isupdatable(::$Attribute) = $(contains(==, OSQP.UPDATABLE_SETTINGS, setting))
     end
 end
 end # module
@@ -555,12 +555,12 @@ MOI.canaddvariable(optimizer::OSQPOptimizer) = false
 ## Variable attributes:
 function MOI.canget(optimizer::OSQPOptimizer, ::MOI.VariablePrimal, ::Type{VI})
     hasresults(optimizer) || return false
-    optimizer.results.info.status ∈ OSQP.SOLUTION_PRESENT || optimizer.results.dual_inf_cert != nothing
+    contains(==, OSQP.SOLUTION_PRESENT, optimizer.results.info.status) || optimizer.results.dual_inf_cert != nothing
 end
 
 function MOI.get(optimizer::OSQPOptimizer, a::MOI.VariablePrimal, vi::VI)
     MOI.canget(optimizer, a, typeof(vi)) || error()
-    x = ifelse(optimizer.results.info.status ∈ OSQP.SOLUTION_PRESENT, optimizer.results.x, optimizer.results.dual_inf_cert)
+    x = ifelse(contains(==, OSQP.SOLUTION_PRESENT, optimizer.results.info.status), optimizer.results.x, optimizer.results.dual_inf_cert)
     x[vi.value]
 end
 
@@ -672,12 +672,12 @@ MOI.supportsconstraint(optimizer::OSQPOptimizer, ::Type{VectorAffine}, ::Type{<:
 ## Constraint attributes:
 function MOI.canget(optimizer::OSQPOptimizer, ::MOI.ConstraintDual, ::Type{<:CI})
     hasresults(optimizer) || return false
-    optimizer.results.info.status ∈ OSQP.SOLUTION_PRESENT || optimizer.results.prim_inf_cert != nothing
+    contains(==, OSQP.SOLUTION_PRESENT, optimizer.results.info.status) || optimizer.results.prim_inf_cert != nothing
 end
 
 function MOI.get(optimizer::OSQPOptimizer, a::MOI.ConstraintDual, ci::CI)
     MOI.canget(optimizer, a, typeof(ci)) || error()
-    y = ifelse(optimizer.results.info.status ∈ OSQP.SOLUTION_PRESENT, optimizer.results.y, optimizer.results.prim_inf_cert)
+    y = ifelse(contains(==, OSQP.SOLUTION_PRESENT, optimizer.results.info.status), optimizer.results.y, optimizer.results.prim_inf_cert)
     rows = constraint_rows(optimizer, ci)
     -y[rows]
 end
