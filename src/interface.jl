@@ -1,13 +1,12 @@
 # Wrapper for the low level functions defined in https://github.com/oxfordcontrol/osqp/blob/master/include/osqp.h
 
 # Ensure compatibility between Julia versions with @gc_preserve
-macro compat_gc_preserve(args...)
-    vars = args[1:end - 1]
-    body = args[end]
-    if VERSION > v"0.7.0-"
-        return esc(Expr(:macrocall, Expr(:., :Base, Base.Meta.quot(Symbol("@gc_preserve"))), __source__, args...))
-    else
-        return esc(body)
+@static if isdefined(Base, :GC)
+    import Base.GC: @preserve
+else
+    macro preserve(args...)
+        body = args[end]
+        esc(body)
     end
 end
 
@@ -147,7 +146,7 @@ function setup!(model::OSQP.Model;
     stgs = OSQP.Settings(settings_dict)
 
     # Perform setup
-    @compat_gc_preserve managedP Pdata managedA Adata q l u begin
+    @preserve managedP Pdata managedA Adata q l u begin
         model.workspace = ccall((:osqp_setup, OSQP.osqp), Ptr{OSQP.Workspace},
             (Ptr{OSQP.Data}, Ptr{OSQP.Settings}), Ref(data), Ref(stgs))
     end
