@@ -1,5 +1,8 @@
 module ModificationCaches
 
+using Compat
+using Compat.SparseArrays
+
 export
     VectorModificationCache,
     MatrixModificationCache,
