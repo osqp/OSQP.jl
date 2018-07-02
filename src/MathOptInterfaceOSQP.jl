@@ -6,6 +6,7 @@ include("modcaches.jl")
 using .ModificationCaches
 
 using Compat
+using Compat.SparseArrays
 using MathOptInterface
 using MathOptInterface.Utilities
 
