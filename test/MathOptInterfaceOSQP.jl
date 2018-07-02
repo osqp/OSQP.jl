@@ -21,7 +21,7 @@ const Affine = MOI.ScalarAffineFunction{Float64}
     m = 10
     q = randn(rng, n)
     P = (X = sprandn(rng, n, n, 0.1); X' * X)
-    P += eps() * Base.I # needed for a test later on
+    P += eps() * I # needed for a test later on
     l = -rand(rng, m)
     u = rand(rng, m)
     A = sprandn(rng, m, n, 0.6)
@@ -47,10 +47,10 @@ const Affine = MOI.ScalarAffineFunction{Float64}
     @test qmod_update_results.x ≈ qmod_setup_results.x atol = 1e-8
 
     # Modify A, ensure that updating results in the same solution as calling setup! with the modified A and q
-    (I, J, _) = findnz(A)
+    (rows, cols, _) = findnz(A)
     Amodindex = rand(rng, 1 : nnz(A))
-    row = I[Amodindex]
-    col = J[Amodindex]
+    row = rows[Amodindex]
+    col = cols[Amodindex]
     val = randn(rng)
     modcache.A[row, col] = val
     MathOptInterfaceOSQP.processupdates!(model, modcache)
@@ -79,10 +79,10 @@ const Affine = MOI.ScalarAffineFunction{Float64}
     @test Pmod_update_results.x ≈ Pmod_setup_results.x atol = 1e-8
 
     # Modifying the sparsity pattern is not allowed
-    nzinds = map(CartesianIndex, zip(I, J))
+    nzinds = map(CartesianIndex, zip(rows, cols))
     zinds = zinds = setdiff(vec(CartesianIndices(A)), nzinds)
-    for I in zinds
-        @test_throws ArgumentError modcache.A[I[1], I[2]] = randn(rng)
+    for zind in zinds
+        @test_throws ArgumentError modcache.A[zind[1], zind[2]] = randn(rng)
     end
     @test_throws ArgumentError modcache.A[:] = 1
 end
