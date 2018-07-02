@@ -1,5 +1,7 @@
 module OSQPMathProgBaseInterface
 
+using Compat
+using Compat.SparseArrays
 using OSQP: Model, Results, setup!, solve!, update!, clean!, update_settings!, warm_start!
 using MathProgBase
 
