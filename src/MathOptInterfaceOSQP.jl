@@ -199,7 +199,7 @@ function processobjective(src::MOI.ModelLike, idxmap)
         else
             throw(UnsupportedObjectiveError())
         end
-        sense == MOI.MaxSense && (scale!(P, -1); scale!(q, -1); c = -c)
+        sense == MOI.MaxSense && (Compat.rmul!(P, -1); Compat.rmul!(q, -1); c = -c)
     else
         P = spzeros(n, n)
         q = zeros(n)
