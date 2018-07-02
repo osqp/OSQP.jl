@@ -248,7 +248,11 @@ function symmetrize!(I::Vector{Int}, J::Vector{Int}, V::Vector)
 end
 
 function processconstraints(src::MOI.ModelLike, idxmap, rowranges::Dict{Int, UnitRange{Int}})
-    m = mapreduce(length, +, 0, values(rowranges))
+    if VERSION < v"0.7-"
+        m = mapreduce(length, +, 0, values(rowranges))
+    else
+        m = mapreduce(length, +, values(rowranges), init=0)
+    end
     l = Vector{Float64}(undef, m)
     u = Vector{Float64}(undef, m)
     constant = Vector{Float64}(undef, m)
