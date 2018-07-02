@@ -104,11 +104,11 @@ function setup!(model::OSQP.Model;
 
     # Check or sparsify matrices
     if !issparse(P)
-        warn("P is not sparse. Sparsifying it now (it might take a while)")
+        Compat.@warn("P is not sparse. Sparsifying it now (it might take a while)")
         P = sparse(P)
     end
     if !issparse(A)
-        warn("A is not sparse. Sparsifying it now (it might take a while)")
+        Compat.@warn("A is not sparse. Sparsifying it now (it might take a while)")
         A = sparse(A)
     end
 
@@ -514,7 +514,7 @@ function linsys_solver_str_to_int!(settings_dict::Dict{Symbol,Any})
         elseif linsys_str == ""
             settings_dict[:linsys_solver] = SUITESPARSE_LDL_SOLVER
         else
-            warn("Linear system solver not recognized. Using default SuiteSparse LDL")
+            Compat.@warn("Linear system solver not recognized. Using default SuiteSparse LDL")
             settings_dict[:linsys_solver] = SUITESPARSE_LDL_SOLVER
 
         end
