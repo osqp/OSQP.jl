@@ -44,7 +44,7 @@ const Affine = MOI.ScalarAffineFunction{Float64}
     model2 = OSQP.Model()
     OSQP.setup!(model2; P = P, q = modcache.q.data, A = A, l = l, u = u, verbose = false, eps_abs = 1e-8, eps_rel = 1e-16)
     qmod_setup_results = OSQP.solve!(model2)
-    @test qmod_update_results.x ≈ qmod_setup_results.x atol = 1e-8
+    @test qmod_update_results.x ≈ qmod_setup_results.x atol = 1e-7
 
     # Modify A, ensure that updating results in the same solution as calling setup! with the modified A and q
     (rows, cols, _) = findnz(A)
@@ -63,7 +63,7 @@ const Affine = MOI.ScalarAffineFunction{Float64}
     model3 = OSQP.Model()
     OSQP.setup!(model3; P = P, q = modcache.q.data, A = Amod, l = l, u = u, verbose = false, eps_abs = 1e-8, eps_rel = 1e-16)
     Amod_setup_results = OSQP.solve!(model3)
-    @test Amod_update_results.x ≈ Amod_setup_results.x atol = 1e-8
+    @test Amod_update_results.x ≈ Amod_setup_results.x atol = 1e-7
 
     # MatrixModificationCache: colon indexing
     modcache.P[:] = 0.
