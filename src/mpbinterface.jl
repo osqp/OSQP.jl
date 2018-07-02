@@ -401,7 +401,7 @@ function MathProgBase.addvar!(model::OSQPMathProgModel, constridx, constrcoef, l
     # Change cost P, q
     model.q = [model.q; objcoef]
     if model.sense == :Max
-        model.q[end] .= -model.q[end]
+        model.q[end] = -model.q[end]
     end
     model.P = blockdiag(model.P, spzeros(1,1))
 
