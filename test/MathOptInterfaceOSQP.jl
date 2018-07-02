@@ -45,7 +45,7 @@ const Affine = MOI.ScalarAffineFunction{Float64}
     @test qmod_update_results.x ≈ qmod_setup_results.x atol = 1e-8
 
     # Modify A, ensure that updating results in the same solution as calling setup! with the modified A and q
-    (I, J) = findn(A)
+    (I, J, _) = findnz(A)
     Amodindex = rand(rng, 1 : nnz(A))
     row = I[Amodindex]
     col = J[Amodindex]

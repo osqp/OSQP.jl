@@ -23,7 +23,7 @@ function setup_update_matrices()
     q = randn(n)
     A = sprandn(m, n, p)
 
-    (Ai, Aj) = findn(A)
+    (Ai, Aj, _) = findnz(A)
     Ax = copy(A.nzval)
     A_newx = Ax + randn(length(Ax))
     A_new = sparse(Ai, Aj, A_newx)
