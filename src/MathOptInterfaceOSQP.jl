@@ -218,7 +218,12 @@ function processobjective(src::MOI.ModelLike, idxmap)
 end
 
 function processlinearterms!(q, terms::Vector{<:MOI.ScalarAffineTerm}, idxmapfun::Function = identity)
-    q[:] = 0
+    # This is currently needed to avoid depwarns. TODO: make this nice again:
+    if q isa VectorModificationCache
+        q[:] = 0
+    else
+        q .= 0
+    end
     for term in terms
         var = term.variable_index
         coeff = term.coefficient
