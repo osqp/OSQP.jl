@@ -47,7 +47,7 @@ mutable struct OSQPMathProgModel <: MathProgBase.AbstractLinearQuadraticModel
     # Results
     results::Results
 
-    function OSQPMathProgModel(settings::Associative{Symbol, Any})
+    function OSQPMathProgModel(settings::AbstractDict{Symbol, Any})
         P = spzeros(Float64, 0, 0)
         q = Float64[]
         A = spzeros(Float64, 0, 0)
