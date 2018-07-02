@@ -375,12 +375,14 @@ module OSQPSettings
 
 export OSQPAttribute, isupdatable
 
-using MathOptInterface, OSQP
+using Compat
+using MathOptInterface
+using OSQP
 
 abstract type OSQPAttribute <: MathOptInterface.AbstractOptimizerAttribute end
 
 for setting in fieldnames(OSQP.Settings)
-    Attribute = Symbol(mapreduce(ucfirst, *, split(String(setting), '_'))) # to camelcase
+    Attribute = Symbol(mapreduce(uppercasefirst, *, split(String(setting), '_'))) # to camelcase
     @eval begin
         export $Attribute
         struct $Attribute <: OSQPAttribute end
