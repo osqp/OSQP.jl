@@ -140,7 +140,7 @@ tol = 1e-5
 
 
     @testset "time_limit" begin
-        
+
         problem, options = setup_basic()
 
         model = OSQP.Model()
@@ -160,5 +160,5 @@ tol = 1e-5
 
 
     end
-    
+
 end

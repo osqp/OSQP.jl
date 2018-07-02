@@ -19,8 +19,8 @@ tol = 1e-5
         m = 500
         P = sprandn(n, n, 0.6)
         P = P' * P
-        q = randn(n) 
-        A = sprandn(m, n, 0.6) 
+        q = randn(n)
+        A = sprandn(m, n, 0.6)
         u = 3 .+ randn(m)
         l = -3 .+ randn(m)
 
@@ -34,7 +34,7 @@ tol = 1e-5
 
         model = OSQP.Model()
         OSQP.setup!(model; P=P, q=q, A=A, l=l, u=u, options...)
-        results = OSQP.solve!(model)    
+        results = OSQP.solve!(model)
 
         @test results.info.status == :Primal_infeasible
 
@@ -55,7 +55,7 @@ tol = 1e-5
 
         model = OSQP.Model()
         OSQP.setup!(model; P=P, q=q, A=A, l=l, u=u, options...)
-        results = OSQP.solve!(model)    
+        results = OSQP.solve!(model)
 
         @test results.info.status == :Primal_infeasible
 
