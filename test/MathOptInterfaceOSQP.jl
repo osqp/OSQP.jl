@@ -73,7 +73,7 @@ const Affine = MOI.ScalarAffineFunction{Float64}
     MathOptInterfaceOSQP.processupdates!(model, modcache)
     Pmod_update_results = OSQP.solve!(model)
     model4 = OSQP.Model()
-    Pmod = speye(n, n)
+    Pmod = sparse(1.0I, n, n)
     OSQP.setup!(model4; P = Pmod, q = modcache.q.data, A = Amod, l = l, u = u, verbose = false, eps_abs = 1e-8, eps_rel = 1e-16)
     Pmod_setup_results = OSQP.solve!(model4)
     @test Pmod_update_results.x ≈ Pmod_setup_results.x atol = 1e-8
