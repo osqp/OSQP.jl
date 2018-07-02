@@ -222,7 +222,7 @@ term(c, x::MOI.VariableIndex, y::MOI.VariableIndex) = MOI.ScalarQuadraticTerm(c,
     @test MOI.get(optimizer, MOI.TerminationStatus()) == MOI.Success
     @test MOI.get(optimizer, MOI.PrimalStatus()) == MOI.FeasiblePoint
     @test MOI.get(optimizer, MOI.ObjectiveValue()) ≈ -1 atol=atol rtol=rtol
-    @test MOI.get(optimizer, MOI.VariablePrimal(), getindex.(idxmap, v)) ≈ [1, 0] atol=atol rtol=rtol
+    @test MOI.get(optimizer, MOI.VariablePrimal(), getindex.(Ref(idxmap), v)) ≈ [1, 0] atol=atol rtol=rtol
     @test MOI.get(optimizer, MOI.DualStatus()) == MOI.FeasiblePoint
     @test MOI.get(optimizer, MOI.ConstraintDual(), idxmap[c]) ≈ -1 atol=atol rtol=rtol
     @test MOI.get(optimizer, MOI.ConstraintDual(), idxmap[vc1]) ≈ 0 atol=atol rtol=rtol
@@ -322,7 +322,7 @@ term(c, x::MOI.VariableIndex, y::MOI.VariableIndex) = MOI.ScalarQuadraticTerm(c,
         @test MOI.get(optimizer, MOI.TerminationStatus()) == MOI.Success
         @test MOI.get(optimizer, MOI.PrimalStatus()) == MOI.FeasiblePoint
         @test MOI.get(optimizer, MOI.ObjectiveValue()) ≈ -1 atol=atol rtol=rtol
-        @test MOI.get(optimizer, MOI.VariablePrimal(), getindex.(idxmap, v)) ≈ [-1, 0] atol=atol rtol=rtol
+        @test MOI.get(optimizer, MOI.VariablePrimal(), getindex.(Ref(idxmap), v)) ≈ [-1, 0] atol=atol rtol=rtol
         @test MOI.get(optimizer, MOI.DualStatus()) == MOI.FeasiblePoint
         @test MOI.get(optimizer, MOI.ConstraintDual(), idxmap[c]) ≈ 1 atol=atol rtol=rtol
         @test MOI.get(optimizer, MOI.ConstraintDual(), idxmap[vc1]) ≈ 0 atol=atol rtol=rtol
@@ -372,7 +372,7 @@ end
     @test MOI.get(optimizer, MOI.TerminationStatus()) == MOI.Success
     @test MOI.get(optimizer, MOI.PrimalStatus()) == MOI.FeasiblePoint
     @test MOI.get(optimizer, MOI.ObjectiveValue()) ≈ 20. atol=atol rtol=rtol
-    @test MOI.get(optimizer, MOI.VariablePrimal(), getindex.(idxmap, x)) ≈ [0.; 5.] atol=atol rtol=rtol
+    @test MOI.get(optimizer, MOI.VariablePrimal(), getindex.(Ref(idxmap), x)) ≈ [0.; 5.] atol=atol rtol=rtol
     @test MOI.get(optimizer, MOI.DualStatus()) == MOI.FeasiblePoint
     @test MOI.get(optimizer, MOI.ConstraintDual(), idxmap[c]) ≈ -[1.666666666666; 0.; 1.3333333; 0.; 0.] atol=atol rtol=rtol
 
@@ -435,7 +435,7 @@ end
     check_results = function (optimizer, idxmap, x, A, b, expected)
         @test MOI.get(optimizer, MOI.TerminationStatus()) == MOI.Success
         @test MOI.get(optimizer, MOI.PrimalStatus()) == MOI.FeasiblePoint
-        @test MOI.get.(optimizer, MOI.VariablePrimal(), getindex.(idxmap, x)) ≈ expected atol = 1e-4
+        @test MOI.get.(optimizer, MOI.VariablePrimal(), getindex.(Ref(idxmap), x)) ≈ expected atol = 1e-4
         @test MOI.get(optimizer, MOI.ObjectiveValue()) ≈ norm(A * expected - b)^2 atol = 1e-4
     end
 
