@@ -16,11 +16,11 @@ tol = 1e-5
     @testset "warm_start_problem" begin
         srand(1)
 
-        n = 100 
+        n = 100
         m = 200
         P = sprandn(n, n, 0.9)
         P = P' * P
-        q = randn(n) 
+        q = randn(n)
         A = sprandn(m, n, 0.9)
         u = rand(m) * 2
         l = -rand(m) * 2
@@ -31,7 +31,7 @@ tol = 1e-5
 
         model = OSQP.Model()
         OSQP.setup!(model; P=P, q=q, A=A, l=l, u=u, options...)
-        results = OSQP.solve!(model)    
+        results = OSQP.solve!(model)
 
         # Store optimal values
         x_opt = results.x
@@ -43,11 +43,11 @@ tol = 1e-5
         OSQP.warm_start!(model, x=zeros(n), y=zeros(m))
         results = OSQP.solve!(model)
         @test results.info.iter == tot_iter
-        
+
         # Warm start with optimal values and check that total number of iter < 10
         OSQP.warm_start!(model, x=x_opt, y=y_opt)
         results = OSQP.solve!(model)
-        @test results.info.iter <= 10 
+        @test results.info.iter <= 10
 
 
     end
