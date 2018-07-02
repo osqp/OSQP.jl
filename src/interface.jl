@@ -128,13 +128,6 @@ function setup!(model::OSQP.Model;
     Pdata = Ref(OSQP.Ccsc(managedP))
     Adata = Ref(OSQP.Ccsc(managedA))
 
-    # Create OSQP data using the managed matrices pointers
-    data = OSQP.Data(n, m,
-                     Base.unsafe_convert(Ptr{OSQP.Ccsc}, Pdata),
-                     Base.unsafe_convert(Ptr{OSQP.Ccsc}, Adata),
-                     pointer(q),
-                     pointer(l), pointer(u))
-
     # Create OSQP settings
     settings_dict = Dict{Symbol,Any}()
     if !isempty(settings)
@@ -145,8 +138,15 @@ function setup!(model::OSQP.Model;
 
     stgs = OSQP.Settings(settings_dict)
 
-    # Perform setup
     @preserve managedP Pdata managedA Adata q l u begin
+        # Create OSQP data using the managed matrices pointers
+        data = OSQP.Data(n, m,
+                        Base.unsafe_convert(Ptr{OSQP.Ccsc}, Pdata),
+                        Base.unsafe_convert(Ptr{OSQP.Ccsc}, Adata),
+                        pointer(q),
+                        pointer(l), pointer(u))
+
+        # Perform setup
         model.workspace = ccall((:osqp_setup, OSQP.osqp), Ptr{OSQP.Workspace},
             (Ptr{OSQP.Data}, Ptr{OSQP.Settings}), Ref(data), Ref(stgs))
     end
