@@ -1,9 +1,14 @@
 module OSQPMathProgBaseInterface
 
 using Compat
+using Compat.LinearAlgebra
 using Compat.SparseArrays
 using OSQP: Model, Results, setup!, solve!, update!, clean!, update_settings!, warm_start!
 using MathProgBase
+
+@static if VERSION < v"0.7-"
+    blockdiag(A...) = blkdiag(A...)
+end
 
 struct OSQPSolver <: MathProgBase.AbstractMathProgSolver
     settings::Dict{Symbol,Any}
@@ -122,7 +127,7 @@ function MathProgBase.optimize!(model::OSQPMathProgModel)
     if model.perform_setup
         n = MathProgBase.numvar(model)
         setup!(model.inner; P = model.P, q = model.q,
-               A = [model.A; sparse(I, n)],
+               A = [model.A; sparse(I, n, n)],
                l = [model.lb; model.l],
                u = [model.ub; model.u],
                model.settings...)
@@ -398,7 +403,7 @@ function MathProgBase.addvar!(model::OSQPMathProgModel, constridx, constrcoef, l
     if model.sense == :Max
         model.q[end] .= -model.q[end]
     end
-    model.P = blkdiag(model.P, spzeros(1,1))
+    model.P = blockdiag(model.P, spzeros(1,1))
 
     # Change constraints
     if !isempty(constrcoef) && !isempty(constridx)
