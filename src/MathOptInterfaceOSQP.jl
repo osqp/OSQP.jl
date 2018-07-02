@@ -51,6 +51,14 @@ upper(::Zeros, i::Int) = 0.0
 upper(::Nonnegatives, i::Int) = Inf
 upper(::Nonpositives, i::Int) = 0.0
 
+# TODO: just use ∈ on 0.7 (allocates on 0.6):
+function _contains(haystack, needle)
+    for x in haystack
+        x == needle && return true
+    end
+    false
+end
+
 mutable struct OSQPOptimizer <: MOI.AbstractOptimizer
     inner::OSQP.Model
     hasresults::Bool
@@ -382,13 +390,21 @@ using OSQP
 
 abstract type OSQPAttribute <: MathOptInterface.AbstractOptimizerAttribute end
 
+# TODO: just use ∈ on 0.7 (allocates on 0.6):
+function _contains(haystack, needle)
+    for x in haystack
+        x == needle && return true
+    end
+    false
+end
+
 for setting in fieldnames(OSQP.Settings)
     Attribute = Symbol(mapreduce(uppercasefirst, *, split(String(setting), '_'))) # to camelcase
     @eval begin
         export $Attribute
         struct $Attribute <: OSQPAttribute end
         Base.Symbol(::$Attribute) = $(QuoteNode(setting))
-        isupdatable(::$Attribute) = $(contains(==, OSQP.UPDATABLE_SETTINGS, setting))
+        isupdatable(::$Attribute) = $(_contains(OSQP.UPDATABLE_SETTINGS, setting))
     end
 end
 end # module
@@ -558,12 +574,12 @@ MOI.canaddvariable(optimizer::OSQPOptimizer) = false
 ## Variable attributes:
 function MOI.canget(optimizer::OSQPOptimizer, ::MOI.VariablePrimal, ::Type{VI})
     hasresults(optimizer) || return false
-    contains(==, OSQP.SOLUTION_PRESENT, optimizer.results.info.status) || optimizer.results.dual_inf_cert != nothing
+    _contains(OSQP.SOLUTION_PRESENT, optimizer.results.info.status) || optimizer.results.dual_inf_cert != nothing
 end
 
 function MOI.get(optimizer::OSQPOptimizer, a::MOI.VariablePrimal, vi::VI)
     MOI.canget(optimizer, a, typeof(vi)) || error()
-    x = ifelse(contains(==, OSQP.SOLUTION_PRESENT, optimizer.results.info.status), optimizer.results.x, optimizer.results.dual_inf_cert)
+    x = ifelse(_contains(OSQP.SOLUTION_PRESENT, optimizer.results.info.status), optimizer.results.x, optimizer.results.dual_inf_cert)
     x[vi.value]
 end
 
@@ -675,12 +691,12 @@ MOI.supportsconstraint(optimizer::OSQPOptimizer, ::Type{VectorAffine}, ::Type{<:
 ## Constraint attributes:
 function MOI.canget(optimizer::OSQPOptimizer, ::MOI.ConstraintDual, ::Type{<:CI})
     hasresults(optimizer) || return false
-    contains(==, OSQP.SOLUTION_PRESENT, optimizer.results.info.status) || optimizer.results.prim_inf_cert != nothing
+    _contains(OSQP.SOLUTION_PRESENT, optimizer.results.info.status) || optimizer.results.prim_inf_cert != nothing
 end
 
 function MOI.get(optimizer::OSQPOptimizer, a::MOI.ConstraintDual, ci::CI)
     MOI.canget(optimizer, a, typeof(ci)) || error()
-    y = ifelse(contains(==, OSQP.SOLUTION_PRESENT, optimizer.results.info.status), optimizer.results.y, optimizer.results.prim_inf_cert)
+    y = ifelse(_contains(OSQP.SOLUTION_PRESENT, optimizer.results.info.status), optimizer.results.y, optimizer.results.prim_inf_cert)
     rows = constraint_rows(optimizer, ci)
     -y[rows]
 end
