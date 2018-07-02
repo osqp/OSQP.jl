@@ -193,13 +193,13 @@ function Base.copy(model::OSQPMathProgModel)
     ret = OSQPMathProgModel(model.settings)
     initialize_dimensions!(ret, MathProgBase.numvar(model), MathProgBase.numconstr(model))
     ret.sense = model.sense
-    copy!(ret.P, model.P)
-    copy!(ret.q, model.q)
-    copy!(ret.A, model.A)
-    copy!(ret.lb, model.lb)
-    copy!(ret.ub, model.ub)
-    copy!(ret.l, model.l)
-    copy!(ret.u, model.u)
+    copyto!(ret.P, model.P)
+    copyto!(ret.q, model.q)
+    copyto!(ret.A, model.A)
+    copyto!(ret.lb, model.lb)
+    copyto!(ret.ub, model.ub)
+    copyto!(ret.l, model.l)
+    copyto!(ret.u, model.u)
     ret
 end
 
@@ -257,7 +257,7 @@ the primal variable warm start is supported. Note that OSQP performs warm starti
 when parts of the problem data change and a new optimize! is called.
 """
 function MathProgBase.setwarmstart!(model::OSQPMathProgModel, x)
-    copy!(model.x_ws, x)
+    copyto!(model.x_ws, x)
     model.run_warmstart = true
 end
 
@@ -269,7 +269,7 @@ function MathProgBase.loadproblem!(model::OSQPMathProgModel, A, l, u, c, lb, ub,
     initialize_dimensions!(model, n, m)  # Initialize problem dimensions
 
     if sense == :Min
-        copy!(model.q, c)
+        copyto!(model.q, c)
     elseif sense == :Max
         model.q .= .-c
     else
@@ -280,18 +280,18 @@ function MathProgBase.loadproblem!(model::OSQPMathProgModel, A, l, u, c, lb, ub,
     model.sense = sense
 
     # Copy variables
-    copy!(model.lb, lb)
-    copy!(model.ub, ub)
-    copy!(model.l, l)
-    copy!(model.u, u)
-    copy!(model.A, sparse(A))  # Sparsify matrix A
+    copyto!(model.lb, lb)
+    copyto!(model.ub, ub)
+    copyto!(model.l, l)
+    copyto!(model.u, u)
+    copyto!(model.A, sparse(A))  # Sparsify matrix A
     model
 end
 
 MathProgBase.getvarLB(model::OSQPMathProgModel) = model.l
 function MathProgBase.setvarLB!(model::OSQPMathProgModel, l)
     # Copy new variable lower bounds
-    copy!(model.l, l)
+    copyto!(model.l, l)
 
     # Update lower bounds in the model
     if !model.perform_setup
@@ -307,7 +307,7 @@ end
 MathProgBase.getvarUB(model::OSQPMathProgModel) = model.u
 function MathProgBase.setvarUB!(model::OSQPMathProgModel, u)
     # Copy new variable upper bounds
-    copy!(model.u, u)
+    copyto!(model.u, u)
 
     # Update lower bounds in the model
     if !model.perform_setup
@@ -324,7 +324,7 @@ end
 MathProgBase.getconstrLB(model::OSQPMathProgModel) = model.lb
 function MathProgBase.setconstrLB!(model::OSQPMathProgModel, lb)
     # Copy new constraints lower bounds
-    copy!(model.lb, lb)
+    copyto!(model.lb, lb)
 
     # Update lower bounds in the model
     if !model.perform_setup
@@ -341,7 +341,7 @@ end
 MathProgBase.getconstrUB(model::OSQPMathProgModel) = model.ub
 function MathProgBase.setconstrUB!(model::OSQPMathProgModel, ub)
     # Copy new constraints upper bounds
-    copy!(model.ub, ub)
+    copyto!(model.ub, ub)
 
     # Update upper bounds in the model
     if !model.perform_setup
@@ -357,7 +357,7 @@ end
 
 function MathProgBase.setobj!(model::OSQPMathProgModel, c)
     # Copy cost
-    copy!(model.q, c)
+    copyto!(model.q, c)
 
     # Negate cost if necessary
     if model.sense == :Max
@@ -510,10 +510,10 @@ function MathProgBase.setquadobj!(model::OSQPMathProgModel, rowidx::Vector, coli
     if (rowidx == Pi) & (colidx == Pj) & !model.perform_setup
         if model.sense == :Max
             # Update matrix in MathProgBase model
-            copy!(model.P.nzval, -Px)
+            copyto!(model.P.nzval, -Px)
         else
             # Update matrix in MathProgBase model
-            copy!(model.P.nzval, Px)
+            copyto!(model.P.nzval, Px)
         end
         # Update only nonzeros of P
         update!(model.inner, Px=model.P.nzval)

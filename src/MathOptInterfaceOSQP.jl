@@ -412,8 +412,8 @@ function MOI.optimize!(optimizer::OSQPOptimizer)
     OSQP.solve!(optimizer.inner, optimizer.results)
     optimizer.hasresults = true
     # Copy previous solution into warm start cache without setting the dirty bit:
-    copy!(optimizer.warmstartcache.x.data, optimizer.results.x)
-    copy!(optimizer.warmstartcache.y.data, optimizer.results.y)
+    copyto!(optimizer.warmstartcache.x.data, optimizer.results.x)
+    copyto!(optimizer.warmstartcache.y.data, optimizer.results.y)
     nothing
 end
 
