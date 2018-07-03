@@ -1,13 +1,14 @@
 module MathOptInterfaceOSQP
 
-export OSQPOptimizer, OSQPSettings, OSQPModel
-
 include("modcaches.jl")
 using .ModificationCaches
 
 using Compat
+using Compat.SparseArrays
 using MathOptInterface
 using MathOptInterface.Utilities
+
+export OSQPOptimizer, OSQPSettings, OSQPModel
 
 const MOI = MathOptInterface
 const MOIU = MathOptInterface.Utilities
@@ -49,6 +50,14 @@ lower(::Nonpositives, i::Int) = -Inf
 upper(::Zeros, i::Int) = 0.0
 upper(::Nonnegatives, i::Int) = Inf
 upper(::Nonpositives, i::Int) = 0.0
+
+# TODO: just use ∈ on 0.7 (allocates on 0.6):
+function _contains(haystack, needle)
+    for x in haystack
+        x == needle && return true
+    end
+    false
+end
 
 mutable struct OSQPOptimizer <: MOI.AbstractOptimizer
     inner::OSQP.Model
@@ -199,7 +208,7 @@ function processobjective(src::MOI.ModelLike, idxmap)
         else
             throw(UnsupportedObjectiveError())
         end
-        sense == MOI.MaxSense && (scale!(P, -1); scale!(q, -1); c = -c)
+        sense == MOI.MaxSense && (Compat.rmul!(P, -1); Compat.rmul!(q, -1); c = -c)
     else
         P = spzeros(n, n)
         q = zeros(n)
@@ -209,7 +218,12 @@ function processobjective(src::MOI.ModelLike, idxmap)
 end
 
 function processlinearterms!(q, terms::Vector{<:MOI.ScalarAffineTerm}, idxmapfun::Function = identity)
-    q[:] = 0
+    # This is currently needed to avoid depwarns. TODO: make this nice again:
+    if q isa VectorModificationCache
+        q[:] = 0
+    else
+        q .= 0
+    end
     for term in terms
         var = term.variable_index
         coeff = term.coefficient
@@ -234,7 +248,11 @@ function symmetrize!(I::Vector{Int}, J::Vector{Int}, V::Vector)
 end
 
 function processconstraints(src::MOI.ModelLike, idxmap, rowranges::Dict{Int, UnitRange{Int}})
-    m = mapreduce(length, +, 0, values(rowranges))
+    if VERSION < v"0.7-"
+        m = mapreduce(length, +, 0, values(rowranges))
+    else
+        m = mapreduce(length, +, values(rowranges), init=0)
+    end
     l = Vector{Float64}(undef, m)
     u = Vector{Float64}(undef, m)
     constant = Vector{Float64}(undef, m)
@@ -373,19 +391,29 @@ end
 ## Solver-specific optimizer attributes:
 module OSQPSettings
 
-export OSQPAttribute, isupdatable
+using Compat
+using MathOptInterface
+using OSQP
 
-using MathOptInterface, OSQP
+export OSQPAttribute, isupdatable
 
 abstract type OSQPAttribute <: MathOptInterface.AbstractOptimizerAttribute end
 
+# TODO: just use ∈ on 0.7 (allocates on 0.6):
+function _contains(haystack, needle)
+    for x in haystack
+        x == needle && return true
+    end
+    false
+end
+
 for setting in fieldnames(OSQP.Settings)
-    Attribute = Symbol(mapreduce(ucfirst, *, split(String(setting), '_'))) # to camelcase
+    Attribute = Symbol(mapreduce(uppercasefirst, *, split(String(setting), '_'))) # to camelcase
     @eval begin
         export $Attribute
         struct $Attribute <: OSQPAttribute end
         Base.Symbol(::$Attribute) = $(QuoteNode(setting))
-        isupdatable(::$Attribute) = $(contains(==, OSQP.UPDATABLE_SETTINGS, setting))
+        isupdatable(::$Attribute) = $(_contains(OSQP.UPDATABLE_SETTINGS, setting))
     end
 end
 end # module
@@ -410,8 +438,8 @@ function MOI.optimize!(optimizer::OSQPOptimizer)
     OSQP.solve!(optimizer.inner, optimizer.results)
     optimizer.hasresults = true
     # Copy previous solution into warm start cache without setting the dirty bit:
-    copy!(optimizer.warmstartcache.x.data, optimizer.results.x)
-    copy!(optimizer.warmstartcache.y.data, optimizer.results.y)
+    copyto!(optimizer.warmstartcache.x.data, optimizer.results.x)
+    copyto!(optimizer.warmstartcache.y.data, optimizer.results.y)
     nothing
 end
 
@@ -555,12 +583,12 @@ MOI.canaddvariable(optimizer::OSQPOptimizer) = false
 ## Variable attributes:
 function MOI.canget(optimizer::OSQPOptimizer, ::MOI.VariablePrimal, ::Type{VI})
     hasresults(optimizer) || return false
-    contains(==, OSQP.SOLUTION_PRESENT, optimizer.results.info.status) || optimizer.results.dual_inf_cert != nothing
+    _contains(OSQP.SOLUTION_PRESENT, optimizer.results.info.status) || optimizer.results.dual_inf_cert != nothing
 end
 
 function MOI.get(optimizer::OSQPOptimizer, a::MOI.VariablePrimal, vi::VI)
     MOI.canget(optimizer, a, typeof(vi)) || error()
-    x = ifelse(contains(==, OSQP.SOLUTION_PRESENT, optimizer.results.info.status), optimizer.results.x, optimizer.results.dual_inf_cert)
+    x = ifelse(_contains(OSQP.SOLUTION_PRESENT, optimizer.results.info.status), optimizer.results.x, optimizer.results.dual_inf_cert)
     x[vi.value]
 end
 
@@ -672,12 +700,12 @@ MOI.supportsconstraint(optimizer::OSQPOptimizer, ::Type{VectorAffine}, ::Type{<:
 ## Constraint attributes:
 function MOI.canget(optimizer::OSQPOptimizer, ::MOI.ConstraintDual, ::Type{<:CI})
     hasresults(optimizer) || return false
-    contains(==, OSQP.SOLUTION_PRESENT, optimizer.results.info.status) || optimizer.results.prim_inf_cert != nothing
+    _contains(OSQP.SOLUTION_PRESENT, optimizer.results.info.status) || optimizer.results.prim_inf_cert != nothing
 end
 
 function MOI.get(optimizer::OSQPOptimizer, a::MOI.ConstraintDual, ci::CI)
     MOI.canget(optimizer, a, typeof(ci)) || error()
-    y = ifelse(contains(==, OSQP.SOLUTION_PRESENT, optimizer.results.info.status), optimizer.results.y, optimizer.results.prim_inf_cert)
+    y = ifelse(_contains(OSQP.SOLUTION_PRESENT, optimizer.results.info.status), optimizer.results.y, optimizer.results.prim_inf_cert)
     rows = constraint_rows(optimizer, ci)
     -y[rows]
 end

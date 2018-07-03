@@ -1,6 +1,8 @@
 using Compat # for CartesianIndices
 using OSQP.MathOptInterfaceOSQP
-using Base.Test
+using Compat.Test
+using Compat.LinearAlgebra
+using Compat.SparseArrays
 
 using MathOptInterface
 const MOI = MathOptInterface
@@ -19,7 +21,7 @@ const Affine = MOI.ScalarAffineFunction{Float64}
     m = 10
     q = randn(rng, n)
     P = (X = sprandn(rng, n, n, 0.1); X' * X)
-    P += eps() * Base.I # needed for a test later on
+    P += eps() * I # needed for a test later on
     l = -rand(rng, m)
     u = rand(rng, m)
     A = sprandn(rng, m, n, 0.6)
@@ -42,13 +44,13 @@ const Affine = MOI.ScalarAffineFunction{Float64}
     model2 = OSQP.Model()
     OSQP.setup!(model2; P = P, q = modcache.q.data, A = A, l = l, u = u, verbose = false, eps_abs = 1e-8, eps_rel = 1e-16)
     qmod_setup_results = OSQP.solve!(model2)
-    @test qmod_update_results.x ≈ qmod_setup_results.x atol = 1e-8
+    @test qmod_update_results.x ≈ qmod_setup_results.x atol = 1e-7
 
     # Modify A, ensure that updating results in the same solution as calling setup! with the modified A and q
-    (I, J) = findn(A)
+    (rows, cols, _) = findnz(A)
     Amodindex = rand(rng, 1 : nnz(A))
-    row = I[Amodindex]
-    col = J[Amodindex]
+    row = rows[Amodindex]
+    col = cols[Amodindex]
     val = randn(rng)
     modcache.A[row, col] = val
     MathOptInterfaceOSQP.processupdates!(model, modcache)
@@ -61,7 +63,7 @@ const Affine = MOI.ScalarAffineFunction{Float64}
     model3 = OSQP.Model()
     OSQP.setup!(model3; P = P, q = modcache.q.data, A = Amod, l = l, u = u, verbose = false, eps_abs = 1e-8, eps_rel = 1e-16)
     Amod_setup_results = OSQP.solve!(model3)
-    @test Amod_update_results.x ≈ Amod_setup_results.x atol = 1e-8
+    @test Amod_update_results.x ≈ Amod_setup_results.x atol = 1e-7
 
     # MatrixModificationCache: colon indexing
     modcache.P[:] = 0.
@@ -71,16 +73,16 @@ const Affine = MOI.ScalarAffineFunction{Float64}
     MathOptInterfaceOSQP.processupdates!(model, modcache)
     Pmod_update_results = OSQP.solve!(model)
     model4 = OSQP.Model()
-    Pmod = speye(n, n)
+    Pmod = sparse(1.0I, n, n)
     OSQP.setup!(model4; P = Pmod, q = modcache.q.data, A = Amod, l = l, u = u, verbose = false, eps_abs = 1e-8, eps_rel = 1e-16)
     Pmod_setup_results = OSQP.solve!(model4)
     @test Pmod_update_results.x ≈ Pmod_setup_results.x atol = 1e-8
 
     # Modifying the sparsity pattern is not allowed
-    nzinds = map(CartesianIndex, zip(I, J))
+    nzinds = map(CartesianIndex, zip(rows, cols))
     zinds = zinds = setdiff(vec(CartesianIndices(A)), nzinds)
-    for I in zinds
-        @test_throws ArgumentError modcache.A[I[1], I[2]] = randn(rng)
+    for zind in zinds
+        @test_throws ArgumentError modcache.A[zind[1], zind[2]] = randn(rng)
     end
     @test_throws ArgumentError modcache.A[:] = 1
 end
@@ -220,7 +222,7 @@ term(c, x::MOI.VariableIndex, y::MOI.VariableIndex) = MOI.ScalarQuadraticTerm(c,
     @test MOI.get(optimizer, MOI.TerminationStatus()) == MOI.Success
     @test MOI.get(optimizer, MOI.PrimalStatus()) == MOI.FeasiblePoint
     @test MOI.get(optimizer, MOI.ObjectiveValue()) ≈ -1 atol=atol rtol=rtol
-    @test MOI.get(optimizer, MOI.VariablePrimal(), getindex.(idxmap, v)) ≈ [1, 0] atol=atol rtol=rtol
+    @test MOI.get(optimizer, MOI.VariablePrimal(), getindex.(Ref(idxmap), v)) ≈ [1, 0] atol=atol rtol=rtol
     @test MOI.get(optimizer, MOI.DualStatus()) == MOI.FeasiblePoint
     @test MOI.get(optimizer, MOI.ConstraintDual(), idxmap[c]) ≈ -1 atol=atol rtol=rtol
     @test MOI.get(optimizer, MOI.ConstraintDual(), idxmap[vc1]) ≈ 0 atol=atol rtol=rtol
@@ -320,7 +322,7 @@ term(c, x::MOI.VariableIndex, y::MOI.VariableIndex) = MOI.ScalarQuadraticTerm(c,
         @test MOI.get(optimizer, MOI.TerminationStatus()) == MOI.Success
         @test MOI.get(optimizer, MOI.PrimalStatus()) == MOI.FeasiblePoint
         @test MOI.get(optimizer, MOI.ObjectiveValue()) ≈ -1 atol=atol rtol=rtol
-        @test MOI.get(optimizer, MOI.VariablePrimal(), getindex.(idxmap, v)) ≈ [-1, 0] atol=atol rtol=rtol
+        @test MOI.get(optimizer, MOI.VariablePrimal(), getindex.(Ref(idxmap), v)) ≈ [-1, 0] atol=atol rtol=rtol
         @test MOI.get(optimizer, MOI.DualStatus()) == MOI.FeasiblePoint
         @test MOI.get(optimizer, MOI.ConstraintDual(), idxmap[c]) ≈ 1 atol=atol rtol=rtol
         @test MOI.get(optimizer, MOI.ConstraintDual(), idxmap[vc1]) ≈ 0 atol=atol rtol=rtol
@@ -370,7 +372,7 @@ end
     @test MOI.get(optimizer, MOI.TerminationStatus()) == MOI.Success
     @test MOI.get(optimizer, MOI.PrimalStatus()) == MOI.FeasiblePoint
     @test MOI.get(optimizer, MOI.ObjectiveValue()) ≈ 20. atol=atol rtol=rtol
-    @test MOI.get(optimizer, MOI.VariablePrimal(), getindex.(idxmap, x)) ≈ [0.; 5.] atol=atol rtol=rtol
+    @test MOI.get(optimizer, MOI.VariablePrimal(), getindex.(Ref(idxmap), x)) ≈ [0.; 5.] atol=atol rtol=rtol
     @test MOI.get(optimizer, MOI.DualStatus()) == MOI.FeasiblePoint
     @test MOI.get(optimizer, MOI.ConstraintDual(), idxmap[c]) ≈ -[1.666666666666; 0.; 1.3333333; 0.; 0.] atol=atol rtol=rtol
 
@@ -433,7 +435,7 @@ end
     check_results = function (optimizer, idxmap, x, A, b, expected)
         @test MOI.get(optimizer, MOI.TerminationStatus()) == MOI.Success
         @test MOI.get(optimizer, MOI.PrimalStatus()) == MOI.FeasiblePoint
-        @test MOI.get.(optimizer, MOI.VariablePrimal(), getindex.(idxmap, x)) ≈ expected atol = 1e-4
+        @test MOI.get.(optimizer, MOI.VariablePrimal(), getindex.(Ref(idxmap), x)) ≈ expected atol = 1e-4
         @test MOI.get(optimizer, MOI.ObjectiveValue()) ≈ norm(A * expected - b)^2 atol = 1e-4
     end
 

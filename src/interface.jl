@@ -1,13 +1,12 @@
 # Wrapper for the low level functions defined in https://github.com/oxfordcontrol/osqp/blob/master/include/osqp.h
 
 # Ensure compatibility between Julia versions with @gc_preserve
-macro compat_gc_preserve(args...)
-    vars = args[1:end - 1]
-    body = args[end]
-    if VERSION > v"0.7.0-"
-        return esc(Expr(:macrocall, Expr(:., :Base, Base.Meta.quot(Symbol("@gc_preserve"))), __source__, args...))
-    else
-        return esc(body)
+@static if isdefined(Base, :GC)
+    import Base.GC: @preserve
+else
+    macro preserve(args...)
+        body = args[end]
+        esc(body)
     end
 end
 
@@ -105,11 +104,11 @@ function setup!(model::OSQP.Model;
 
     # Check or sparsify matrices
     if !issparse(P)
-        warn("P is not sparse. Sparsifying it now (it might take a while)")
+        Compat.@warn("P is not sparse. Sparsifying it now (it might take a while)")
         P = sparse(P)
     end
     if !issparse(A)
-        warn("A is not sparse. Sparsifying it now (it might take a while)")
+        Compat.@warn("A is not sparse. Sparsifying it now (it might take a while)")
         A = sparse(A)
     end
 
@@ -129,13 +128,6 @@ function setup!(model::OSQP.Model;
     Pdata = Ref(OSQP.Ccsc(managedP))
     Adata = Ref(OSQP.Ccsc(managedA))
 
-    # Create OSQP data using the managed matrices pointers
-    data = OSQP.Data(n, m,
-                     Base.unsafe_convert(Ptr{OSQP.Ccsc}, Pdata),
-                     Base.unsafe_convert(Ptr{OSQP.Ccsc}, Adata),
-                     pointer(q),
-                     pointer(l), pointer(u))
-
     # Create OSQP settings
     settings_dict = Dict{Symbol,Any}()
     if !isempty(settings)
@@ -146,8 +138,15 @@ function setup!(model::OSQP.Model;
 
     stgs = OSQP.Settings(settings_dict)
 
-    # Perform setup
-    @compat_gc_preserve managedP Pdata managedA Adata q l u begin
+    @preserve managedP Pdata managedA Adata q l u begin
+        # Create OSQP data using the managed matrices pointers
+        data = OSQP.Data(n, m,
+                        Base.unsafe_convert(Ptr{OSQP.Ccsc}, Pdata),
+                        Base.unsafe_convert(Ptr{OSQP.Ccsc}, Adata),
+                        pointer(q),
+                        pointer(l), pointer(u))
+
+        # Perform setup
         model.workspace = ccall((:osqp_setup, OSQP.osqp), Ptr{OSQP.Workspace},
             (Ptr{OSQP.Data}, Ptr{OSQP.Settings}), Ref(data), Ref(stgs))
     end
@@ -515,7 +514,7 @@ function linsys_solver_str_to_int!(settings_dict::Dict{Symbol,Any})
         elseif linsys_str == ""
             settings_dict[:linsys_solver] = SUITESPARSE_LDL_SOLVER
         else
-            warn("Linear system solver not recognized. Using default SuiteSparse LDL")
+            Compat.@warn("Linear system solver not recognized. Using default SuiteSparse LDL")
             settings_dict[:linsys_solver] = SUITESPARSE_LDL_SOLVER
 
         end

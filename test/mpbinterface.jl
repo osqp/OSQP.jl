@@ -33,7 +33,7 @@ include(joinpath(Pkg.dir("MathProgBase"), "test", "linproginterface.jl"))
         m = LinearQuadraticModel(solver)
         loadproblem!(m, [1. 2. 3.; 1. 1. 0.],[-Inf,-Inf,-Inf],[Inf,Inf,Inf],[0.,0.,0.],[4., 1.],[Inf,Inf], :Min)
 
-        setquadobj!(m,diagm([10.0,10.0,10.0]))
+        setquadobj!(m,diagm(0 => [10.0,10.0,10.0]))
         rows = [1, 2, 2, 2, 3, 3, 3]
         cols = [1, 1, 1, 2, 2, 3, 3]
         vals = Float64[2, 0.5, 0.5, 2, 1, 1, 1]

@@ -1,5 +1,9 @@
 module ModificationCaches
 
+using Compat
+using Compat.LinearAlgebra
+using Compat.SparseArrays
+
 export
     VectorModificationCache,
     MatrixModificationCache,
@@ -16,7 +20,7 @@ mutable struct VectorModificationCache{T}
     VectorModificationCache(data::Vector{T}) where {T} = new{T}(copy(data), false)
 end
 Base.setindex!(cache::VectorModificationCache, x, i::Integer) = (cache.dirty = true; cache.data[i] = x)
-Base.setindex!(cache::VectorModificationCache, x, ::Colon) = (cache.dirty = true; cache.data[:] = x)
+Base.setindex!(cache::VectorModificationCache, x, ::Colon) = (cache.dirty = true; cache.data .= x)
 Base.getindex(cache::VectorModificationCache, i::Integer) = cache.data[i]
 
 function processupdates!(model, cache::VectorModificationCache, updatefun::Function)
