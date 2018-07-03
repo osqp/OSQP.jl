@@ -1,7 +1,5 @@
 module MathOptInterfaceOSQP
 
-export OSQPOptimizer, OSQPSettings, OSQPModel
-
 include("modcaches.jl")
 using .ModificationCaches
 
@@ -9,6 +7,8 @@ using Compat
 using Compat.SparseArrays
 using MathOptInterface
 using MathOptInterface.Utilities
+
+export OSQPOptimizer, OSQPSettings, OSQPModel
 
 const MOI = MathOptInterface
 const MOIU = MathOptInterface.Utilities
@@ -391,11 +391,11 @@ end
 ## Solver-specific optimizer attributes:
 module OSQPSettings
 
-export OSQPAttribute, isupdatable
-
 using Compat
 using MathOptInterface
 using OSQP
+
+export OSQPAttribute, isupdatable
 
 abstract type OSQPAttribute <: MathOptInterface.AbstractOptimizerAttribute end
 
