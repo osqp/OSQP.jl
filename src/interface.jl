@@ -507,15 +507,15 @@ function linsys_solver_str_to_int!(settings_dict::Dict{Symbol,Any})
          # Convert to lower case
         linsys_str = lowercase(linsys_str)
 
-        if linsys_str == "suitesparse ldl"
-            settings_dict[:linsys_solver] = SUITESPARSE_LDL_SOLVER
+        if linsys_str == "qdldl"
+            settings_dict[:linsys_solver] = QDLDL_SOLVER
         elseif linsys_str == "mkl pardiso"
             settings_dict[:linsys_solver] = MKL_PARDISO_SOLVER
         elseif linsys_str == ""
-            settings_dict[:linsys_solver] = SUITESPARSE_LDL_SOLVER
+            settings_dict[:linsys_solver] = QDLDL_SOLVER
         else
-            Compat.@warn("Linear system solver not recognized. Using default SuiteSparse LDL")
-            settings_dict[:linsys_solver] = SUITESPARSE_LDL_SOLVER
+            Compat.@warn("Linear system solver not recognized. Using default QDLDL")
+            settings_dict[:linsys_solver] = QDLDL_SOLVER
 
         end
     end

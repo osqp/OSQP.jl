@@ -160,6 +160,7 @@ function MathProgBase.status(model::OSQPMathProgModel)::Symbol
     osqpstatus == :Dual_infeasible && (status = :Unbounded)
     osqpstatus == :Dual_infeasible_inaccurate && (status = :Unbounded)
     osqpstatus == :Time_limit_reached && (status = :UserLimit)
+    osqpstatus == :Non_convex && (status = :Error)
 
     return status
 end

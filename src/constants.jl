@@ -15,6 +15,7 @@ const status_map = Dict{Int,Symbol}(4 => :Dual_infeasible_inaccurate,
     -4 => :Dual_infeasible,
     -5 => :Interrupted,
     -6 => :Time_limit_reached,
+    -7 => :Non_convex,
     -10 => :Unsolved)
 
 const SOLUTION_PRESENT = [:Solved_inaccurate, :Solved, :Max_iter_reached]
