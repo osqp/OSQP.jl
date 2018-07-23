@@ -532,7 +532,7 @@ function MOI.get(optimizer::OSQPOptimizer, a::MOI.TerminationStatus)
     elseif osqpstatus == :Primal_infeasible_inaccurate
         MOI.AlmostSuccess
     elseif osqpstatus == :Non_convex
-	MOI.InvalidModel
+        MOI.InvalidModel
     end
 end
 
