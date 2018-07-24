@@ -1,4 +1,4 @@
-Version 0.2.0 (23 July 2018): OSQP v0.4.0
+Version 0.2.0 (24 July 2018): OSQP v0.4.0
 -----------------------------------------
 * Upgraded OSQP to 0.4.0 version
 

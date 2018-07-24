@@ -44,7 +44,7 @@ downloadsdir = joinpath(BinDeps.depsdir(osqp),"downloads")
 libname = "libosqp.$(dlext)"
 
 # File move rule to move QDLDL sources
-type FileMoveRule <: BinDeps.BuildStep
+struct FileMoveRule <: BinDeps.BuildStep
     src::AbstractString
     dest::AbstractString
 end
