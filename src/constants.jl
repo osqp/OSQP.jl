@@ -1,4 +1,4 @@
-const SUITESPARSE_LDL_SOLVER = 0
+const QDLDL_SOLVER = 0
 const MKL_PARDISO_SOLVER = 1
 
 # Define OSQP infinity constants
