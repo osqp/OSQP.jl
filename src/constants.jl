@@ -1,4 +1,4 @@
-const SUITESPARSE_LDL_SOLVER = 0
+const QDLDL_SOLVER = 0
 const MKL_PARDISO_SOLVER = 1
 
 # Define OSQP infinity constants
@@ -15,6 +15,7 @@ const status_map = Dict{Int,Symbol}(4 => :Dual_infeasible_inaccurate,
     -4 => :Dual_infeasible,
     -5 => :Interrupted,
     -6 => :Time_limit_reached,
+    -7 => :Non_convex,
     -10 => :Unsolved)
 
 const SOLUTION_PRESENT = [:Solved_inaccurate, :Solved, :Max_iter_reached]

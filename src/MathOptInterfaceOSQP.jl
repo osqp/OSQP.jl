@@ -531,6 +531,8 @@ function MOI.get(optimizer::OSQPOptimizer, a::MOI.TerminationStatus)
         MOI.AlmostSuccess
     elseif osqpstatus == :Primal_infeasible_inaccurate
         MOI.AlmostSuccess
+    elseif osqpstatus == :Non_convex
+        MOI.InvalidModel
     end
 end
 
@@ -548,7 +550,7 @@ function MOI.get(optimizer::OSQPOptimizer, a::MOI.PrimalStatus)
         MOI.NearlyInfeasibilityCertificate
     elseif osqpstatus == :Dual_infeasible
         MOI.InfeasibilityCertificate
-    else # :Interrupted, :Max_iter_reached, :Solved_inaccurate (TODO: good idea? use OSQP.SOLUTION_PRESENT?)
+    else # :Interrupted, :Max_iter_reached, :Solved_inaccurate, :Non_convex (TODO: good idea? use OSQP.SOLUTION_PRESENT?)
         MOI.UnknownResultStatus
     end
 end
@@ -567,7 +569,7 @@ function MOI.get(optimizer::OSQPOptimizer, a::MOI.DualStatus)
         MOI.AlmostInfeasibilityCertificate
     elseif osqpstatus == :Solved
         MOI.FeasiblePoint
-    else # :Interrupted, :Max_iter_reached, :Solved_inaccurate (TODO: good idea? use OSQP.SOLUTION_PRESENT?)
+    else # :Interrupted, :Max_iter_reached, :Solved_inaccurate, :Non_convex (TODO: good idea? use OSQP.SOLUTION_PRESENT?)
         MOI.UnknownResultStatus
     end
 end

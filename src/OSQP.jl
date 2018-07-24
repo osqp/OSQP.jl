@@ -25,8 +25,8 @@ function __init__()
 
 
     depsdir = realpath(joinpath(dirname(@__FILE__), "..", "deps"))
-    if (vnum.major != 0 && vnum.minor != 2)
-        error("Current OSQP version installed is $(osqp_version()), but we require version 0.2.*. Delete the contents of the `$depsdir` directory except for the files `build.jl` and `.gitignore`, then rerun Pkg.build(\"OSQP\").")
+    if (vnum.major != 0 && vnum.minor != 4)
+        error("Current OSQP version installed is $(osqp_version()), but we require version 0.4.*. Delete the contents of the `$depsdir` directory except for the files `build.jl` and `.gitignore`, then rerun Pkg.build(\"OSQP\").")
     end
 end
 
