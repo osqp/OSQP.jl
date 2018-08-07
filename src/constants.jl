@@ -24,7 +24,7 @@ const SOLUTION_PRESENT = [:Solved_inaccurate, :Solved, :Max_iter_reached]
 const UPDATABLE_DATA = [:q, :l, :u, :Px, :Px_idx, :Ax, :Ax_idx]
 
 # UPDATABLE_SETTINGS
-const UPDATABLE_SETTINGS = [:max_iter, :eps_aps, :eps_rel, :eps_prim_inf, :eps_dual_inf, :time_limit,
+const UPDATABLE_SETTINGS = [:max_iter, :eps_abs, :eps_rel, :eps_prim_inf, :eps_dual_inf, :time_limit,
               :rho, :alpha, :delta, :polish, :polish_refine_iter, :verbose,
               :check_termination,:warm_start]
 
