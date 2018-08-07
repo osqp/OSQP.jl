@@ -138,9 +138,8 @@ function test_optimizer_modification(modfun::Base.Callable, model::MOI.ModelLike
 
     # copy model into clean optimizer
     copyresult = MOI.copy!(cleanoptimizer, model)
-    @test copyresult.status == MOI.CopySuccess
-    @test copyresult.indexmap.varmap == idxmap.varmap
-    @test copyresult.indexmap.conmap == idxmap.conmap
+    @test copyresult.varmap == idxmap.varmap
+    @test copyresult.conmap == idxmap.conmap
 
     # call optimize! on both optimizers
     MOI.optimize!(optimizer)
@@ -205,8 +204,7 @@ term(c, x::MOI.VariableIndex, y::MOI.VariableIndex) = MOI.ScalarQuadraticTerm(c,
     MOI.set!(model, MOI.ObjectiveSense(), MOI.MinSense)
 
     optimizer = defaultoptimizer()
-    copyresult = MOI.copy!(optimizer, model)
-    idxmap = copyresult.indexmap
+    idxmap = MOI.copy!(optimizer, model)
     @test MOI.canget(optimizer, MOI.ObjectiveSense())
     @test MOI.get(optimizer, MOI.ObjectiveSense()) == MOI.MinSense
     @test MOI.get(optimizer, MOI.NumberOfVariables()) == 2
@@ -249,7 +247,6 @@ term(c, x::MOI.VariableIndex, y::MOI.VariableIndex) = MOI.ScalarQuadraticTerm(c,
     test_optimizer_modification(model, optimizer, idxmap, defaultoptimizer(), config) do m
         newobjf = MOI.ScalarAffineFunction([term(-2.0, mapfrommodel(m, y))], 0.0)
         F = typeof(newobjf)
-        @test MOI.canset(m, MOI.ObjectiveFunction{F}())
         MOI.set!(m, MOI.ObjectiveFunction{F}(), newobjf)
     end
 
@@ -258,7 +255,6 @@ term(c, x::MOI.VariableIndex, y::MOI.VariableIndex) = MOI.ScalarQuadraticTerm(c,
     objconstant = 1.5
     test_optimizer_modification(model, optimizer, idxmap, defaultoptimizer(), config) do m
         attr = MOI.ObjectiveFunction{Affine}()
-        @test MOI.canmodify(m, attr, MOI.ScalarConstantChange)
         MOI.modify!(m, attr, MOI.ScalarConstantChange(objconstant))
     end
     objval_after = MOI.get(optimizer, MOI.ObjectiveValue())
@@ -267,7 +263,6 @@ term(c, x::MOI.VariableIndex, y::MOI.VariableIndex) = MOI.ScalarQuadraticTerm(c,
     # change objective to min -y using ScalarCoefficientChange
     test_optimizer_modification(model, optimizer, idxmap, defaultoptimizer(), config) do m
         attr = MOI.ObjectiveFunction{Affine}()
-        @test MOI.canmodify(m, attr, MOI.ScalarCoefficientChange{Float64})
         MOI.modify!(m, attr, MOI.ScalarCoefficientChange(mapfrommodel(m, y), -1.0))
     end
     @test MOI.get(optimizer, MOI.ObjectiveValue()) ≈ 0.5 * objval_before + objconstant atol = 1e-8
@@ -276,14 +271,12 @@ term(c, x::MOI.VariableIndex, y::MOI.VariableIndex) = MOI.ScalarQuadraticTerm(c,
     test_optimizer_modification(model, optimizer, idxmap, defaultoptimizer(), config) do m
         attr = MOI.ConstraintFunction()
         ci =  mapfrommodel(m, c)
-        @test MOI.canset(m, attr, typeof(ci))
         MOI.set!(m, attr, ci, MOI.ScalarAffineFunction(term.([1.0, 1.0, 1.0], mapfrommodel.(m, [x, x, y])), 0.5))
     end
 
     # change back to x + y <= 1 using ScalarCoefficientChange
     test_optimizer_modification(model, optimizer, idxmap, defaultoptimizer(), config) do m
         ci = mapfrommodel(m, c)
-        @test MOI.canmodify(m, typeof(ci), MOI.ScalarCoefficientChange{Float64})
         MOI.modify!(m, ci, MOI.ScalarCoefficientChange(mapfrommodel(m, y), 1.0))
     end
 
@@ -292,29 +285,24 @@ term(c, x::MOI.VariableIndex, y::MOI.VariableIndex) = MOI.ScalarQuadraticTerm(c,
         # objective
         newobjf = MOI.SingleVariable(mapfrommodel(m, x))
         F = typeof(newobjf)
-        @test MOI.canset(m, MOI.ObjectiveFunction{F}())
         MOI.set!(m, MOI.ObjectiveFunction{F}(), newobjf)
 
         # c
         attr = MOI.ConstraintFunction()
         ci = mapfrommodel(m, c)
-        @test MOI.canset(m, attr, typeof(ci))
         MOI.set!(m, attr, ci, MOI.ScalarAffineFunction(term.([1.0, 1.0], mapfrommodel.(m, [x, y])), 0.0))
 
         attr = MOI.ConstraintSet()
-        @test MOI.canset(m, attr, typeof(ci))
         MOI.set!(m, attr, ci, MOI.Interval(-1.0, Inf))
 
         # vc1
         attr = MOI.ConstraintSet()
         ci = mapfrommodel(m, vc1)
-        @test MOI.canset(m, attr, typeof(ci))
         MOI.set!(m, attr, ci, MOI.Interval(-Inf, 0.))
 
         # vc2
         attr = MOI.ConstraintSet()
         ci = mapfrommodel(m, vc2)
-        @test MOI.canset(m, attr, typeof(ci))
         MOI.set!(m, attr, ci, MOI.Interval(-Inf, 0.))
     end
 
@@ -332,7 +320,6 @@ term(c, x::MOI.VariableIndex, y::MOI.VariableIndex) = MOI.ScalarQuadraticTerm(c,
 
     # update settings
     @test optimizer.results.info.status_polish == 0
-    @test MOI.canset(optimizer, OSQPSettings.Polish())
     MOI.set!(optimizer, OSQPSettings.Polish(), true)
     MOI.optimize!(optimizer)
     @test optimizer.results.info.status_polish == 1
@@ -355,8 +342,7 @@ end
     c = MOI.addconstraint!(model, cf, MOI.Nonpositives(length(u)))
 
     optimizer = defaultoptimizer()
-    copyresult = MOI.copy!(optimizer, model)
-    idxmap = copyresult.indexmap
+    idxmap = MOI.copy!(optimizer, model)
     @test MOI.canget(optimizer, MOI.ObjectiveSense())
     @test MOI.get(optimizer, MOI.ObjectiveSense()) == MOI.MinSense
     @test MOI.get(optimizer, MOI.NumberOfVariables()) == 2
@@ -394,7 +380,6 @@ end
         test_optimizer_modification(model, optimizer, idxmap, defaultoptimizer(), randvectorconfig) do m
             attr = MOI.ConstraintFunction()
             ci = mapfrommodel(m, c)
-            @test MOI.canset(m, attr, typeof(ci))
             newcf = MOI.VectorAffineFunction(MOI.VectorAffineTerm.(Int64.(I), term.(newcoeffs, map(j -> getindex(x, j), J))), newconst)
             MOI.set!(m, attr, ci, newcf)
         end
@@ -451,8 +436,7 @@ end
     c = MOI.addconstraint!(model, make_constraint_fun(C, d, x), MOI.Zeros(length(d)))
 
     optimizer = defaultoptimizer()
-    copyresult = MOI.copy!(optimizer, model)
-    idxmap = copyresult.indexmap
+    idxmap = MOI.copy!(optimizer, model)
     MOI.optimize!(optimizer)
     check_results(optimizer, idxmap, x, A, b, expected)
 
@@ -497,5 +481,5 @@ MOI.canget(src::BadObjectiveModel, ::MOI.ObjectiveFunction{<:Any}) = false
 @testset "failcopy" begin
     optimizer = OSQPOptimizer()
     MOIT.failcopytestc(optimizer)
-    MOIT.failcopytest(optimizer, BadObjectiveModel(), MOI.CopyOtherError)
+    @test_throws MOI.CopyOtherError MOI.copy!(optimizer, BadObjectiveModel())
 end
