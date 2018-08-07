@@ -108,31 +108,20 @@ MOI.isempty(optimizer::OSQPOptimizer) = optimizer.isempty
 
 struct UnsupportedObjectiveError <: Exception end
 
-struct UnsupportedConstraintError
-    F::Type
-    S::Type
-end
-
 function MOI.copy!(dest::OSQPOptimizer, src::MOI.ModelLike; copynames=false)
     copynames && error("Copying names is not supported.")
-    try
-        MOI.empty!(dest)
-        idxmap = MOIU.IndexMap(dest, src)
-        assign_constraint_row_ranges!(dest.rowranges, idxmap, src)
-        dest.sense, P, q, dest.objconstant = processobjective(src, idxmap)
-        A, l, u, dest.constrconstant = processconstraints(src, idxmap, dest.rowranges)
-        OSQP.setup!(dest.inner; P = P, q = q, A = A, l = l, u = u, dest.settings...)
-        dest.modcache = ProblemModificationCache(P, q, A, l, u)
-        dest.warmstartcache = WarmStartCache{Float64}(size(A, 2), size(A, 1))
-        processprimalstart!(dest.warmstartcache.x, src, idxmap)
-        processdualstart!(dest.warmstartcache.y, src, idxmap, dest.rowranges)
-        dest.isempty = false
-        return MOI.CopyResult(MOI.CopySuccess, "", idxmap)
-    catch e
-        e isa UnsupportedObjectiveError && return MOI.CopyResult(MOI.CopyOtherError, "Unsupported objective", MOIU.IndexMap())
-        e isa UnsupportedConstraintError && return MOI.CopyResult(MOI.CopyUnsupportedConstraint, "Unsupported $(e.F)-in-$(e.S) constraint", MOIU.IndexMap())
-        rethrow(e)
-    end
+    MOI.empty!(dest)
+    idxmap = MOIU.IndexMap(dest, src)
+    assign_constraint_row_ranges!(dest.rowranges, idxmap, src)
+    dest.sense, P, q, dest.objconstant = processobjective(src, idxmap)
+    A, l, u, dest.constrconstant = processconstraints(src, idxmap, dest.rowranges)
+    OSQP.setup!(dest.inner; P = P, q = q, A = A, l = l, u = u, dest.settings...)
+    dest.modcache = ProblemModificationCache(P, q, A, l, u)
+    dest.warmstartcache = WarmStartCache{Float64}(size(A, 2), size(A, 1))
+    processprimalstart!(dest.warmstartcache.x, src, idxmap)
+    processdualstart!(dest.warmstartcache.y, src, idxmap, dest.rowranges)
+    dest.isempty = false
+    idxmap
 end
 
 """
@@ -146,7 +135,7 @@ function MOIU.IndexMap(dest::OSQPOptimizer, src::MOI.ModelLike)
     end
     i = 0
     for (F, S) in MOI.get(src, MOI.ListOfConstraints())
-        MOI.supportsconstraint(dest, F, S) || throw(UnsupportedConstraintError(F, S))
+        MOI.supportsconstraint(dest, F, S) || throw(MOI.UnsupportedConstraint{F, S}())
         cis_src = MOI.get(src, MOI.ListOfConstraintIndices{F, S}())
         for ci in cis_src
             i += 1
@@ -374,6 +363,7 @@ end
 ## Standard optimizer attributes:
 MOI.canget(optimizer::OSQPOptimizer, ::MOI.ObjectiveSense) = true
 MOI.get(optimizer::OSQPOptimizer, ::MOI.ObjectiveSense) = optimizer.sense
+MOI.set!(optimizer::OSQPOptimizer, ::MOI.ObjectiveSense, sense::MOI.OptimizationSense) = optimizer.sense = sense
 
 MOI.canget(optimizer::OSQPOptimizer, ::MOI.NumberOfVariables) = !MOI.isempty(optimizer) # https://github.com/oxfordcontrol/OSQP.jl/issues/10
 function MOI.get(optimizer::OSQPOptimizer, a::MOI.NumberOfVariables)
@@ -420,9 +410,8 @@ end # module
 
 using .OSQPSettings
 
-MOI.canset(optimizer::OSQPOptimizer, a::OSQPAttribute) = isupdatable(a) || MOI.isempty(optimizer)
 function MOI.set!(optimizer::OSQPOptimizer, a::OSQPAttribute, value)
-    MOI.canset(optimizer, a) || error()
+    (isupdatable(a) || MOI.isempty(optimizer)) || throw(MOI.CannotSetAttribute(a))
     setting = Symbol(a)
     optimizer.settings[setting] = value
     if !MOI.isempty(optimizer)
@@ -448,19 +437,19 @@ end
 
 
 ## Optimizer attributes:
-MOI.canget(optimizer::OSQPOptimizer, ::MOI.RawSolver) = true
+MOI.canget(::OSQPOptimizer, ::MOI.RawSolver) = true
 MOI.get(optimizer::OSQPOptimizer, ::MOI.RawSolver) = optimizer.inner
 
-MOI.canget(optimizer::OSQPOptimizer, ::MOI.ResultCount) = true
+MOI.canget(::OSQPOptimizer, ::MOI.ResultCount) = true
 MOI.get(optimizer::OSQPOptimizer, ::MOI.ResultCount) = 1
 
 MOI.supports(::OSQPOptimizer, ::MOI.ObjectiveFunction{MOI.SingleVariable}) = true
 MOI.supports(::OSQPOptimizer, ::MOI.ObjectiveFunction{MOI.ScalarAffineFunction{Float64}}) = true
 MOI.supports(::OSQPOptimizer, ::MOI.ObjectiveFunction{Quadratic}) = true
+MOI.supports(::OSQPOptimizer, ::MOI.ObjectiveSense) = true
 
-MOI.canset(optimizer::OSQPOptimizer, ::MOI.ObjectiveFunction{MOI.SingleVariable}) = !MOI.isempty(optimizer)
 function MOI.set!(optimizer::OSQPOptimizer, a::MOI.ObjectiveFunction{MOI.SingleVariable}, obj::MOI.SingleVariable)
-    MOI.canset(optimizer, a) || error()
+    MOI.isempty(optimizer) && throw(MOI.CannotSetAttribute(a))
     optimizer.modcache.P[:] = 0
     optimizer.modcache.q[:] = 0
     optimizer.modcache.q[obj.variable.value] = 1
@@ -468,18 +457,16 @@ function MOI.set!(optimizer::OSQPOptimizer, a::MOI.ObjectiveFunction{MOI.SingleV
     nothing
 end
 
-MOI.canset(optimizer::OSQPOptimizer, ::MOI.ObjectiveFunction{MOI.ScalarAffineFunction{Float64}}) = !MOI.isempty(optimizer)
 function MOI.set!(optimizer::OSQPOptimizer, a::MOI.ObjectiveFunction{MOI.ScalarAffineFunction{Float64}}, obj::MOI.ScalarAffineFunction{Float64})
-    MOI.canset(optimizer, a) || error()
+    MOI.isempty(optimizer) && throw(MOI.CannotSetAttribute(a))
     optimizer.modcache.P[:] = 0
     processlinearterms!(optimizer.modcache.q, obj.terms)
     optimizer.objconstant = obj.constant
     nothing
 end
 
-MOI.canset(optimizer::OSQPOptimizer, ::MOI.ObjectiveFunction{Quadratic}) = !MOI.isempty(optimizer)
 function MOI.set!(optimizer::OSQPOptimizer, a::MOI.ObjectiveFunction{Quadratic}, obj::Quadratic)
-    MOI.canset(optimizer, a) || error()
+    MOI.isempty(optimizer) && throw(MOI.CannotSetAttribute(a))
     cache = optimizer.modcache
     cache.P[:] = 0
     for term in obj.quadratic_terms
@@ -579,7 +566,6 @@ end
 function MOI.isvalid(optimizer::OSQPOptimizer, vi::VI)
     MOI.canget(optimizer, MOI.NumberOfVariables()) && vi.value ∈ 1 : MOI.get(optimizer, MOI.NumberOfVariables())
 end
-MOI.canaddvariable(optimizer::OSQPOptimizer) = false
 
 
 ## Variable attributes:
@@ -594,9 +580,8 @@ function MOI.get(optimizer::OSQPOptimizer, a::MOI.VariablePrimal, vi::VI)
     x[vi.value]
 end
 
-MOI.canset(optimizer::OSQPOptimizer, ::MOI.VariablePrimalStart, ::Type{VI}) = !MOI.isempty(optimizer)
 function MOI.set!(optimizer::OSQPOptimizer, a::MOI.VariablePrimalStart, vi::VI, value)
-    MOI.canset(optimizer, a, typeof(vi)) || error()
+    MOI.isempty(optimizer) && throw(MOI.CannotSetAttribute(a))
     optimizer.warmstartcache.x[vi.value] = value
 end
 
@@ -607,9 +592,8 @@ function MOI.isvalid(optimizer::OSQPOptimizer, ci::CI)
     ci.value ∈ keys(optimizer.rowranges)
 end
 
-MOI.canset(optimizer::OSQPOptimizer, ::MOI.ConstraintDualStart, ::Type{<:CI}) = !MOI.isempty(optimizer)
 function MOI.set!(optimizer::OSQPOptimizer, a::MOI.ConstraintDualStart, ci::CI, value)
-    MOI.canset(optimizer, a, typeof(ci)) || error()
+    MOI.isempty(optimizer) && throw(MOI.CannotSetAttribute(a))
     rows = constraint_rows(optimizer, ci)
     for (i, row) in enumerate(rows)
         optimizer.warmstartcache.y[row] = -value[i] # opposite dual convention
@@ -618,9 +602,7 @@ function MOI.set!(optimizer::OSQPOptimizer, a::MOI.ConstraintDualStart, ci::CI, 
 end
 
 # function modification:
-MOI.canset(optimizer::OSQPOptimizer, ::MOI.ConstraintFunction, ::Type{<:CI{Affine, <:IntervalConvertible}}) = true
 function MOI.set!(optimizer::OSQPOptimizer, attr::MOI.ConstraintFunction, ci::CI{Affine, <:IntervalConvertible}, f::Affine)
-    MOI.canset(optimizer, attr, typeof(ci)) || error()
     MOI.isvalid(optimizer, ci) || error("Invalid constraint index")
     row = constraint_rows(optimizer, ci)
     optimizer.modcache.A[row, :] = 0
@@ -636,9 +618,7 @@ function MOI.set!(optimizer::OSQPOptimizer, attr::MOI.ConstraintFunction, ci::CI
     nothing
 end
 
-MOI.canset(optimizer::OSQPOptimizer, ::MOI.ConstraintFunction, ::Type{<:CI{VectorAffine, <:SupportedVectorSets}}) = true
 function MOI.set!(optimizer::OSQPOptimizer, attr::MOI.ConstraintFunction, ci::CI{VectorAffine, <:SupportedVectorSets}, f::VectorAffine)
-    MOI.canset(optimizer, attr, typeof(ci)) || error()
     MOI.isvalid(optimizer, ci) || error("Invalid constraint index")
     rows = constraint_rows(optimizer, ci)
     for row in rows
@@ -659,9 +639,7 @@ function MOI.set!(optimizer::OSQPOptimizer, attr::MOI.ConstraintFunction, ci::CI
 end
 
 # set modification:
-MOI.canset(optimizer::OSQPOptimizer, ::MOI.ConstraintSet, ::Type{<:CI{<:AffineConvertible, S}}) where {S <: IntervalConvertible} = true
 function MOI.set!(optimizer::OSQPOptimizer, attr::MOI.ConstraintSet, ci::CI{<:AffineConvertible, S}, s::S) where {S <: IntervalConvertible}
-    MOI.canset(optimizer, attr, typeof(ci)) || error()
     MOI.isvalid(optimizer, ci) || error("Invalid constraint index")
     interval = MOI.Interval(s)
     row = constraint_rows(optimizer, ci)
@@ -671,9 +649,7 @@ function MOI.set!(optimizer::OSQPOptimizer, attr::MOI.ConstraintSet, ci::CI{<:Af
     nothing
 end
 
-MOI.canset(optimizer::OSQPOptimizer, ::MOI.ConstraintSet, ::Type{<:CI{<:VectorAffine, S}}) where {S <: SupportedVectorSets} = true
 function MOI.set!(optimizer::OSQPOptimizer,  attr::MOI.ConstraintSet, ci::CI{<:VectorAffine, S}, s::S) where {S <: SupportedVectorSets}
-    MOI.canset(optimizer, attr, typeof(ci)) || error()
     MOI.isvalid(optimizer, ci) || error("Invalid constraint index")
     rows = constraint_rows(optimizer, ci)
     for (i, row) in enumerate(rows)
@@ -685,9 +661,7 @@ function MOI.set!(optimizer::OSQPOptimizer,  attr::MOI.ConstraintSet, ci::CI{<:V
 end
 
 # partial function modification:
-MOI.canmodify(optimizer::OSQPOptimizer, ::Type{<:CI{Affine, <:IntervalConvertible}}, ::Type{<:MOI.ScalarCoefficientChange}) = true
 function MOI.modify!(optimizer::OSQPOptimizer, ci::CI{Affine, <:IntervalConvertible}, change::MOI.ScalarCoefficientChange)
-    MOI.canmodify(optimizer, typeof(ci), typeof(change)) || error()
     MOI.isvalid(optimizer, ci) || error("Invalid constraint index")
     row = constraint_rows(optimizer, ci)
     optimizer.modcache.A[row, change.variable.value] = change.new_coefficient
@@ -714,15 +688,13 @@ end
 
 
 # Objective modification
-MOI.canmodify(optimizer::OSQPOptimizer, ::MOI.ObjectiveFunction, ::Type{<:MOI.ScalarConstantChange}) = !MOI.isempty(optimizer)
 function MOI.modify!(optimizer::OSQPOptimizer, attr::MOI.ObjectiveFunction, change::MOI.ScalarConstantChange)
-    MOI.canmodify(optimizer, attr, typeof(change)) || error()
+    MOI.isempty(optimizer) && error()  # TODO: throw a MOI.CannotModifyObjective() exception once that exists
     optimizer.objconstant = change.new_constant
 end
 
-MOI.canmodify(optimizer::OSQPOptimizer, ::MOI.ObjectiveFunction, ::Type{<:MOI.ScalarCoefficientChange}) = !MOI.isempty(optimizer)
 function MOI.modify!(optimizer::OSQPOptimizer, attr::MOI.ObjectiveFunction, change::MOI.ScalarCoefficientChange)
-    MOI.canmodify(optimizer, attr, typeof(change)) || error()
+    MOI.isempty(optimizer) && error()  # TODO: throw a MOI.CannotModifyObjective() exception once that exists
     optimizer.modcache.q[change.variable.value] = change.new_coefficient
 end
 
