@@ -3,6 +3,7 @@
 *.jl.mem
 *.swp
 *.DS_Store
+deps/build.log
 
 # Emacs stuff
 \#*\#
