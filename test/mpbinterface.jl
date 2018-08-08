@@ -3,10 +3,13 @@ using MathProgBase.SolverInterface
 
 
 # Include linprog.jl tests
-include(joinpath(Pkg.dir("MathProgBase"), "test", "linprog.jl"))
-include(joinpath(Pkg.dir("MathProgBase"), "test", "linproginterface.jl"))
-
-
+if isdefined(Base, :pathof)
+    include(joinpath(dirname(pathof(MathProgBase)), "..", "test", "linprog.jl"))
+    include(joinpath(dirname(pathof(MathProgBase)), "..", "test", "linproginterface.jl"))
+else
+    include(joinpath(Pkg.dir("MathProgBase"), "test", "linprog.jl"))
+    include(joinpath(Pkg.dir("MathProgBase"), "test", "linproginterface.jl"))
+end
 
 @testset "MathProgBase" begin
     solver = OSQPMathProgBaseInterface.OSQPSolver(eps_abs = 1e-7, eps_rel = 1e-16)
