@@ -2,6 +2,11 @@ using OSQP
 using Compat
 using Compat.Test, Compat.SparseArrays, Compat.LinearAlgebra, Compat.Random
 
+if isdefined(Random, :seed!)
+    using Random: seed!
+else
+    const seed! = srand
+end
 
 tests = [
     "basic.jl",

@@ -43,7 +43,7 @@ tol = 1e-3
 
     @testset "polishing_unconstrained" begin
 
-        srand(1)
+        seed!(1)
 
         n = 10
         m = n
@@ -74,7 +74,7 @@ tol = 1e-3
 
 
     @testset "polish_random" begin
-        srand(1)
+        seed!(1)
 
         n = 30
         m = 50

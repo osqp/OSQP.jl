@@ -13,7 +13,7 @@ tol = 1e-5
 @testset "primal_infeasibility" begin
 
     @testset "primal_infeasible_problem" begin
-        srand(1)
+        seed!(1)
 
         n = 50
         m = 500
@@ -41,7 +41,7 @@ tol = 1e-5
     end
 
     @testset "primal_dual_infeasible_problem" begin
-        srand(1)
+        seed!(1)
 
         n = 2
         m = 4
