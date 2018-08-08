@@ -271,7 +271,7 @@ term(c, x::MOI.VariableIndex, y::MOI.VariableIndex) = MOI.ScalarQuadraticTerm(c,
     test_optimizer_modification(model, optimizer, idxmap, defaultoptimizer(), config) do m
         attr = MOI.ConstraintFunction()
         ci =  mapfrommodel(m, c)
-        MOI.set!(m, attr, ci, MOI.ScalarAffineFunction(term.([1.0, 1.0, 1.0], mapfrommodel.(m, [x, x, y])), 0.5))
+        MOI.set!(m, attr, ci, MOI.ScalarAffineFunction(term.([1.0, 1.0, 1.0], mapfrommodel.(Ref(m), [x, x, y])), 0.5))
     end
 
     # change back to x + y <= 1 using ScalarCoefficientChange
@@ -290,7 +290,7 @@ term(c, x::MOI.VariableIndex, y::MOI.VariableIndex) = MOI.ScalarQuadraticTerm(c,
         # c
         attr = MOI.ConstraintFunction()
         ci = mapfrommodel(m, c)
-        MOI.set!(m, attr, ci, MOI.ScalarAffineFunction(term.([1.0, 1.0], mapfrommodel.(m, [x, y])), 0.0))
+        MOI.set!(m, attr, ci, MOI.ScalarAffineFunction(term.([1.0, 1.0], mapfrommodel.(Ref(m), [x, y])), 0.0))
 
         attr = MOI.ConstraintSet()
         MOI.set!(m, attr, ci, MOI.Interval(-1.0, Inf))
@@ -420,7 +420,7 @@ end
     check_results = function (optimizer, idxmap, x, A, b, expected)
         @test MOI.get(optimizer, MOI.TerminationStatus()) == MOI.Success
         @test MOI.get(optimizer, MOI.PrimalStatus()) == MOI.FeasiblePoint
-        @test MOI.get.(optimizer, MOI.VariablePrimal(), getindex.(Ref(idxmap), x)) ≈ expected atol = 1e-4
+        @test MOI.get.(Ref(optimizer), Ref(MOI.VariablePrimal()), getindex.(Ref(idxmap), x)) ≈ expected atol = 1e-4
         @test MOI.get(optimizer, MOI.ObjectiveValue()) ≈ norm(A * expected - b)^2 atol = 1e-4
     end
 
@@ -481,5 +481,5 @@ MOI.canget(src::BadObjectiveModel, ::MOI.ObjectiveFunction{<:Any}) = false
 @testset "failcopy" begin
     optimizer = OSQPOptimizer()
     MOIT.failcopytestc(optimizer)
-    @test_throws MOI.CopyOtherError MOI.copy!(optimizer, BadObjectiveModel())
+    @test_throws MathOptInterfaceOSQP.UnsupportedObjectiveError MOI.copy!(optimizer, BadObjectiveModel())
 end
