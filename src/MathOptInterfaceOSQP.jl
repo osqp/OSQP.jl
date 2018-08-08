@@ -65,7 +65,7 @@ mutable struct OSQPOptimizer <: MOI.AbstractOptimizer
     results::OSQP.Results
     isempty::Bool
     settings::Dict{Symbol, Any} # need to store these, because they should be preserved if empty! is called
-    sense::MOI.OptimizationSense # note: can only be set in copy!, cannot be modified
+    sense::MOI.OptimizationSense
     objconstant::Float64
     constrconstant::Vector{Float64}
     modcache::ProblemModificationCache{Float64}
@@ -363,8 +363,8 @@ end
 ## Standard optimizer attributes:
 MOI.canget(optimizer::OSQPOptimizer, ::MOI.ObjectiveSense) = true
 MOI.get(optimizer::OSQPOptimizer, ::MOI.ObjectiveSense) = optimizer.sense
-
 function MOI.set!(optimizer::OSQPOptimizer, a::MOI.ObjectiveSense, ::MOI.OptimizationSense)
+    # Cannot set ObjectiveSense after MOI.copy! call.
     throw(MOI.CannotSetAttribute(a))
 end
 
@@ -675,6 +675,11 @@ end
 
 MOI.supportsconstraint(optimizer::OSQPOptimizer, ::Type{<:AffineConvertible}, ::Type{<:IntervalConvertible}) = true
 MOI.supportsconstraint(optimizer::OSQPOptimizer, ::Type{VectorAffine}, ::Type{<:SupportedVectorSets}) = true
+
+function MOI.addconstraint!(optimizer::OSQPOptimizer, ::F, ::S) where {F<:MOI.AbstractFunction, S<:MOI.AbstractSet}
+    # Cannot add constraints after MOI.copy! call.
+    throw(MOI.CannotAddConstraint{F, S}())
+end
 
 ## Constraint attributes:
 function MOI.canget(optimizer::OSQPOptimizer, ::MOI.ConstraintDual, ::Type{<:CI})
