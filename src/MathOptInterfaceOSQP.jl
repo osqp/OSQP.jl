@@ -65,7 +65,7 @@ mutable struct OSQPOptimizer <: MOI.AbstractOptimizer
     results::OSQP.Results
     isempty::Bool
     settings::Dict{Symbol, Any} # need to store these, because they should be preserved if empty! is called
-    sense::MOI.OptimizationSense
+    sense::MOI.OptimizationSense # note: can only be set in copy!, cannot be modified
     objconstant::Float64
     constrconstant::Vector{Float64}
     modcache::ProblemModificationCache{Float64}
@@ -363,7 +363,10 @@ end
 ## Standard optimizer attributes:
 MOI.canget(optimizer::OSQPOptimizer, ::MOI.ObjectiveSense) = true
 MOI.get(optimizer::OSQPOptimizer, ::MOI.ObjectiveSense) = optimizer.sense
-MOI.set!(optimizer::OSQPOptimizer, ::MOI.ObjectiveSense, sense::MOI.OptimizationSense) = optimizer.sense = sense
+
+function MOI.set!(optimizer::OSQPOptimizer, a::MOI.ObjectiveSense, ::MOI.OptimizationSense)
+    throw(MOI.CannotSetAttribute(a))
+end
 
 MOI.canget(optimizer::OSQPOptimizer, ::MOI.NumberOfVariables) = !MOI.isempty(optimizer) # https://github.com/oxfordcontrol/OSQP.jl/issues/10
 function MOI.get(optimizer::OSQPOptimizer, a::MOI.NumberOfVariables)
