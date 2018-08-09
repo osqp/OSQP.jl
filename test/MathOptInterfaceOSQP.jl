@@ -137,9 +137,9 @@ function test_optimizer_modification(modfun::Base.Callable, model::MOI.ModelLike
     modfun(optimizer)
 
     # copy model into clean optimizer
-    copyresult = MOI.copy!(cleanoptimizer, model)
-    @test copyresult.varmap == idxmap.varmap
-    @test copyresult.conmap == idxmap.conmap
+    cleanidxmap = MOI.copy!(cleanoptimizer, model)
+    @test cleanidxmap.varmap == idxmap.varmap
+    @test cleanidxmap.conmap == idxmap.conmap
 
     # call optimize! on both optimizers
     MOI.optimize!(optimizer)
@@ -467,7 +467,7 @@ end
     MOI.set!(model, MOI.ObjectiveSense(), MOI.MinSense)
     MOI.set!(model, MOI.ObjectiveFunction{MOI.SingleVariable}(), MOI.SingleVariable(x))
 
-    copyresult = MOI.copy!(optimizer, model)
+    MOI.copy!(optimizer, model)
     inner = MOI.get(optimizer, MOI.RawSolver())
     @test inner.workspace != C_NULL
 end

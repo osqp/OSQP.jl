@@ -364,7 +364,7 @@ end
 MOI.canget(optimizer::OSQPOptimizer, ::MOI.ObjectiveSense) = true
 MOI.get(optimizer::OSQPOptimizer, ::MOI.ObjectiveSense) = optimizer.sense
 function MOI.set!(optimizer::OSQPOptimizer, a::MOI.ObjectiveSense, ::MOI.OptimizationSense)
-    # Cannot set ObjectiveSense after MOI.copy! call.
+    # Can only set ObjectiveSense in MOI.copy!.
     throw(MOI.CannotSetAttribute(a))
 end
 
@@ -677,7 +677,7 @@ MOI.supportsconstraint(optimizer::OSQPOptimizer, ::Type{<:AffineConvertible}, ::
 MOI.supportsconstraint(optimizer::OSQPOptimizer, ::Type{VectorAffine}, ::Type{<:SupportedVectorSets}) = true
 
 function MOI.addconstraint!(optimizer::OSQPOptimizer, ::F, ::S) where {F<:MOI.AbstractFunction, S<:MOI.AbstractSet}
-    # Cannot add constraints after MOI.copy! call.
+    # Can only add constraints in MOI.copy!.
     throw(MOI.CannotAddConstraint{F, S}())
 end
 
