@@ -12,7 +12,7 @@ tol = 1e-5
 @testset "unconstrained" begin
 
     @testset "unconstrained_problem" begin
-        srand(1)
+        seed!(1)
 
         n = 30
         m = 0

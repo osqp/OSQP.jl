@@ -14,7 +14,7 @@ tol = 1e-5
 @testset "warm_start" begin
 
     @testset "warm_start_problem" begin
-        srand(1)
+        seed!(1)
 
         n = 100
         m = 200

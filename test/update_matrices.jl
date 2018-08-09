@@ -5,7 +5,7 @@ function setup_update_matrices()
                    :polish => false,
                    :check_termination => 1)
 
-    srand(1)
+    seed!(1)
 
     n = 5
     m = 8
