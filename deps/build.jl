@@ -1,4 +1,5 @@
 using BinDeps
+using Compat
 
 # Libdl has been moved to a standard library module
 using Compat.Libdl
@@ -14,11 +15,11 @@ qdldl_version = "0.1.2"
 
 # Get current operating system
 osqp_platform =
-if Sys.is_linux()
+if Compat.Sys.islinux()
     "linux"
-elseif Sys.is_apple()
+elseif Compat.Sys.isapple()
     "mac"
-elseif Sys.is_windows()
+elseif Compat.Sys.iswindows()
     "windows"
 else
     error("Platform not supported!")
