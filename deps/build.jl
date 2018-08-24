@@ -49,7 +49,7 @@ struct FileMoveRule <: BinDeps.BuildStep
     src::AbstractString
     dest::AbstractString
 end
-@compat Base.run(fc::FileMoveRule) = isfile(fc.dest) || mv(fc.src, fc.dest, force=true)
+Base.run(fc::FileMoveRule) = isfile(fc.dest) || @compat mv(fc.src, fc.dest, force=true)
 
 provides(SimpleBuild,
     (@build_steps begin
