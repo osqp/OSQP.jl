@@ -24,8 +24,8 @@ addons:
     packages:
       - cmake
       - cmake-data
-script:
-  - if [[ -a .git/shallow ]]; then git fetch --unshallow; fi
-  - if [[ "$TRAVIS_JULIA_VERSION" == 0.6 ]]; then julia -e 'Pkg.clone(pwd()); Pkg.build("OSQP"); Pkg.test("OSQP"; coverage=true)'; else julia -e 'using Pkg; Pkg.clone(pwd()); Pkg.build("OSQP"); Pkg.test("OSQP"; coverage=true)'; fi
+# script:
+#   - if [[ -a .git/shallow ]]; then git fetch --unshallow; fi
+#   - if [[ "$TRAVIS_JULIA_VERSION" == 0.6 ]]; then julia -e 'Pkg.clone(pwd()); Pkg.build("OSQP"); Pkg.test("OSQP"; coverage=true)'; else julia -e 'using Pkg; Pkg.clone(pwd()); Pkg.build("OSQP"); Pkg.test("OSQP"; coverage=true)'; fi
 after_success:
   - if [[ "$TRAVIS_JULIA_VERSION" == 0.6 ]]; then julia -e 'cd(Pkg.dir("OSQP")); Pkg.add("Coverage"); using Coverage; Codecov.submit(Codecov.process_folder())'; else julia --project -e 'using Pkg; Pkg.add("Coverage"); using Coverage; Codecov.submit(Codecov.process_folder())'; fi
