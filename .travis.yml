@@ -10,7 +10,6 @@ julia:
   - nightly
 matrix:
   allow_failures:
-  - julia: 1.0
   - julia: nightly
 branches:
   only:
@@ -25,8 +24,8 @@ addons:
     packages:
       - cmake
       - cmake-data
-script:
-  - if [[ -a .git/shallow ]]; then git fetch --unshallow; fi
-  - julia -e 'Pkg.clone(pwd()); Pkg.build("OSQP"); Pkg.test("OSQP"; coverage=true)'
+# script:
+#   - if [[ -a .git/shallow ]]; then git fetch --unshallow; fi
+#   - if [[ "$TRAVIS_JULIA_VERSION" == 0.6 ]]; then julia -e 'Pkg.clone(pwd()); Pkg.build("OSQP"); Pkg.test("OSQP"; coverage=true)'; else julia -e 'using Pkg; Pkg.clone(pwd()); Pkg.build("OSQP"); Pkg.test("OSQP"; coverage=true)'; fi
 after_success:
-  - if [[ "$TRAVIS_JULIA_VERSION" == 0.6 ]]; then julia -e 'cd(Pkg.dir("OSQP")); Pkg.add("Coverage"); using Coverage; Codecov.submit(Codecov.process_folder())'; else julia --project -e 'Pkg.add("Coverage"); using Coverage; Codecov.submit(Codecov.process_folder())'; fi
+  - if [[ "$TRAVIS_JULIA_VERSION" == 0.6 ]]; then julia -e 'cd(Pkg.dir("OSQP")); Pkg.add("Coverage"); using Coverage; Codecov.submit(Codecov.process_folder())'; else julia --project -e 'using Pkg; Pkg.add("Coverage"); using Coverage; Codecov.submit(Codecov.process_folder())'; fi

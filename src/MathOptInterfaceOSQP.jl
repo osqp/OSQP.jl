@@ -320,8 +320,11 @@ function processlinearpart!(triplets::SparseTriplets, f::MOI.VectorAffineFunctio
 end
 
 function processconstraintset!(bounds::Tuple{<:Vector, <:Vector}, row::Int, s::IntervalConvertible)
+    processconstraintset!(bounds, row, MOI.Interval(s))
+end
+
+function processconstraintset!(bounds::Tuple{<:Vector, <:Vector}, row::Int, interval::Interval)
     l, u = bounds
-    interval = MOI.Interval(s)
     l[row] = interval.lower
     u[row] = interval.upper
     nothing
@@ -644,7 +647,7 @@ end
 # set modification:
 function MOI.set!(optimizer::OSQPOptimizer, attr::MOI.ConstraintSet, ci::CI{<:AffineConvertible, S}, s::S) where {S <: IntervalConvertible}
     MOI.isvalid(optimizer, ci) || error("Invalid constraint index")
-    interval = MOI.Interval(s)
+    interval = S <: Interval ? s : MOI.Interval(s)
     row = constraint_rows(optimizer, ci)
     constant = optimizer.constrconstant[row]
     optimizer.modcache.l[row] = interval.lower - constant
