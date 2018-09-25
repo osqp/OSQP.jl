@@ -1,3 +1,13 @@
+Version 0.4.0 (): OSQP v0.4.1
+----------------------------------------------
+* Upgraded OSQP to 0.4.1 version
+* Added support from MathOptInterface 0.6
+
+
+Version 0.3.0 (4 September 2018): OSQP v0.4.0
+----------------------------------------------
+* Bugfixes for Julia 1.0
+
 Version 0.2.0 (24 July 2018): OSQP v0.4.0
 -----------------------------------------
 * Upgraded OSQP to 0.4.0 version
