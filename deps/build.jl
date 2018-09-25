@@ -30,7 +30,7 @@ provides(Binaries, URI("https://dl.bintray.com/bstellato/generic/OSQP/$version/$
 provides(Binaries, URI("https://dl.bintray.com/bstellato/generic/OSQP/$version/$archive_name.tar.gz"), [osqp], unpacked_dir="$archive_name/lib", os=:Windows)
 
 # Build from sources on Linux
-provides(Sources, URI("https://dl.bintray.com/bstellato/generic/OSQP/$version/:osqp-$version.tar.gz"), [osqp], unpacked_dir="osqp-$version", os = :Linux)
+provides(Sources, URI("https://dl.bintray.com/bstellato/generic/OSQP/$version/osqp-$version.tar.gz"), [osqp], unpacked_dir="osqp-$version", os = :Linux)
 
 # Define directories locations deps/usr and deps/src
 prefix = joinpath(BinDeps.depsdir(osqp),"usr")
