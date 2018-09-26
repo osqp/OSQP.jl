@@ -12,6 +12,7 @@ tests = [
     "basic.jl",
     "dual_infeasibility.jl",
     "feasibility.jl",
+    "non_convex.jl",
     "polishing.jl",
     "primal_infeasibility.jl",
     "unconstrained.jl",

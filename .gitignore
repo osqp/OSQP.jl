@@ -9,3 +9,6 @@ deps/build.log
 \#*\#
 .\#*
 *~
+
+# vscode
+.vscode/

@@ -196,6 +196,10 @@ function solve!(model::OSQP.Model, results::Results = Results())
         end
     end
 
+    if info.status == :Non_convex
+        info.obj_val = NaN
+    end
+
     results
 end
 
