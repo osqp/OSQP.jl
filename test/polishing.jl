@@ -47,7 +47,7 @@ tol = 1e-3
 
         n = 10
         m = n
-        P = sparse(Diagonal(randn(n)) + 1. * sparse(I, n, n))
+        P = sparse(Diagonal(rand(n)) + .2 * sparse(I, n, n))
         q = randn(n)
         A = sparse(I, n, n)
         l = -100 * ones(m)
