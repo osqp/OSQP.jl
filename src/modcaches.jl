@@ -81,7 +81,7 @@ function Base.getindex(cache::MatrixModificationCache, row::Integer, col::Intege
 end
 
 function processupdates!(model, cache::MatrixModificationCache, updatefun::Function)
-    dirty = !isempty(cache.modifications)
+    dirty = !is_empty(cache.modifications)
     if dirty
         nmods = length(cache.modifications)
         resize!(cache.vals, nmods)
