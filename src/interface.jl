@@ -130,7 +130,7 @@ function setup!(model::OSQP.Model;
 
     # Create OSQP settings
     settings_dict = Dict{Symbol,Any}()
-    if !is_empty(settings)
+    if !isempty(settings)
         for (key, value) in settings
             settings_dict[key] = value
         end
@@ -331,7 +331,7 @@ end
 
 function update_settings!(model::OSQP.Model; kwargs...)
 
-    if is_empty(kwargs)
+    if isempty(kwargs)
         return
     else
         data = Dict{Symbol,Any}()

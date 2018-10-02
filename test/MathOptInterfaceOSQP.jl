@@ -54,7 +54,7 @@ const Affine = MOI.ScalarAffineFunction{Float64}
     val = randn(rng)
     modcache.A[row, col] = val
     MathOptInterfaceOSQP.processupdates!(model, modcache)
-    @test is_empty(modcache.A.modifications)
+    @test isempty(modcache.A.modifications)
     Amod_update_results = OSQP.solve!(model)
     @test !isapprox(baseresults.x, Amod_update_results.x; atol = 1e-1) # ensure that new results are significantly different
     @test !isapprox(qmod_update_results.x, Amod_update_results.x; atol = 1e-1) # ensure that new results are significantly different

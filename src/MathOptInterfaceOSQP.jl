@@ -109,7 +109,7 @@ MOI.is_empty(optimizer::OSQPOptimizer) = optimizer.is_empty
 struct UnsupportedObjectiveError <: Exception end
 
 function MOI.copy_to(dest::OSQPOptimizer, src::MOI.ModelLike; copy_names=false)
-    copynames && error("Copying names is not supported.")
+    copy_names && error("Copying names is not supported.")
     MOI.empty!(dest)
     idxmap = MOIU.IndexMap(dest, src)
     assign_constraint_row_ranges!(dest.rowranges, idxmap, src)
@@ -175,18 +175,19 @@ function processobjective(src::MOI.ModelLike, idxmap)
     n = MOI.get(src, MOI.NumberOfVariables())
     q = zeros(n)
     if sense != MOI.FeasibilitySense
-        if MOI.canget(src, MOI.ObjectiveFunction{MOI.SingleVariable}())
+        function_type = MOI.get(src, MOI.ObjectiveFunctionType())
+        if function_type == MOI.SingleVariable
             fsingle = MOI.get(src, MOI.ObjectiveFunction{MOI.SingleVariable}())
             P = spzeros(n, n)
             q[idxmap[fsingle.variable].value] = 1
             c = 0.
-        elseif MOI.canget(src, MOI.ObjectiveFunction{MOI.ScalarAffineFunction{Float64}}())
+        elseif function_type == MOI.ScalarAffineFunction{Float64}
             faffine = MOI.get(src, MOI.ObjectiveFunction{MOI.ScalarAffineFunction{Float64}}())
             P = spzeros(n, n)
             processlinearterms!(q, faffine.terms, idxmap)
             c = faffine.constant
-        elseif MOI.canget(src, MOI.ObjectiveFunction{Quadratic}())
-            fquadratic = MOI.get(src, MOI.ObjectiveFunction{Quadratic}())
+        elseif function_type == MOI.ScalarQuadraticFunction{Float64}
+            fquadratic = MOI.get(src, MOI.ObjectiveFunction{MOI.ScalarQuadraticFunction{Float64}}())
             I = [Int(idxmap[term.variable_index_1].value) for term in fquadratic.quadratic_terms]
             J = [Int(idxmap[term.variable_index_2].value) for term in fquadratic.quadratic_terms]
             V = [term.coefficient for term in fquadratic.quadratic_terms]
@@ -339,26 +340,22 @@ function processconstraintset!(bounds::Tuple{<:Vector, <:Vector}, rows::UnitRang
 end
 
 function processprimalstart!(x, src::MOI.ModelLike, idxmap)
-    if MOI.canget(src, MOI.VariablePrimalStart(), VI)
         vis_src = MOI.get(src, MOI.ListOfVariableIndices())
         for vi in vis_src
             x[idxmap[vi]] = get(src, MOI.VariablePrimalStart(), vi)
         end
-    end
 end
 
 function processdualstart!(y, src::MOI.ModelLike, idxmap, rowranges::Dict{Int, UnitRange{Int}})
     for (F, S) in MOI.get(src, MOI.ListOfConstraints())
-        if MOI.canget(src, MOI.ConstraintDualStart(), CI{F, S})
             cis_src = MOI.get(src, MOI.ListOfConstraintIndices{F, S}())
             for ci in cis_src
                 rows = constraint_rows(rowranges, idxmap[ci])
-                dual = get(src, MOI.ConstraintDualStart(), ci)
+                dual = MOI.get(src, MOI.ConstraintDualStart(), ci)
                 for (i, row) in enumerate(rows)
                     y[row] = -dual[i] # opposite dual convention
                 end
             end
-        end
     end
 end
 
