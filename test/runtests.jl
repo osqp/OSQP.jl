@@ -18,8 +18,8 @@ tests = [
     "unconstrained.jl",
     "warm_start.jl",
     "update_matrices.jl",
-    "mpbinterface.jl",
-    "MathOptInterfaceOSQP.jl"
+    "MPBWrapper.jl",
+    "MOIWrapper.jl"
     ]
 
 println("Running tests:")
