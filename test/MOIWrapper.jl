@@ -1,7 +1,9 @@
 using Compat # for CartesianIndices
+using OSQP
 using OSQP.MathOptInterfaceOSQP
 using Compat.Test
 using Compat.LinearAlgebra
+using Compat.Random
 using Compat.SparseArrays
 
 using MathOptInterface
