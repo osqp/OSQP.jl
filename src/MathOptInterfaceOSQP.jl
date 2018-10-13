@@ -340,14 +340,29 @@ function processconstraintset!(bounds::Tuple{<:Vector, <:Vector}, rows::UnitRang
 end
 
 function processprimalstart!(x, src::MOI.ModelLike, idxmap)
+    has_primal_start = false
+    for attr in MOI.get(src, MOI.ListOfVariableAttributesSet())
+        if attr isa MOI.VariablePrimalStart
+            has_primal_start = true
+        end
+    end
+    if has_primal_start
         vis_src = MOI.get(src, MOI.ListOfVariableIndices())
         for vi in vis_src
             x[idxmap[vi]] = get(src, MOI.VariablePrimalStart(), vi)
         end
+    end
 end
 
 function processdualstart!(y, src::MOI.ModelLike, idxmap, rowranges::Dict{Int, UnitRange{Int}})
     for (F, S) in MOI.get(src, MOI.ListOfConstraints())
+        has_dual_start = false
+        for attr in MOI.get(src, MOI.ListOfConstraintAttributesSet{F, S}())
+            if attr isa MOI.VariablePrimalStart
+                has_dual_start = true
+            end
+        end
+        if has_dual_start
             cis_src = MOI.get(src, MOI.ListOfConstraintIndices{F, S}())
             for ci in cis_src
                 rows = constraint_rows(rowranges, idxmap[ci])
@@ -356,17 +371,13 @@ function processdualstart!(y, src::MOI.ModelLike, idxmap, rowranges::Dict{Int, U
                     y[row] = -dual[i] # opposite dual convention
                 end
             end
+        end
     end
 end
 
 
 ## Standard optimizer attributes:
 MOI.get(optimizer::OSQPOptimizer, ::MOI.ObjectiveSense) = optimizer.sense
-function MOI.set(optimizer::OSQPOptimizer, a::MOI.ObjectiveSense, ::MOI.OptimizationSense)
-    # Can only set ObjectiveSense in MOI.copy_to.
-    throw(MOI.CannotSetAttribute(a))
-end
-
 function MOI.get(optimizer::OSQPOptimizer, a::MOI.NumberOfVariables)
     OSQP.dimensions(optimizer.inner)[1]
 end
@@ -409,7 +420,7 @@ end # module
 using .OSQPSettings
 
 function MOI.set(optimizer::OSQPOptimizer, a::OSQPAttribute, value)
-    (isupdatable(a) || MOI.is_empty(optimizer)) || throw(MOI.CannotSetAttribute(a))
+    (isupdatable(a) || MOI.is_empty(optimizer)) || throw(MOI.SetAttributeNotAllowed(a))
     setting = Symbol(a)
     optimizer.settings[setting] = value
     if !MOI.is_empty(optimizer)
@@ -440,7 +451,7 @@ MOI.supports(::OSQPOptimizer, ::MOI.ObjectiveFunction{Quadratic}) = true
 MOI.supports(::OSQPOptimizer, ::MOI.ObjectiveSense) = true
 
 function MOI.set(optimizer::OSQPOptimizer, a::MOI.ObjectiveFunction{MOI.SingleVariable}, obj::MOI.SingleVariable)
-    MOI.is_empty(optimizer) && throw(MOI.CannotSetAttribute(a))
+    MOI.is_empty(optimizer) && throw(MOI.SetAttributeNotAllowed(a))
     optimizer.modcache.P[:] = 0
     optimizer.modcache.q[:] = 0
     optimizer.modcache.q[obj.variable.value] = 1
@@ -449,7 +460,7 @@ function MOI.set(optimizer::OSQPOptimizer, a::MOI.ObjectiveFunction{MOI.SingleVa
 end
 
 function MOI.set(optimizer::OSQPOptimizer, a::MOI.ObjectiveFunction{MOI.ScalarAffineFunction{Float64}}, obj::MOI.ScalarAffineFunction{Float64})
-    MOI.is_empty(optimizer) && throw(MOI.CannotSetAttribute(a))
+    MOI.is_empty(optimizer) && throw(MOI.SetAttributeNotAllowed(a))
     optimizer.modcache.P[:] = 0
     processlinearterms!(optimizer.modcache.q, obj.terms)
     optimizer.objconstant = obj.constant
@@ -457,7 +468,7 @@ function MOI.set(optimizer::OSQPOptimizer, a::MOI.ObjectiveFunction{MOI.ScalarAf
 end
 
 function MOI.set(optimizer::OSQPOptimizer, a::MOI.ObjectiveFunction{Quadratic}, obj::Quadratic)
-    MOI.is_empty(optimizer) && throw(MOI.CannotSetAttribute(a))
+    MOI.is_empty(optimizer) && throw(MOI.SetAttributeNotAllowed(a))
     cache = optimizer.modcache
     cache.P[:] = 0
     for term in obj.quadratic_terms
@@ -554,7 +565,7 @@ function MOI.get(optimizer::OSQPOptimizer, a::MOI.VariablePrimal, vi::VI)
 end
 
 function MOI.set(optimizer::OSQPOptimizer, a::MOI.VariablePrimalStart, vi::VI, value)
-    MOI.is_empty(optimizer) && throw(MOI.CannotSetAttribute(a))
+    MOI.is_empty(optimizer) && throw(MOI.SetAttributeNotAllowed(a))
     optimizer.warmstartcache.x[vi.value] = value
 end
 
@@ -566,7 +577,7 @@ function MOI.is_valid(optimizer::OSQPOptimizer, ci::CI)
 end
 
 function MOI.set(optimizer::OSQPOptimizer, a::MOI.ConstraintDualStart, ci::CI, value)
-    MOI.is_empty(optimizer) && throw(MOI.CannotSetAttribute(a))
+    MOI.is_empty(optimizer) && throw(MOI.SetAttributeNotAllowed(a))
     rows = constraint_rows(optimizer, ci)
     for (i, row) in enumerate(rows)
         optimizer.warmstartcache.y[row] = -value[i] # opposite dual convention
@@ -645,11 +656,6 @@ end
 
 MOI.supports_constraint(optimizer::OSQPOptimizer, ::Type{<:AffineConvertible}, ::Type{<:IntervalConvertible}) = true
 MOI.supports_constraint(optimizer::OSQPOptimizer, ::Type{VectorAffine}, ::Type{<:SupportedVectorSets}) = true
-
-function MOI.add_constraint(optimizer::OSQPOptimizer, ::F, ::S) where {F<:MOI.AbstractFunction, S<:MOI.AbstractSet}
-    # Can only add constraints in MOI.copy_to.
-    throw(MOI.CannotAddConstraint{F, S}())
-end
 
 ## Constraint attributes:
 function MOI.get(optimizer::OSQPOptimizer, a::MOI.ConstraintDual, ci::CI)

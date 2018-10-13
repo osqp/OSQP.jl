@@ -471,6 +471,8 @@ end
 # TODO: consider moving to MOIT. However, current default copy_to is fine with BadObjectiveModel.
 struct BadObjectiveModel <: MOIT.BadModel end # objective sense is not FeasibilitySense, but can't get objective function
 MOI.get(src::BadObjectiveModel, ::MOI.ObjectiveSense) = MOI.MinSense
+struct ExoticFunction <: MOI.AbstractScalarFunction end
+MOI.get(src::BadObjectiveModel, ::MOI.ObjectiveFunctionType) = ExoticFunction
 
 @testset "failcopy" begin
     optimizer = OSQPOptimizer()
