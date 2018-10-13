@@ -1,5 +1,4 @@
 BinDeps
-Libdl
 julia 0.6
 Compat 0.47.0 # for @warn
 MathProgBase 0.7 0.8
