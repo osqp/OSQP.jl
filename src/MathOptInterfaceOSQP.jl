@@ -488,16 +488,27 @@ function MOI.get(optimizer::OSQPOptimizer, a::MOI.ObjectiveValue)
     ifelse(optimizer.sense == MOI.MaxSense, -rawobj, rawobj)
 end
 
+error_not_solved() = error("Problem is unsolved.")
+function check_has_results(optimizer::OSQPOptimizer)
+    if !hasresults(optimizer)
+        error_not_solved()
+    end
+end
+
 # Since these aren't explicitly returned by OSQP, I feel like it would be better to have a fallback method compute these:
-MOI.get(optimizer::OSQPOptimizer, a::MOI.SolveTime) = optimizer.results.info.run_time
+function MOI.get(optimizer::OSQPOptimizer, a::MOI.SolveTime)
+    check_has_results(optimizer)
+    optimizer.results.info.run_time
+end
 
 function MOI.get(optimizer::OSQPOptimizer, a::MOI.TerminationStatus)
+    check_has_results(optimizer)
     # Note that the :Dual_infeasible and :Primal_infeasible are mapped to MOI.Success
     # because OSQP can return a proof of infeasibility. For the same reason,
     # :Primal_infeasible_inaccurate is mapped to MOI.AlmostSuccess
     osqpstatus = optimizer.results.info.status
     if osqpstatus == :Unsolved
-        error("Problem is unsolved.") # TODO: good idea?
+        error_not_solved() # TODO: good idea?
     elseif osqpstatus == :Interrupted
         MOI.Interrupted
     elseif osqpstatus == :Dual_infeasible
@@ -518,6 +529,7 @@ function MOI.get(optimizer::OSQPOptimizer, a::MOI.TerminationStatus)
 end
 
 function MOI.get(optimizer::OSQPOptimizer, a::MOI.PrimalStatus)
+    hasresults(optimizer) || return MOI.NoSolution
     osqpstatus = optimizer.results.info.status
     if osqpstatus == :Unsolved
         error("Problem is unsolved.") # TODO: good idea?
@@ -535,6 +547,7 @@ function MOI.get(optimizer::OSQPOptimizer, a::MOI.PrimalStatus)
 end
 
 function MOI.get(optimizer::OSQPOptimizer, a::MOI.DualStatus)
+    hasresults(optimizer) || return MOI.NoSolution
     osqpstatus = optimizer.results.info.status
     if osqpstatus == :Unsolved
         error("Problem is unsolved.") # TODO: good idea?
@@ -587,7 +600,7 @@ end
 
 # function modification:
 function MOI.set(optimizer::OSQPOptimizer, attr::MOI.ConstraintFunction, ci::CI{Affine, <:IntervalConvertible}, f::Affine)
-    MOI.is_valid(optimizer, ci) || error("Invalid constraint index")
+    MOI.is_valid(optimizer, ci) || throw(MOI.InvalidIndex(ci))
     row = constraint_rows(optimizer, ci)
     optimizer.modcache.A[row, :] = 0
     for term in f.terms
@@ -603,7 +616,7 @@ function MOI.set(optimizer::OSQPOptimizer, attr::MOI.ConstraintFunction, ci::CI{
 end
 
 function MOI.set(optimizer::OSQPOptimizer, attr::MOI.ConstraintFunction, ci::CI{VectorAffine, <:SupportedVectorSets}, f::VectorAffine)
-    MOI.is_valid(optimizer, ci) || error("Invalid constraint index")
+    MOI.is_valid(optimizer, ci) || throw(MOI.InvalidIndex(ci))
     rows = constraint_rows(optimizer, ci)
     for row in rows
         optimizer.modcache.A[row, :] = 0
@@ -624,7 +637,7 @@ end
 
 # set modification:
 function MOI.set(optimizer::OSQPOptimizer, attr::MOI.ConstraintSet, ci::CI{<:AffineConvertible, S}, s::S) where {S <: IntervalConvertible}
-    MOI.is_valid(optimizer, ci) || error("Invalid constraint index")
+    MOI.is_valid(optimizer, ci) || throw(MOI.InvalidIndex(ci))
     interval = S <: Interval ? s : MOI.Interval(s)
     row = constraint_rows(optimizer, ci)
     constant = optimizer.constrconstant[row]
@@ -634,7 +647,7 @@ function MOI.set(optimizer::OSQPOptimizer, attr::MOI.ConstraintSet, ci::CI{<:Aff
 end
 
 function MOI.set(optimizer::OSQPOptimizer,  attr::MOI.ConstraintSet, ci::CI{<:VectorAffine, S}, s::S) where {S <: SupportedVectorSets}
-    MOI.is_valid(optimizer, ci) || error("Invalid constraint index")
+    MOI.is_valid(optimizer, ci) || throw(MOI.InvalidIndex(ci))
     rows = constraint_rows(optimizer, ci)
     for (i, row) in enumerate(rows)
         constant = optimizer.constrconstant[row]
@@ -646,7 +659,7 @@ end
 
 # partial function modification:
 function MOI.modify(optimizer::OSQPOptimizer, ci::CI{Affine, <:IntervalConvertible}, change::MOI.ScalarCoefficientChange)
-    MOI.is_valid(optimizer, ci) || error("Invalid constraint index")
+    MOI.is_valid(optimizer, ci) || throw(MOI.InvalidIndex(ci))
     row = constraint_rows(optimizer, ci)
     optimizer.modcache.A[row, change.variable.value] = change.new_coefficient
     nothing
@@ -667,12 +680,12 @@ end
 
 # Objective modification
 function MOI.modify(optimizer::OSQPOptimizer, attr::MOI.ObjectiveFunction, change::MOI.ScalarConstantChange)
-    MOI.is_empty(optimizer) && error()  # TODO: throw a MOI.CannotModifyObjective() exception once that exists
+    MOI.is_empty(optimizer) && throw(MOI.ModifyObjectiveNotAllowed(change))
     optimizer.objconstant = change.new_constant
 end
 
 function MOI.modify(optimizer::OSQPOptimizer, attr::MOI.ObjectiveFunction, change::MOI.ScalarCoefficientChange)
-    MOI.is_empty(optimizer) && error()  # TODO: throw a MOI.CannotModifyObjective() exception once that exists
+    MOI.is_empty(optimizer) && throw(MOI.ModifyObjectiveNotAllowed(change))
     optimizer.modcache.q[change.variable.value] = change.new_coefficient
 end
 
