@@ -106,8 +106,6 @@ end
 
 MOI.is_empty(optimizer::OSQPOptimizer) = optimizer.is_empty
 
-struct UnsupportedObjectiveError <: Exception end
-
 function MOI.copy_to(dest::OSQPOptimizer, src::MOI.ModelLike; copy_names=false)
     copy_names && error("Copying names is not supported.")
     MOI.empty!(dest)
@@ -196,7 +194,7 @@ function processobjective(src::MOI.ModelLike, idxmap)
             processlinearterms!(q, fquadratic.affine_terms, idxmap)
             c = fquadratic.constant
         else
-            throw(UnsupportedObjectiveError())
+            throw(MOI.UnsupportedAttribute(MOI.ObjectiveFunction{function_type}()))
         end
         sense == MOI.MaxSense && (Compat.rmul!(P, -1); Compat.rmul!(q, -1); c = -c)
     else

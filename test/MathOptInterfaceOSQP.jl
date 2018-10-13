@@ -477,5 +477,5 @@ MOI.get(src::BadObjectiveModel, ::MOI.ObjectiveFunctionType) = ExoticFunction
 @testset "failcopy" begin
     optimizer = OSQPOptimizer()
     MOIT.failcopytestc(optimizer)
-    @test_throws MathOptInterfaceOSQP.UnsupportedObjectiveError MOI.copy_to(optimizer, BadObjectiveModel())
+    @test_throws MOI.UnsupportedAttribute{MOI.ObjectiveFunction{ExoticFunction}} MOI.copy_to(optimizer, BadObjectiveModel())
 end
