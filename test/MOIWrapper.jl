@@ -477,7 +477,8 @@ struct ExoticFunction <: MOI.AbstractScalarFunction end
 MOI.get(src::BadObjectiveModel, ::MOI.ObjectiveFunctionType) = ExoticFunction
 
 @testset "failcopy" begin
-    optimizer = OSQP.Optimizer()
+    # TODO change OSQPOptimizer() to OSQP.Optimizer() in OSQP v0.6
+    optimizer = OSQPOptimizer()
     MOIT.failcopytestc(optimizer)
     @test_throws MOI.UnsupportedAttribute{MOI.ObjectiveFunction{ExoticFunction}} MOI.copy_to(optimizer, BadObjectiveModel())
 end
