@@ -33,7 +33,7 @@ end
 include("constants.jl")
 include("types.jl")
 include("interface.jl")
-include("mpbinterface.jl")
-include("MathOptInterfaceOSQP.jl")
+include("MPBWrapper.jl")
+include("MOIWrapper.jl")
 
 end # module
