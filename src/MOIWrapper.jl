@@ -93,6 +93,7 @@ export OSQPOptimizer
 function OSQPOptimizer()
     Base.depwarn("OSQPOptimizer() is deprecated, use OSQP.Optimizer() instead.",
                  :OSQPOptimizer)
+    return Optimizer()
 end
 
 hasresults(optimizer::Optimizer) = optimizer.hasresults
