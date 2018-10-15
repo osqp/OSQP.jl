@@ -35,5 +35,6 @@ include("types.jl")
 include("interface.jl")
 include("MPBWrapper.jl")
 include("MOIWrapper.jl")
+const Optimizer = MathOptInterfaceOSQP.Optimizer
 
 end # module

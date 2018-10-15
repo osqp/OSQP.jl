@@ -106,7 +106,7 @@ end
 const config = MOIT.TestConfig(atol=1e-4, rtol=1e-4)
 
 function defaultoptimizer()
-    optimizer = OSQPOptimizer()
+    optimizer = OSQP.Optimizer()
     MOI.set(optimizer, OSQPSettings.Verbose(), false)
     MOI.set(optimizer, OSQPSettings.EpsAbs(), 1e-8)
     MOI.set(optimizer, OSQPSettings.EpsRel(), 1e-16)
@@ -477,6 +477,7 @@ struct ExoticFunction <: MOI.AbstractScalarFunction end
 MOI.get(src::BadObjectiveModel, ::MOI.ObjectiveFunctionType) = ExoticFunction
 
 @testset "failcopy" begin
+    # TODO change OSQPOptimizer() to OSQP.Optimizer() in OSQP v0.6
     optimizer = OSQPOptimizer()
     MOIT.failcopytestc(optimizer)
     @test_throws MOI.UnsupportedAttribute{MOI.ObjectiveFunction{ExoticFunction}} MOI.copy_to(optimizer, BadObjectiveModel())

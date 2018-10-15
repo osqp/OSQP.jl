@@ -8,7 +8,7 @@ using Compat.SparseArrays
 using MathOptInterface
 using MathOptInterface.Utilities
 
-export OSQPOptimizer, OSQPSettings, OSQPModel
+export Optimizer, OSQPSettings, OSQPModel
 
 const MOI = MathOptInterface
 const MOIU = MathOptInterface.Utilities
@@ -59,7 +59,7 @@ function _contains(haystack, needle)
     false
 end
 
-mutable struct OSQPOptimizer <: MOI.AbstractOptimizer
+mutable struct Optimizer <: MOI.AbstractOptimizer
     inner::OSQP.Model
     hasresults::Bool
     results::OSQP.Results
@@ -72,7 +72,7 @@ mutable struct OSQPOptimizer <: MOI.AbstractOptimizer
     warmstartcache::WarmStartCache{Float64}
     rowranges::Dict{Int, UnitRange{Int}}
 
-    function OSQPOptimizer()
+    function Optimizer()
         inner = OSQP.Model()
         hasresults = false
         results = OSQP.Results()
@@ -88,9 +88,17 @@ mutable struct OSQPOptimizer <: MOI.AbstractOptimizer
     end
 end
 
-hasresults(optimizer::OSQPOptimizer) = optimizer.hasresults
+# used to smooth out transition of OSQP v0.4 -> v0.5, TODO: remove on OSQP v0.6
+export OSQPOptimizer
+function OSQPOptimizer()
+    Base.depwarn("OSQPOptimizer() is deprecated, use OSQP.Optimizer() instead.",
+                 :OSQPOptimizer)
+    return Optimizer()
+end
 
-function MOI.empty!(optimizer::OSQPOptimizer)
+hasresults(optimizer::Optimizer) = optimizer.hasresults
+
+function MOI.empty!(optimizer::Optimizer)
     optimizer.inner = OSQP.Model()
     optimizer.hasresults = false
     optimizer.results = OSQP.Results()
@@ -104,9 +112,9 @@ function MOI.empty!(optimizer::OSQPOptimizer)
     optimizer
 end
 
-MOI.is_empty(optimizer::OSQPOptimizer) = optimizer.is_empty
+MOI.is_empty(optimizer::Optimizer) = optimizer.is_empty
 
-function MOI.copy_to(dest::OSQPOptimizer, src::MOI.ModelLike; copy_names=false)
+function MOI.copy_to(dest::Optimizer, src::MOI.ModelLike; copy_names=false)
     copy_names && error("Copying names is not supported.")
     MOI.empty!(dest)
     idxmap = MOIU.IndexMap(dest, src)
@@ -125,7 +133,7 @@ end
 """
 Set up index map from `src` variables and constraints to `dest` variables and constraints.
 """
-function MOIU.IndexMap(dest::OSQPOptimizer, src::MOI.ModelLike)
+function MOIU.IndexMap(dest::Optimizer, src::MOI.ModelLike)
     idxmap = MOIU.IndexMap()
     vis_src = MOI.get(src, MOI.ListOfVariableIndices())
     for i in eachindex(vis_src)
@@ -163,7 +171,7 @@ function constraint_rows(rowranges::Dict{Int, UnitRange{Int}}, ci::CI{<:Any, <:M
     first(rowrange)
 end
 constraint_rows(rowranges::Dict{Int, UnitRange{Int}}, ci::CI{<:Any, <:MOI.AbstractVectorSet}) = rowranges[ci.value]
-constraint_rows(optimizer::OSQPOptimizer, ci::CI) = constraint_rows(optimizer.rowranges, ci)
+constraint_rows(optimizer::Optimizer, ci::CI) = constraint_rows(optimizer.rowranges, ci)
 
 """
 Return objective sense, as well as matrix `P`, vector `q`, and scalar `c` such that objective function is `1/2 x' P x + q' x + c`.
@@ -375,12 +383,12 @@ end
 
 
 ## Standard optimizer attributes:
-MOI.get(optimizer::OSQPOptimizer, ::MOI.ObjectiveSense) = optimizer.sense
-function MOI.get(optimizer::OSQPOptimizer, a::MOI.NumberOfVariables)
+MOI.get(optimizer::Optimizer, ::MOI.ObjectiveSense) = optimizer.sense
+function MOI.get(optimizer::Optimizer, a::MOI.NumberOfVariables)
     OSQP.dimensions(optimizer.inner)[1]
 end
 
-function MOI.get(optimizer::OSQPOptimizer, a::MOI.ListOfVariableIndices)
+function MOI.get(optimizer::Optimizer, a::MOI.ListOfVariableIndices)
     [VI(i) for i = 1 : MOI.get(optimizer, MOI.NumberOfVariables())] # TODO: support for UnitRange would be nice
 end
 
@@ -417,7 +425,7 @@ end # module
 
 using .OSQPSettings
 
-function MOI.set(optimizer::OSQPOptimizer, a::OSQPAttribute, value)
+function MOI.set(optimizer::Optimizer, a::OSQPAttribute, value)
     (isupdatable(a) || MOI.is_empty(optimizer)) || throw(MOI.SetAttributeNotAllowed(a))
     setting = Symbol(a)
     optimizer.settings[setting] = value
@@ -428,7 +436,7 @@ end
 
 
 ## Optimizer methods:
-function MOI.optimize!(optimizer::OSQPOptimizer)
+function MOI.optimize!(optimizer::Optimizer)
     processupdates!(optimizer.inner, optimizer.modcache)
     processupdates!(optimizer.inner, optimizer.warmstartcache)
     OSQP.solve!(optimizer.inner, optimizer.results)
@@ -440,15 +448,15 @@ function MOI.optimize!(optimizer::OSQPOptimizer)
 end
 
 ## Optimizer attributes:
-MOI.get(optimizer::OSQPOptimizer, ::MOI.RawSolver) = optimizer.inner
-MOI.get(optimizer::OSQPOptimizer, ::MOI.ResultCount) = 1
+MOI.get(optimizer::Optimizer, ::MOI.RawSolver) = optimizer.inner
+MOI.get(optimizer::Optimizer, ::MOI.ResultCount) = 1
 
-MOI.supports(::OSQPOptimizer, ::MOI.ObjectiveFunction{MOI.SingleVariable}) = true
-MOI.supports(::OSQPOptimizer, ::MOI.ObjectiveFunction{MOI.ScalarAffineFunction{Float64}}) = true
-MOI.supports(::OSQPOptimizer, ::MOI.ObjectiveFunction{Quadratic}) = true
-MOI.supports(::OSQPOptimizer, ::MOI.ObjectiveSense) = true
+MOI.supports(::Optimizer, ::MOI.ObjectiveFunction{MOI.SingleVariable}) = true
+MOI.supports(::Optimizer, ::MOI.ObjectiveFunction{MOI.ScalarAffineFunction{Float64}}) = true
+MOI.supports(::Optimizer, ::MOI.ObjectiveFunction{Quadratic}) = true
+MOI.supports(::Optimizer, ::MOI.ObjectiveSense) = true
 
-function MOI.set(optimizer::OSQPOptimizer, a::MOI.ObjectiveFunction{MOI.SingleVariable}, obj::MOI.SingleVariable)
+function MOI.set(optimizer::Optimizer, a::MOI.ObjectiveFunction{MOI.SingleVariable}, obj::MOI.SingleVariable)
     MOI.is_empty(optimizer) && throw(MOI.SetAttributeNotAllowed(a))
     optimizer.modcache.P[:] = 0
     optimizer.modcache.q[:] = 0
@@ -457,7 +465,7 @@ function MOI.set(optimizer::OSQPOptimizer, a::MOI.ObjectiveFunction{MOI.SingleVa
     nothing
 end
 
-function MOI.set(optimizer::OSQPOptimizer, a::MOI.ObjectiveFunction{MOI.ScalarAffineFunction{Float64}}, obj::MOI.ScalarAffineFunction{Float64})
+function MOI.set(optimizer::Optimizer, a::MOI.ObjectiveFunction{MOI.ScalarAffineFunction{Float64}}, obj::MOI.ScalarAffineFunction{Float64})
     MOI.is_empty(optimizer) && throw(MOI.SetAttributeNotAllowed(a))
     optimizer.modcache.P[:] = 0
     processlinearterms!(optimizer.modcache.q, obj.terms)
@@ -465,7 +473,7 @@ function MOI.set(optimizer::OSQPOptimizer, a::MOI.ObjectiveFunction{MOI.ScalarAf
     nothing
 end
 
-function MOI.set(optimizer::OSQPOptimizer, a::MOI.ObjectiveFunction{Quadratic}, obj::Quadratic)
+function MOI.set(optimizer::Optimizer, a::MOI.ObjectiveFunction{Quadratic}, obj::Quadratic)
     MOI.is_empty(optimizer) && throw(MOI.SetAttributeNotAllowed(a))
     cache = optimizer.modcache
     cache.P[:] = 0
@@ -481,25 +489,25 @@ function MOI.set(optimizer::OSQPOptimizer, a::MOI.ObjectiveFunction{Quadratic}, 
     nothing
 end
 
-function MOI.get(optimizer::OSQPOptimizer, a::MOI.ObjectiveValue)
+function MOI.get(optimizer::Optimizer, a::MOI.ObjectiveValue)
     rawobj = optimizer.results.info.obj_val + optimizer.objconstant
     ifelse(optimizer.sense == MOI.MaxSense, -rawobj, rawobj)
 end
 
 error_not_solved() = error("Problem is unsolved.")
-function check_has_results(optimizer::OSQPOptimizer)
+function check_has_results(optimizer::Optimizer)
     if !hasresults(optimizer)
         error_not_solved()
     end
 end
 
 # Since these aren't explicitly returned by OSQP, I feel like it would be better to have a fallback method compute these:
-function MOI.get(optimizer::OSQPOptimizer, a::MOI.SolveTime)
+function MOI.get(optimizer::Optimizer, a::MOI.SolveTime)
     check_has_results(optimizer)
     optimizer.results.info.run_time
 end
 
-function MOI.get(optimizer::OSQPOptimizer, a::MOI.TerminationStatus)
+function MOI.get(optimizer::Optimizer, a::MOI.TerminationStatus)
     check_has_results(optimizer)
     # Note that the :Dual_infeasible and :Primal_infeasible are mapped to MOI.Success
     # because OSQP can return a proof of infeasibility. For the same reason,
@@ -526,7 +534,7 @@ function MOI.get(optimizer::OSQPOptimizer, a::MOI.TerminationStatus)
     end
 end
 
-function MOI.get(optimizer::OSQPOptimizer, a::MOI.PrimalStatus)
+function MOI.get(optimizer::Optimizer, a::MOI.PrimalStatus)
     hasresults(optimizer) || return MOI.NoSolution
     osqpstatus = optimizer.results.info.status
     if osqpstatus == :Unsolved
@@ -544,7 +552,7 @@ function MOI.get(optimizer::OSQPOptimizer, a::MOI.PrimalStatus)
     end
 end
 
-function MOI.get(optimizer::OSQPOptimizer, a::MOI.DualStatus)
+function MOI.get(optimizer::Optimizer, a::MOI.DualStatus)
     hasresults(optimizer) || return MOI.NoSolution
     osqpstatus = optimizer.results.info.status
     if osqpstatus == :Unsolved
@@ -564,30 +572,30 @@ end
 
 
 ## Variables:
-function MOI.is_valid(optimizer::OSQPOptimizer, vi::VI)
+function MOI.is_valid(optimizer::Optimizer, vi::VI)
     vi.value ∈ 1 : MOI.get(optimizer, MOI.NumberOfVariables())
 end
 
 
 ## Variable attributes:
-function MOI.get(optimizer::OSQPOptimizer, a::MOI.VariablePrimal, vi::VI)
+function MOI.get(optimizer::Optimizer, a::MOI.VariablePrimal, vi::VI)
     x = ifelse(_contains(OSQP.SOLUTION_PRESENT, optimizer.results.info.status), optimizer.results.x, optimizer.results.dual_inf_cert)
     x[vi.value]
 end
 
-function MOI.set(optimizer::OSQPOptimizer, a::MOI.VariablePrimalStart, vi::VI, value)
+function MOI.set(optimizer::Optimizer, a::MOI.VariablePrimalStart, vi::VI, value)
     MOI.is_empty(optimizer) && throw(MOI.SetAttributeNotAllowed(a))
     optimizer.warmstartcache.x[vi.value] = value
 end
 
 
 ## Constraints:
-function MOI.is_valid(optimizer::OSQPOptimizer, ci::CI)
+function MOI.is_valid(optimizer::Optimizer, ci::CI)
     MOI.is_empty(optimizer) && return false
     ci.value ∈ keys(optimizer.rowranges)
 end
 
-function MOI.set(optimizer::OSQPOptimizer, a::MOI.ConstraintDualStart, ci::CI, value)
+function MOI.set(optimizer::Optimizer, a::MOI.ConstraintDualStart, ci::CI, value)
     MOI.is_empty(optimizer) && throw(MOI.SetAttributeNotAllowed(a))
     rows = constraint_rows(optimizer, ci)
     for (i, row) in enumerate(rows)
@@ -597,7 +605,7 @@ function MOI.set(optimizer::OSQPOptimizer, a::MOI.ConstraintDualStart, ci::CI, v
 end
 
 # function modification:
-function MOI.set(optimizer::OSQPOptimizer, attr::MOI.ConstraintFunction, ci::CI{Affine, <:IntervalConvertible}, f::Affine)
+function MOI.set(optimizer::Optimizer, attr::MOI.ConstraintFunction, ci::CI{Affine, <:IntervalConvertible}, f::Affine)
     MOI.is_valid(optimizer, ci) || throw(MOI.InvalidIndex(ci))
     row = constraint_rows(optimizer, ci)
     optimizer.modcache.A[row, :] = 0
@@ -613,7 +621,7 @@ function MOI.set(optimizer::OSQPOptimizer, attr::MOI.ConstraintFunction, ci::CI{
     nothing
 end
 
-function MOI.set(optimizer::OSQPOptimizer, attr::MOI.ConstraintFunction, ci::CI{VectorAffine, <:SupportedVectorSets}, f::VectorAffine)
+function MOI.set(optimizer::Optimizer, attr::MOI.ConstraintFunction, ci::CI{VectorAffine, <:SupportedVectorSets}, f::VectorAffine)
     MOI.is_valid(optimizer, ci) || throw(MOI.InvalidIndex(ci))
     rows = constraint_rows(optimizer, ci)
     for row in rows
@@ -634,7 +642,7 @@ function MOI.set(optimizer::OSQPOptimizer, attr::MOI.ConstraintFunction, ci::CI{
 end
 
 # set modification:
-function MOI.set(optimizer::OSQPOptimizer, attr::MOI.ConstraintSet, ci::CI{<:AffineConvertible, S}, s::S) where {S <: IntervalConvertible}
+function MOI.set(optimizer::Optimizer, attr::MOI.ConstraintSet, ci::CI{<:AffineConvertible, S}, s::S) where {S <: IntervalConvertible}
     MOI.is_valid(optimizer, ci) || throw(MOI.InvalidIndex(ci))
     interval = S <: Interval ? s : MOI.Interval(s)
     row = constraint_rows(optimizer, ci)
@@ -644,7 +652,7 @@ function MOI.set(optimizer::OSQPOptimizer, attr::MOI.ConstraintSet, ci::CI{<:Aff
     nothing
 end
 
-function MOI.set(optimizer::OSQPOptimizer,  attr::MOI.ConstraintSet, ci::CI{<:VectorAffine, S}, s::S) where {S <: SupportedVectorSets}
+function MOI.set(optimizer::Optimizer,  attr::MOI.ConstraintSet, ci::CI{<:VectorAffine, S}, s::S) where {S <: SupportedVectorSets}
     MOI.is_valid(optimizer, ci) || throw(MOI.InvalidIndex(ci))
     rows = constraint_rows(optimizer, ci)
     for (i, row) in enumerate(rows)
@@ -656,7 +664,7 @@ function MOI.set(optimizer::OSQPOptimizer,  attr::MOI.ConstraintSet, ci::CI{<:Ve
 end
 
 # partial function modification:
-function MOI.modify(optimizer::OSQPOptimizer, ci::CI{Affine, <:IntervalConvertible}, change::MOI.ScalarCoefficientChange)
+function MOI.modify(optimizer::Optimizer, ci::CI{Affine, <:IntervalConvertible}, change::MOI.ScalarCoefficientChange)
     MOI.is_valid(optimizer, ci) || throw(MOI.InvalidIndex(ci))
     row = constraint_rows(optimizer, ci)
     optimizer.modcache.A[row, change.variable.value] = change.new_coefficient
@@ -665,11 +673,11 @@ end
 
 # TODO: MultirowChange?
 
-MOI.supports_constraint(optimizer::OSQPOptimizer, ::Type{<:AffineConvertible}, ::Type{<:IntervalConvertible}) = true
-MOI.supports_constraint(optimizer::OSQPOptimizer, ::Type{VectorAffine}, ::Type{<:SupportedVectorSets}) = true
+MOI.supports_constraint(optimizer::Optimizer, ::Type{<:AffineConvertible}, ::Type{<:IntervalConvertible}) = true
+MOI.supports_constraint(optimizer::Optimizer, ::Type{VectorAffine}, ::Type{<:SupportedVectorSets}) = true
 
 ## Constraint attributes:
-function MOI.get(optimizer::OSQPOptimizer, a::MOI.ConstraintDual, ci::CI)
+function MOI.get(optimizer::Optimizer, a::MOI.ConstraintDual, ci::CI)
     y = ifelse(_contains(OSQP.SOLUTION_PRESENT, optimizer.results.info.status), optimizer.results.y, optimizer.results.prim_inf_cert)
     rows = constraint_rows(optimizer, ci)
     -y[rows]
@@ -677,12 +685,12 @@ end
 
 
 # Objective modification
-function MOI.modify(optimizer::OSQPOptimizer, attr::MOI.ObjectiveFunction, change::MOI.ScalarConstantChange)
+function MOI.modify(optimizer::Optimizer, attr::MOI.ObjectiveFunction, change::MOI.ScalarConstantChange)
     MOI.is_empty(optimizer) && throw(MOI.ModifyObjectiveNotAllowed(change))
     optimizer.objconstant = change.new_constant
 end
 
-function MOI.modify(optimizer::OSQPOptimizer, attr::MOI.ObjectiveFunction, change::MOI.ScalarCoefficientChange)
+function MOI.modify(optimizer::Optimizer, attr::MOI.ObjectiveFunction, change::MOI.ScalarCoefficientChange)
     MOI.is_empty(optimizer) && throw(MOI.ModifyObjectiveNotAllowed(change))
     optimizer.modcache.q[change.variable.value] = change.new_coefficient
 end
