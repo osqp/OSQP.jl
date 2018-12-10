@@ -1,4 +1,9 @@
-Version 0.4.0 (): OSQP v0.4.1
+Version 0.5.0 (10 December 2018): OSQP v0.5.0
+----------------------------------------------
+* Upgraded OSQP to 0.5.0 version
+* Added `update_time` info structure
+
+Version 0.4.0 (29 October 2018): OSQP v0.4.1
 ----------------------------------------------
 * Upgraded OSQP to 0.4.1 version
 
