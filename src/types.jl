@@ -75,6 +75,7 @@ struct CInfo
     dua_res::Cdouble
     setup_time::Cdouble
     solve_time::Cdouble
+    update_time::Cdouble
     polish_time::Cdouble
     run_time::Cdouble
     rho_updates::Cc_int
@@ -209,6 +210,7 @@ mutable struct Info
     dua_res::Float64
     setup_time::Float64
     solve_time::Float64
+    update_time::Float64
     polish_time::Float64
     run_time::Float64
     rho_updates::Int64
@@ -227,6 +229,7 @@ function Compat.copyto!(info::Info, cinfo::CInfo)
     info.dua_res = cinfo.dua_res
     info.setup_time = cinfo.setup_time
     info.solve_time = cinfo.solve_time
+    info.update_time = cinfo.update_time
     info.polish_time = cinfo.polish_time
     info.run_time = cinfo.run_time
     info.rho_updates = cinfo.rho_updates
