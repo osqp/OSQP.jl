@@ -33,8 +33,8 @@ end
 include("constants.jl")
 include("types.jl")
 include("interface.jl")
-include("MPBWrapper.jl")
-include("MOIWrapper.jl")
+include("MPB_wrapper.jl")
+include("MOI_wrapper.jl")
 const Optimizer = MathOptInterfaceOSQP.Optimizer
 
 end # module
