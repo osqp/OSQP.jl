@@ -78,7 +78,7 @@ mutable struct Optimizer <: MOI.AbstractOptimizer
         results = OSQP.Results()
         is_empty = true
         settings = Dict{Symbol, Any}()
-        sense = MOI.MinSense
+        sense = MOI.MIN_SENSE
         objconstant = 0.
         constrconstant = Float64[]
         modcache = ProblemModificationCache{Float64}()
@@ -87,6 +87,8 @@ mutable struct Optimizer <: MOI.AbstractOptimizer
         new(inner, hasresults, results, is_empty, settings, sense, objconstant, constrconstant, modcache, warmstartcache, rowranges)
     end
 end
+
+MOI.get(::Optimizer, ::MOI.SolverName) = "OSQP"
 
 # used to smooth out transition of OSQP v0.4 -> v0.5, TODO: remove on OSQP v0.6
 export OSQPOptimizer
@@ -103,7 +105,7 @@ function MOI.empty!(optimizer::Optimizer)
     optimizer.hasresults = false
     optimizer.results = OSQP.Results()
     optimizer.is_empty = true
-    optimizer.sense = MOI.MinSense # model parameter, so needs to be reset
+    optimizer.sense = MOI.MIN_SENSE # model parameter, so needs to be reset
     optimizer.objconstant = 0.
     optimizer.constrconstant = Float64[]
     optimizer.modcache = ProblemModificationCache{Float64}()
@@ -180,7 +182,7 @@ function processobjective(src::MOI.ModelLike, idxmap)
     sense = MOI.get(src, MOI.ObjectiveSense())
     n = MOI.get(src, MOI.NumberOfVariables())
     q = zeros(n)
-    if sense != MOI.FeasibilitySense
+    if sense != MOI.FEASIBILITY_SENSE
         function_type = MOI.get(src, MOI.ObjectiveFunctionType())
         if function_type == MOI.SingleVariable
             fsingle = MOI.get(src, MOI.ObjectiveFunction{MOI.SingleVariable}())
@@ -204,7 +206,7 @@ function processobjective(src::MOI.ModelLike, idxmap)
         else
             throw(MOI.UnsupportedAttribute(MOI.ObjectiveFunction{function_type}()))
         end
-        sense == MOI.MaxSense && (Compat.rmul!(P, -1); Compat.rmul!(q, -1); c = -c)
+        sense == MOI.MAX_SENSE && (Compat.rmul!(P, -1); Compat.rmul!(q, -1); c = -c)
     else
         P = spzeros(n, n)
         q = zeros(n)
@@ -491,7 +493,7 @@ end
 
 function MOI.get(optimizer::Optimizer, a::MOI.ObjectiveValue)
     rawobj = optimizer.results.info.obj_val + optimizer.objconstant
-    ifelse(optimizer.sense == MOI.MaxSense, -rawobj, rawobj)
+    ifelse(optimizer.sense == MOI.MAX_SENSE, -rawobj, rawobj)
 end
 
 error_not_solved() = error("Problem is unsolved.")
@@ -504,69 +506,67 @@ end
 # Since these aren't explicitly returned by OSQP, I feel like it would be better to have a fallback method compute these:
 function MOI.get(optimizer::Optimizer, a::MOI.SolveTime)
     check_has_results(optimizer)
-    optimizer.results.info.run_time
+    return optimizer.results.info.run_time
 end
 
 function MOI.get(optimizer::Optimizer, a::MOI.TerminationStatus)
-    check_has_results(optimizer)
-    # Note that the :Dual_infeasible and :Primal_infeasible are mapped to MOI.Success
-    # because OSQP can return a proof of infeasibility. For the same reason,
-    # :Primal_infeasible_inaccurate is mapped to MOI.AlmostSuccess
+    hasresults(optimizer) || return MOI.OPTIMIZE_NOT_CALLED
     osqpstatus = optimizer.results.info.status
     if osqpstatus == :Unsolved
-        error_not_solved() # TODO: good idea?
+        return MOI.OPTIMIZE_NOT_CALLED
     elseif osqpstatus == :Interrupted
-        MOI.Interrupted
+        return MOI.INTERRUPTED
     elseif osqpstatus == :Dual_infeasible
-        MOI.Success
+        return MOI.DUAL_INFEASIBLE
     elseif osqpstatus == :Primal_infeasible
-        MOI.Success
+        return MOI.INFEASIBLE
     elseif osqpstatus == :Max_iter_reached
-        MOI.IterationLimit
+        return MOI.ITERATION_LIMIT
     elseif osqpstatus == :Solved
-        MOI.Success
+        return MOI.OPTIMAL
     elseif osqpstatus == :Solved_inaccurate
-        MOI.AlmostSuccess
+        return MOI.ALMOST_OPTIMAL
     elseif osqpstatus == :Primal_infeasible_inaccurate
-        MOI.AlmostSuccess
-    elseif osqpstatus == :Non_convex
-        MOI.InvalidModel
+        return MOI.ALMOST_INFEASIBLE
+    else
+        @assert osqpstatus == :Non_convex
+        return MOI.INVALID_MODEL
     end
 end
 
 function MOI.get(optimizer::Optimizer, a::MOI.PrimalStatus)
-    hasresults(optimizer) || return MOI.NoSolution
+    hasresults(optimizer) || return MOI.NO_SOLUTION
     osqpstatus = optimizer.results.info.status
     if osqpstatus == :Unsolved
-        error("Problem is unsolved.") # TODO: good idea?
+        return MOI.NO_SOLUTION
     elseif osqpstatus == :Primal_infeasible
-        MOI.InfeasibilityCertificate
+        return MOI.INFEASIBILITY_CERTIFICATE
     elseif osqpstatus == :Solved
-        MOI.FeasiblePoint
+        return MOI.FEASIBLE_POINT
     elseif osqpstatus == :Primal_infeasible_inaccurate
-        MOI.NearlyInfeasibilityCertificate
+        return MOI.NEARLY_INFEASIBILITY_CERTIFICATE
     elseif osqpstatus == :Dual_infeasible
-        MOI.InfeasibilityCertificate
+        return MOI.INFEASIBILITY_CERTIFICATE
     else # :Interrupted, :Max_iter_reached, :Solved_inaccurate, :Non_convex (TODO: good idea? use OSQP.SOLUTION_PRESENT?)
-        MOI.NoSolution
+        return MOI.NO_SOLUTION
     end
 end
 
 function MOI.get(optimizer::Optimizer, a::MOI.DualStatus)
-    hasresults(optimizer) || return MOI.NoSolution
+    hasresults(optimizer) || return MOI.NO_SOLUTION
     osqpstatus = optimizer.results.info.status
     if osqpstatus == :Unsolved
-        error("Problem is unsolved.") # TODO: good idea?
+        return MOI.NO_SOLUTION
     elseif osqpstatus == :Dual_infeasible
-        MOI.InfeasibilityCertificate
+        return MOI.INFEASIBILITY_CERTIFICATE
     elseif osqpstatus == :Primal_infeasible
-        MOI.InfeasibilityCertificate
+        return MOI.INFEASIBILITY_CERTIFICATE
     elseif osqpstatus == :Primal_infeasible_inaccurate
-        MOI.AlmostInfeasibilityCertificate
+        return MOI.NEARLY_INFEASIBILITY_CERTIFICATE
     elseif osqpstatus == :Solved
-        MOI.FeasiblePoint
+        return MOI.FEASIBLE_POINT
     else # :Interrupted, :Max_iter_reached, :Solved_inaccurate, :Non_convex (TODO: good idea? use OSQP.SOLUTION_PRESENT?)
-        MOI.NoSolution
+        return MOI.NO_SOLUTION
     end
 end
 

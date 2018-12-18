@@ -153,7 +153,7 @@ function test_optimizer_modification(modfun::Base.Callable, model::MOI.ModelLike
     @test MOI.get(optimizer, MOI.PrimalStatus()) == MOI.get(cleanoptimizer, MOI.PrimalStatus())
     @test MOI.get(optimizer, MOI.ObjectiveValue()) ≈ MOI.get(cleanoptimizer, MOI.ObjectiveValue()) atol=atol rtol=rtol
 
-    if MOI.get(optimizer, MOI.PrimalStatus()) == MOI.FeasiblePoint
+    if MOI.get(optimizer, MOI.PrimalStatus()) == MOI.FEASIBLE_POINT
         modelvars = MOI.get(model, MOI.ListOfVariableIndices())
         for v_model in modelvars
             v_optimizer = idxmap[v_model]
@@ -163,7 +163,7 @@ function test_optimizer_modification(modfun::Base.Callable, model::MOI.ModelLike
 
     if config.duals
         @test MOI.get(optimizer, MOI.DualStatus()) == MOI.get(cleanoptimizer, MOI.DualStatus())
-        if MOI.get(optimizer, MOI.DualStatus()) == MOI.FeasiblePoint
+        if MOI.get(optimizer, MOI.DualStatus()) == MOI.FEASIBLE_POINT
             for (F, S) in MOI.get(model, MOI.ListOfConstraints())
                 cis_model = MOI.get(model, MOI.ListOfConstraintIndices{F, S}())
                 for ci_model in cis_model
@@ -202,11 +202,11 @@ term(c, x::MOI.VariableIndex, y::MOI.VariableIndex) = MOI.ScalarQuadraticTerm(c,
     vc2 = MOI.add_constraint(model, v[2], MOI.Interval(0.0, Inf))
     objf = MOI.ScalarAffineFunction([term.([0.0, 0.0], v); term.([-1.0, 0.0], v); term.([0.0, 0.0], v)], 0.0)
     MOI.set(model, MOI.ObjectiveFunction{MOI.ScalarAffineFunction{Float64}}(), objf)
-    MOI.set(model, MOI.ObjectiveSense(), MOI.MinSense)
+    MOI.set(model, MOI.ObjectiveSense(), MOI.MIN_SENSE)
 
     optimizer = defaultoptimizer()
     idxmap = MOI.copy_to(optimizer, model)
-    @test MOI.get(optimizer, MOI.ObjectiveSense()) == MOI.MinSense
+    @test MOI.get(optimizer, MOI.ObjectiveSense()) == MOI.MIN_SENSE
     @test MOI.get(optimizer, MOI.NumberOfVariables()) == 2
     @test MOI.get(optimizer, MOI.ListOfVariableIndices()) == [MOI.VariableIndex(1), MOI.VariableIndex(2)]
     @test MOI.is_valid(optimizer, MOI.VariableIndex(2))
@@ -217,11 +217,11 @@ term(c, x::MOI.VariableIndex, y::MOI.VariableIndex) = MOI.ScalarQuadraticTerm(c,
     # ensure that unmodified model is correct
     atol = config.atol
     rtol = config.rtol
-    @test MOI.get(optimizer, MOI.TerminationStatus()) == MOI.Success
-    @test MOI.get(optimizer, MOI.PrimalStatus()) == MOI.FeasiblePoint
+    @test MOI.get(optimizer, MOI.TerminationStatus()) == MOI.OPTIMAL
+    @test MOI.get(optimizer, MOI.PrimalStatus()) == MOI.FEASIBLE_POINT
     @test MOI.get(optimizer, MOI.ObjectiveValue()) ≈ -1 atol=atol rtol=rtol
     @test MOI.get(optimizer, MOI.VariablePrimal(), getindex.(Ref(idxmap), v)) ≈ [1, 0] atol=atol rtol=rtol
-    @test MOI.get(optimizer, MOI.DualStatus()) == MOI.FeasiblePoint
+    @test MOI.get(optimizer, MOI.DualStatus()) == MOI.FEASIBLE_POINT
     @test MOI.get(optimizer, MOI.ConstraintDual(), idxmap[c]) ≈ -1 atol=atol rtol=rtol
     @test MOI.get(optimizer, MOI.ConstraintDual(), idxmap[vc1]) ≈ 0 atol=atol rtol=rtol
     @test MOI.get(optimizer, MOI.ConstraintDual(), idxmap[vc2]) ≈ 1 atol=atol rtol=rtol
@@ -307,11 +307,11 @@ term(c, x::MOI.VariableIndex, y::MOI.VariableIndex) = MOI.ScalarQuadraticTerm(c,
     end
 
     testflipped = function ()
-        @test MOI.get(optimizer, MOI.TerminationStatus()) == MOI.Success
-        @test MOI.get(optimizer, MOI.PrimalStatus()) == MOI.FeasiblePoint
+        @test MOI.get(optimizer, MOI.TerminationStatus()) == MOI.OPTIMAL
+        @test MOI.get(optimizer, MOI.PrimalStatus()) == MOI.FEASIBLE_POINT
         @test MOI.get(optimizer, MOI.ObjectiveValue()) ≈ -1 atol=atol rtol=rtol
         @test MOI.get(optimizer, MOI.VariablePrimal(), getindex.(Ref(idxmap), v)) ≈ [-1, 0] atol=atol rtol=rtol
-        @test MOI.get(optimizer, MOI.DualStatus()) == MOI.FeasiblePoint
+        @test MOI.get(optimizer, MOI.DualStatus()) == MOI.FEASIBLE_POINT
         @test MOI.get(optimizer, MOI.ConstraintDual(), idxmap[c]) ≈ 1 atol=atol rtol=rtol
         @test MOI.get(optimizer, MOI.ConstraintDual(), idxmap[vc1]) ≈ 0 atol=atol rtol=rtol
         @test MOI.get(optimizer, MOI.ConstraintDual(), idxmap[vc2]) ≈ -1 atol=atol rtol=rtol
@@ -337,13 +337,13 @@ end
     I, J, coeffs = findnz(A)
     objf = MOI.ScalarQuadraticFunction(term.(q, x), [term(2 * P11, x[1], x[1])], 0.0)
     MOI.set(model, MOI.ObjectiveFunction{MOI.ScalarAffineFunction{Float64}}(), objf)
-    MOI.set(model, MOI.ObjectiveSense(), MOI.MinSense)
+    MOI.set(model, MOI.ObjectiveSense(), MOI.MIN_SENSE)
     cf = MOI.VectorAffineFunction(MOI.VectorAffineTerm.(Int64.(I), term.(coeffs, map(j -> getindex(x, j), J))), -u)
     c = MOI.add_constraint(model, cf, MOI.Nonpositives(length(u)))
 
     optimizer = defaultoptimizer()
     idxmap = MOI.copy_to(optimizer, model)
-    @test MOI.get(optimizer, MOI.ObjectiveSense()) == MOI.MinSense
+    @test MOI.get(optimizer, MOI.ObjectiveSense()) == MOI.MIN_SENSE
     @test MOI.get(optimizer, MOI.NumberOfVariables()) == 2
     @test MOI.get(optimizer, MOI.ListOfVariableIndices()) == [MOI.VariableIndex(1), MOI.VariableIndex(2)]
     @test MOI.is_valid(optimizer, MOI.VariableIndex(2))
@@ -354,11 +354,11 @@ end
     # check result before modification
     atol = config.atol
     rtol = config.rtol
-    @test MOI.get(optimizer, MOI.TerminationStatus()) == MOI.Success
-    @test MOI.get(optimizer, MOI.PrimalStatus()) == MOI.FeasiblePoint
+    @test MOI.get(optimizer, MOI.TerminationStatus()) == MOI.OPTIMAL
+    @test MOI.get(optimizer, MOI.PrimalStatus()) == MOI.FEASIBLE_POINT
     @test MOI.get(optimizer, MOI.ObjectiveValue()) ≈ 20. atol=atol rtol=rtol
     @test MOI.get(optimizer, MOI.VariablePrimal(), getindex.(Ref(idxmap), x)) ≈ [0.; 5.] atol=atol rtol=rtol
-    @test MOI.get(optimizer, MOI.DualStatus()) == MOI.FeasiblePoint
+    @test MOI.get(optimizer, MOI.DualStatus()) == MOI.FEASIBLE_POINT
     @test MOI.get(optimizer, MOI.ConstraintDual(), idxmap[c]) ≈ -[1.666666666666; 0.; 1.3333333; 0.; 0.] atol=atol rtol=rtol
 
     # test allocations
@@ -417,8 +417,8 @@ end
     end
 
     check_results = function (optimizer, idxmap, x, A, b, expected)
-        @test MOI.get(optimizer, MOI.TerminationStatus()) == MOI.Success
-        @test MOI.get(optimizer, MOI.PrimalStatus()) == MOI.FeasiblePoint
+        @test MOI.get(optimizer, MOI.TerminationStatus()) == MOI.OPTIMAL
+        @test MOI.get(optimizer, MOI.PrimalStatus()) == MOI.FEASIBLE_POINT
         @test MOI.get.(Ref(optimizer), Ref(MOI.VariablePrimal()), getindex.(Ref(idxmap), x)) ≈ expected atol = 1e-4
         @test MOI.get(optimizer, MOI.ObjectiveValue()) ≈ norm(A * expected - b)^2 atol = 1e-4
     end
@@ -431,7 +431,7 @@ end
     model = OSQPModel{Float64}()
     x = MOI.add_variables(model, n)
     MOI.set(model, MOI.ObjectiveFunction{MOI.ScalarQuadraticFunction{Float64}}(), make_objective(P, q, r, x))
-    MOI.set(model, MOI.ObjectiveSense(), MOI.MinSense)
+    MOI.set(model, MOI.ObjectiveSense(), MOI.MIN_SENSE)
     c = MOI.add_constraint(model, make_constraint_fun(C, d, x), MOI.Zeros(length(d)))
 
     optimizer = defaultoptimizer()
@@ -458,11 +458,13 @@ end
         @test inner.workspace == C_NULL
     end
 
+    @test MOI.get(optimizer, MOI.SolverName()) == "OSQP"
+
     model = OSQPModel{Float64}()
     MOI.empty!(model)
     x = MOI.add_variable(model)
     c = MOI.add_constraint(model, x, MOI.GreaterThan(2.0))
-    MOI.set(model, MOI.ObjectiveSense(), MOI.MinSense)
+    MOI.set(model, MOI.ObjectiveSense(), MOI.MIN_SENSE)
     MOI.set(model, MOI.ObjectiveFunction{MOI.SingleVariable}(), MOI.SingleVariable(x))
 
     MOI.copy_to(optimizer, model)
@@ -471,8 +473,8 @@ end
 end
 
 # TODO: consider moving to MOIT. However, current default copy_to is fine with BadObjectiveModel.
-struct BadObjectiveModel <: MOIT.BadModel end # objective sense is not FeasibilitySense, but can't get objective function
-MOI.get(src::BadObjectiveModel, ::MOI.ObjectiveSense) = MOI.MinSense
+struct BadObjectiveModel <: MOIT.BadModel end # objective sense is not FEASIBILITY_SENSE, but can't get objective function
+MOI.get(src::BadObjectiveModel, ::MOI.ObjectiveSense) = MOI.MIN_SENSE
 struct ExoticFunction <: MOI.AbstractScalarFunction end
 MOI.get(src::BadObjectiveModel, ::MOI.ObjectiveFunctionType) = ExoticFunction
 
