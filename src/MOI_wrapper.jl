@@ -366,7 +366,7 @@ function processdualstart!(y, src::MOI.ModelLike, idxmap, rowranges::Dict{Int, U
     for (F, S) in MOI.get(src, MOI.ListOfConstraints())
         has_dual_start = false
         for attr in MOI.get(src, MOI.ListOfConstraintAttributesSet{F, S}())
-            if attr isa MOI.VariablePrimalStart
+            if attr isa MOI.ConstraintDualStart
                 has_dual_start = true
             end
         end
