@@ -357,7 +357,10 @@ function processprimalstart!(x, src::MOI.ModelLike, idxmap)
     if has_primal_start
         vis_src = MOI.get(src, MOI.ListOfVariableIndices())
         for vi in vis_src
-            x[idxmap[vi].value] = MOI.get(src, MOI.VariablePrimalStart(), vi)
+            value = MOI.get(src, MOI.VariablePrimalStart(), vi)
+            if value != nothing
+                x[idxmap[vi].value] = value
+            end
         end
     end
 end
