@@ -357,7 +357,7 @@ function processprimalstart!(x, src::MOI.ModelLike, idxmap)
     if has_primal_start
         vis_src = MOI.get(src, MOI.ListOfVariableIndices())
         for vi in vis_src
-            x[idxmap[vi]] = get(src, MOI.VariablePrimalStart(), vi)
+            x[idxmap[vi].value] = MOI.get(src, MOI.VariablePrimalStart(), vi)
         end
     end
 end
@@ -375,8 +375,10 @@ function processdualstart!(y, src::MOI.ModelLike, idxmap, rowranges::Dict{Int, U
             for ci in cis_src
                 rows = constraint_rows(rowranges, idxmap[ci])
                 dual = MOI.get(src, MOI.ConstraintDualStart(), ci)
-                for (i, row) in enumerate(rows)
-                    y[row] = -dual[i] # opposite dual convention
+                if dual != nothing
+                    for (i, row) in enumerate(rows)
+                        y[row] = -dual[i] # opposite dual convention
+                    end
                 end
             end
         end

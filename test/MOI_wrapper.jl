@@ -395,7 +395,6 @@ end
     u = [1.; 0.7; 0.7]
 
     model = MOIU.UniversalFallback(OSQPModel{Float64}());
-    MOI.supports(::MOIU.UniversalFallback{OSQPModel{Float64}}, a::MOI.VariablePrimalStart, ::Type{MOI.VariableIndex}) = true
     optimizer = defaultoptimizer();
 
     x = MOI.add_variables(model, 2);
@@ -417,6 +416,8 @@ end
     x_sol = MOI.get(optimizer, MOI.VariablePrimal(), getindex.(Ref(idxmap), x));
     y_c1 = MOI.get(optimizer, MOI.ConstraintDual(), idxmap[con1]);
     y_c2 = MOI.get(optimizer, MOI.ConstraintDual(), idxmap[con2]);
+    y_c1_rows = OSQP.MathOptInterfaceOSQP.constraint_rows(optimizer.rowranges, idxmap[con1]);
+    y_c2_rows = OSQP.MathOptInterfaceOSQP.constraint_rows(optimizer.rowranges, idxmap[con2]);
 
     # provide warm start values to the model
     MOI.set.(model, MOI.VariablePrimalStart(), x, x_sol)
@@ -425,7 +426,9 @@ end
     idxmap = MOI.copy_to(optimizer, model);
 
     # check that internal variables are set correctly
-
+    @test optimizer.warmstartcache.x.data == x_sol
+    @test optimizer.warmstartcache.y.data[y_c1_rows] == -y_c1
+    @test optimizer.warmstartcache.y.data[y_c2_rows] == -y_c2
 end
 
 @testset "Vector equality constraint" begin
