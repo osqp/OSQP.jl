@@ -385,6 +385,52 @@ end
     end
 end
 
+@testset "No CachingOptimizer: Warm starting" begin
+    # define QP:
+    # min 1/2 x'Px + q'x
+    # s.t. Ax <= u   <=> -Ax + u in Nonnegatives
+    #      Ax >= l   <=> Ax - l in Nonnegatives
+
+    l = [1.; 0; 0];
+    u = [1.; 0.7; 0.7]
+
+    model = MOIU.UniversalFallback(OSQPModel{Float64}());
+    optimizer = defaultoptimizer();
+
+    x = MOI.add_variables(model, 2);
+    objectiveFunction = MOI.ScalarQuadraticFunction{Float64}([MOI.ScalarAffineTerm(1.0, x[1]); MOI.ScalarAffineTerm(1.0, x[2])], [MOI.ScalarQuadraticTerm(4.0, x[1], x[1]); MOI.ScalarQuadraticTerm(1.0, x[1], x[2]); MOI.ScalarQuadraticTerm(2.0, x[2], x[2])] , 0);
+    MOI.set(model, MOI.ObjectiveFunction{MOI.ScalarQuadraticFunction{Float64}}(), objectiveFunction);
+    MOI.set(model, MOI.ObjectiveSense(), MOI.MIN_SENSE);
+    Aneg = [MOI.VectorAffineTerm(1, MOI.ScalarAffineTerm(-1.0, x[1])),MOI.VectorAffineTerm(1, MOI.ScalarAffineTerm(-1.0, x[2])),MOI.VectorAffineTerm(2, MOI.ScalarAffineTerm(-1.0, x[1])),MOI.VectorAffineTerm(3, MOI.ScalarAffineTerm(-1.0, x[2]))];
+    MOI.add_constraint(model, MOI.VectorAffineFunction(Aneg, u), MOI.Nonnegatives(3));
+    A = [MOI.VectorAffineTerm(1, MOI.ScalarAffineTerm(1.0, x[1])),MOI.VectorAffineTerm(1, MOI.ScalarAffineTerm(1.0, x[2])),MOI.VectorAffineTerm(2, MOI.ScalarAffineTerm(1.0, x[1])),MOI.VectorAffineTerm(3, MOI.ScalarAffineTerm(1.0, x[2]))];
+    con1 = MOI.add_constraint(model, MOI.VectorAffineFunction(A, -u), MOI.Nonpositives(3));
+    con2 = MOI.add_constraint(model, MOI.VectorAffineFunction(A, -l),MOI.Nonnegatives(3));
+
+
+    MOI.empty!(optimizer);
+    idxmap = MOI.copy_to(optimizer, model);
+    MOI.optimize!(optimizer);
+
+    # solve once to get optimal solution
+    x_sol = MOI.get(optimizer, MOI.VariablePrimal(), getindex.(Ref(idxmap), x));
+    y_c1 = MOI.get(optimizer, MOI.ConstraintDual(), idxmap[con1]);
+    y_c2 = MOI.get(optimizer, MOI.ConstraintDual(), idxmap[con2]);
+    y_c1_rows = OSQP.MathOptInterfaceOSQP.constraint_rows(optimizer.rowranges, idxmap[con1]);
+    y_c2_rows = OSQP.MathOptInterfaceOSQP.constraint_rows(optimizer.rowranges, idxmap[con2]);
+
+    # provide warm start values to the model
+    MOI.set.(model, MOI.VariablePrimalStart(), x, x_sol)
+    MOI.set.(model, MOI.ConstraintDualStart(), [con1, con2], [y_c1, y_c2])
+    MOI.empty!(optimizer);
+    idxmap = MOI.copy_to(optimizer, model);
+
+    # check that internal variables are set correctly
+    @test optimizer.warmstartcache.x.data == x_sol
+    @test optimizer.warmstartcache.y.data[y_c1_rows] == -y_c1
+    @test optimizer.warmstartcache.y.data[y_c2_rows] == -y_c2
+end
+
 @testset "Vector equality constraint" begin
     # Minimize ||A x - b||^2 = x' A' A x - (2 * A' * b)' x + b' * b
     # subject to C x = d
