@@ -227,10 +227,10 @@ term(c, x::MOI.VariableIndex, y::MOI.VariableIndex) = MOI.ScalarQuadraticTerm(c,
     @test MOI.get(optimizer, MOI.ConstraintDual(), idxmap[vc2]) ≈ 1 atol=atol rtol=rtol
 
     # test default warm start
-    tcold = MOI.get(optimizer, MOI.SolveTime())
+    itercold = optimizer.results.info.iter
     MOI.optimize!(optimizer)
-    twarm = MOI.get(optimizer, MOI.SolveTime())
-    @test twarm < 0.5 * tcold # conservative; should be about an order of magnitude in this case
+    iterwarm = optimizer.results.info.iter
+    @test iterwarm < itercold
 
     # test allocations
     allocs = @allocated MOI.optimize!(optimizer)
