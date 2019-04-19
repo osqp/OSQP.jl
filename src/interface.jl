@@ -10,16 +10,16 @@ else
     end
 end
 
+"""
+    Model()
+
+Initialize OSQP model
+"""
 mutable struct Model
     workspace::Ptr{OSQP.Workspace}
     lcache::Vector{Float64} # to facilitate converting l to use OSQP_INFTY
     ucache::Vector{Float64} # to facilitate converting u to use OSQP_INFTY
 
-    """
-        Module()
-
-    Initialize OSQP module
-    """
     function Model()
         model = new(C_NULL, Float64[], Float64[])
         @compat finalizer(OSQP.clean!, model)
