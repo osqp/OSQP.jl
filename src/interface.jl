@@ -66,7 +66,7 @@ function setup!(model::OSQP.Model;
 
     # Check if parameters are nothing
     if ((A == nothing) & ( (l != nothing) | (u != nothing))) |
-        ((A != nothing) & ((l == nothing) | (u == nothing)))
+        ((A != nothing) & ((l == nothing) & (u == nothing)))
         error("A must be supplied together with l and u")
     end
 
