@@ -72,12 +72,15 @@ mutable struct Optimizer <: MOI.AbstractOptimizer
     warmstartcache::WarmStartCache{Float64}
     rowranges::Dict{Int, UnitRange{Int}}
 
-    function Optimizer()
+    function Optimizer(; kwargs...)
         inner = OSQP.Model()
         hasresults = false
         results = OSQP.Results()
         is_empty = true
         settings = Dict{Symbol, Any}()
+        for (name, value) in kwargs
+            settings[Symbol(name)] = value
+        end
         sense = MOI.MIN_SENSE
         objconstant = 0.
         constrconstant = Float64[]

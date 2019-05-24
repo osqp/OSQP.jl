@@ -1,3 +1,8 @@
+Version 0.5.2 (24 May 2019): OSQP v0.5.0
+----------------------------------------------
+* Updated package manager system (#52): now all operating systems use precompiled shared libraries.
+* Fixed issues #44 #51 #49 #50
+
 Version 0.5.0 (10 December 2018): OSQP v0.5.0
 ----------------------------------------------
 * Upgraded OSQP to 0.5.0 version
