@@ -1,8 +1,7 @@
 module ModificationCaches
 
-using Compat
-using Compat.LinearAlgebra
-using Compat.SparseArrays
+using LinearAlgebra
+using SparseArrays
 
 export
     VectorModificationCache,
@@ -11,7 +10,6 @@ export
     WarmStartCache,
     processupdates!
 
-using Compat
 import OSQP
 
 mutable struct VectorModificationCache{T}

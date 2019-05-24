@@ -219,7 +219,7 @@ mutable struct Info
     Info() = new()
 end
 
-function Compat.copyto!(info::Info, cinfo::CInfo)
+function copyto!(info::Info, cinfo::CInfo)
     info.iter = cinfo.iter
     info.status = OSQP.status_map[cinfo.status_val]
     info.status_val = cinfo.status_val

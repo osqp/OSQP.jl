@@ -1,5 +1,4 @@
 using BinaryProvider
-using Compat
 
 # Parse some basic command-line arguments
 const verbose = "--verbose" in ARGS
@@ -10,11 +9,11 @@ version = "0.5.0"
 
 # Get current operating system
 osqp_platform =
-if Compat.Sys.islinux()
+if Sys.islinux()
     "linux"
-elseif Compat.Sys.isapple()
+elseif Sys.isapple()
     "mac"
-elseif Compat.Sys.iswindows()
+elseif Sys.iswindows()
     "windows"
 else
     error("Platform not supported!")

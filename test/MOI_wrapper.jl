@@ -1,10 +1,8 @@
-using Compat # for CartesianIndices
 using OSQP
 using OSQP.MathOptInterfaceOSQP
-using Compat.Test
-using Compat.LinearAlgebra
-using Compat.Random
-using Compat.SparseArrays
+using LinearAlgebra
+using Random
+using SparseArrays
 
 using MathOptInterface
 const MOI = MathOptInterface

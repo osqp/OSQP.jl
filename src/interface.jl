@@ -22,7 +22,7 @@ mutable struct Model
 
     function Model()
         model = new(C_NULL, Float64[], Float64[])
-        @compat finalizer(OSQP.clean!, model)
+        finalizer(OSQP.clean!, model)
         return model
 
     end
@@ -104,11 +104,11 @@ function setup!(model::OSQP.Model;
 
     # Check or sparsify matrices
     if !issparse(P)
-        Compat.@warn("P is not sparse. Sparsifying it now (it might take a while)")
+        @warn("P is not sparse. Sparsifying it now (it might take a while)")
         P = sparse(P)
     end
     if !issparse(A)
-        Compat.@warn("A is not sparse. Sparsifying it now (it might take a while)")
+        @warn("A is not sparse. Sparsifying it now (it might take a while)")
         A = sparse(A)
     end
 
@@ -164,7 +164,7 @@ function solve!(model::OSQP.Model, results::Results = Results())
              model.workspace)
     workspace = unsafe_load(model.workspace)
     info = results.info
-    Compat.copyto!(info, unsafe_load(workspace.info))
+    copyto!(info, unsafe_load(workspace.info))
     solution = unsafe_load(workspace.solution)
     data = unsafe_load(workspace.data)
     n = data.n
@@ -518,7 +518,7 @@ function linsys_solver_str_to_int!(settings_dict::Dict{Symbol,Any})
         elseif linsys_str == ""
             settings_dict[:linsys_solver] = QDLDL_SOLVER
         else
-            Compat.@warn("Linear system solver not recognized. Using default QDLDL")
+            @warn("Linear system solver not recognized. Using default QDLDL")
             settings_dict[:linsys_solver] = QDLDL_SOLVER
 
         end

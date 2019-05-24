@@ -1,6 +1,5 @@
 using OSQP
-using Compat
-using Compat.Test, Compat.SparseArrays, Compat.LinearAlgebra, Compat.Random
+using Test, SparseArrays, LinearAlgebra
 using Random: seed!
 
 tests = [
