@@ -1,14 +1,9 @@
 module OSQPMathProgBaseInterface
 
-using Compat
-using Compat.LinearAlgebra
-using Compat.SparseArrays
+using LinearAlgebra
+using SparseArrays
 using OSQP: Model, Results, setup!, solve!, update!, clean!, update_settings!, warm_start!
 using MathProgBase
-
-@static if VERSION < v"0.7-"
-    blockdiag(A...) = blkdiag(A...)
-end
 
 struct OSQPSolver <: MathProgBase.AbstractMathProgSolver
     settings::Dict{Symbol,Any}

@@ -1,10 +1,8 @@
-using Compat # for CartesianIndices
 using OSQP
 using OSQP.MathOptInterfaceOSQP
-using Compat.Test
-using Compat.LinearAlgebra
-using Compat.Random
-using Compat.SparseArrays
+using LinearAlgebra
+using Random
+using SparseArrays
 
 using MathOptInterface
 const MOI = MathOptInterface
@@ -116,11 +114,13 @@ function defaultoptimizer()
 end
 
 @testset "CachingOptimizer: linear problems" begin
-    excludes = if Int == Int32
+    excludes = ["partial_start"]  # See comment https://github.com/JuliaOpt/MathOptInterface.jl/blob/ecf691545e67552ff437ed26ec4ddfff03c50327/src/Test/contlinear.jl#L1715
+    append!(excludes,
+    if Int == Int32
         ["linear7"] # https://github.com/JuliaOpt/MathOptInterface.jl/issues/377#issuecomment-394912761
     else
-        String[]
-    end
+        []
+    end)
     optimizer = defaultoptimizer()
     MOIT.contlineartest(MOIU.CachingOptimizer(OSQPModel{Float64}(), optimizer), config, excludes)
 end

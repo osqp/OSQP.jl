@@ -1,13 +1,7 @@
-VERSION < v"0.7.0-beta2.199" && __precompile__()
-
 module OSQP
 
 export OSQPMathProgBaseInterface
-
-# Compatibility stuff
-using Compat
-using Compat.SparseArrays
-using Compat.Iterators
+using SparseArrays
 
 
 if isfile(joinpath(dirname(@__FILE__), "..", "deps", "deps.jl"))
