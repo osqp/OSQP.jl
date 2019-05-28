@@ -113,6 +113,23 @@ function defaultoptimizer()
     optimizer
 end
 
+@testset "CachingOptimizer: unit" begin
+    excludes = [# Quadratic constraints are not supported
+                "solve_qcp_edge_cases",
+                # No method get(::Optimizer, ::MathOptInterface.ConstraintPrimal, ::MathOptInterface.ConstraintIndex{MathOptInterface.VectorAffineFunction{Float64},MathOptInterface.Nonpositives})
+                "solve_duplicate_terms_vector_affine",
+                # FIXME KeyError: key CartesianIndex(1, 2) not found
+                "solve_qp_edge_cases",
+                # ConstraintPrimal not supported
+                "solve_affine_deletion_edge_cases",
+                # Integer and ZeroOne sets are not supported
+                "solve_integer_edge_cases", "solve_objbound_edge_cases"]
+
+    optimizer = defaultoptimizer()
+    MOIT.unittest(MOIU.CachingOptimizer(OSQPModel{Float64}(), optimizer),
+                  config, excludes)
+end
+
 @testset "CachingOptimizer: linear problems" begin
     excludes = ["partial_start"]  # See comment https://github.com/JuliaOpt/MathOptInterface.jl/blob/ecf691545e67552ff437ed26ec4ddfff03c50327/src/Test/contlinear.jl#L1715
     append!(excludes,
