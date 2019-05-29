@@ -6,12 +6,8 @@ using SparseArrays
 
 using MathOptInterface
 const MOI = MathOptInterface
-
-using MathOptInterface.Test
-const MOIT = MathOptInterface.Test
-
-using MathOptInterface.Utilities
-const MOIU = MathOptInterface.Utilities
+const MOIT = MOI.Test
+const MOIU = MOI.Utilities
 
 const Affine = MOI.ScalarAffineFunction{Float64}
 
@@ -105,7 +101,7 @@ const config = MOIT.TestConfig(atol=1e-4, rtol=1e-4)
 
 function defaultoptimizer()
     optimizer = OSQP.Optimizer()
-    MOI.set(optimizer, OSQPSettings.Verbose(), false)
+    MOI.set(optimizer, MOI.Silent(), true)
     MOI.set(optimizer, OSQPSettings.EpsAbs(), 1e-8)
     MOI.set(optimizer, OSQPSettings.EpsRel(), 1e-16)
     MOI.set(optimizer, OSQPSettings.MaxIter(), 10000)
@@ -126,7 +122,7 @@ end
                 "solve_integer_edge_cases", "solve_objbound_edge_cases"]
 
     optimizer = defaultoptimizer()
-    MOIT.unittest(MOIU.CachingOptimizer(OSQPModel{Float64}(), optimizer),
+    MOIT.unittest(MOIU.CachingOptimizer(MOIU.UniversalFallback(OSQPModel{Float64}()), optimizer),
                   config, excludes)
 end
 
