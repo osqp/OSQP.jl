@@ -19,7 +19,6 @@ const SparseTriplets = Tuple{Vector{Int}, Vector{Int}, Vector{<:Any}}
 
 const Affine = MOI.ScalarAffineFunction{Float64}
 const Quadratic = MOI.ScalarQuadraticFunction{Float64}
-const AffineConvertible = Union{Affine, MOI.SingleVariable}
 const VectorAffine = MOI.VectorAffineFunction{Float64}
 
 const Interval = MOI.Interval{Float64}
@@ -286,7 +285,7 @@ function processconstraints!(triplets::SparseTriplets, bounds::Tuple{<:Vector, <
     nothing
 end
 
-function processconstant!(c::Vector{Float64}, row::Int, f::AffineConvertible)
+function processconstant!(c::Vector{Float64}, row::Int, f::Affine)
     c[row] = MOI.constant(f, Float64)
     nothing
 end
@@ -295,15 +294,6 @@ function processconstant!(c::Vector{Float64}, rows::UnitRange{Int}, f::VectorAff
     for (i, row) in enumerate(rows)
         c[row] = f.constants[i]
     end
-end
-
-function processlinearpart!(triplets::SparseTriplets, f::MOI.SingleVariable, row::Int, idxmap)
-    (I, J, V) = triplets
-    col = idxmap[f.variable].value
-    push!(I, row)
-    push!(J, col)
-    push!(V, 1)
-    nothing
 end
 
 function processlinearpart!(triplets::SparseTriplets, f::MOI.ScalarAffineFunction, row::Int, idxmap)
@@ -660,7 +650,7 @@ function MOI.set(optimizer::Optimizer, attr::MOI.ConstraintFunction, ci::CI{Vect
 end
 
 # set modification:
-function MOI.set(optimizer::Optimizer, attr::MOI.ConstraintSet, ci::CI{<:AffineConvertible, S}, s::S) where {S <: IntervalConvertible}
+function MOI.set(optimizer::Optimizer, attr::MOI.ConstraintSet, ci::CI{Affine, S}, s::S) where {S <: IntervalConvertible}
     MOI.is_valid(optimizer, ci) || throw(MOI.InvalidIndex(ci))
     interval = S <: Interval ? s : MOI.Interval(s)
     row = constraint_rows(optimizer, ci)
@@ -670,7 +660,7 @@ function MOI.set(optimizer::Optimizer, attr::MOI.ConstraintSet, ci::CI{<:AffineC
     nothing
 end
 
-function MOI.set(optimizer::Optimizer,  attr::MOI.ConstraintSet, ci::CI{<:VectorAffine, S}, s::S) where {S <: SupportedVectorSets}
+function MOI.set(optimizer::Optimizer,  attr::MOI.ConstraintSet, ci::CI{VectorAffine, S}, s::S) where {S <: SupportedVectorSets}
     MOI.is_valid(optimizer, ci) || throw(MOI.InvalidIndex(ci))
     rows = constraint_rows(optimizer, ci)
     for (i, row) in enumerate(rows)
@@ -691,7 +681,7 @@ end
 
 # TODO: MultirowChange?
 
-MOI.supports_constraint(optimizer::Optimizer, ::Type{<:AffineConvertible}, ::Type{<:IntervalConvertible}) = true
+MOI.supports_constraint(optimizer::Optimizer, ::Type{Affine}, ::Type{<:IntervalConvertible}) = true
 MOI.supports_constraint(optimizer::Optimizer, ::Type{VectorAffine}, ::Type{<:SupportedVectorSets}) = true
 
 ## Constraint attributes:

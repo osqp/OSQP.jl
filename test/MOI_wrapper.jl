@@ -84,10 +84,6 @@ const Affine = MOI.ScalarAffineFunction{Float64}
 end
 
 # FIXME: type piracy. Generalize and move to MOIU.
-function MOI.get(optimizer::MOIU.CachingOptimizer, ::MOI.ConstraintPrimal, ci::MOI.ConstraintIndex{<:MOI.SingleVariable, <:Any})
-    f = MOI.get(optimizer, MOI.ConstraintFunction(), ci)
-    MOI.get(optimizer, MOI.VariablePrimal(), f.variable)
-end
 function MOI.get(optimizer::MOIU.CachingOptimizer, ::MOI.ConstraintPrimal, ci::MOI.ConstraintIndex{<:MOI.ScalarAffineFunction, <:Any})
     f = MOI.get(optimizer, MOI.ConstraintFunction(), ci)
     ret = f.constant
@@ -106,7 +102,12 @@ function defaultoptimizer()
     MOI.set(optimizer, OSQPSettings.EpsRel(), 1e-16)
     MOI.set(optimizer, OSQPSettings.MaxIter(), 10000)
     MOI.set(optimizer, OSQPSettings.AdaptiveRhoInterval(), 25) # required for deterministic behavior
-    optimizer
+    return optimizer
+end
+function bridged_optimizer()
+    optimizer = defaultoptimizer()
+    cached = MOIU.CachingOptimizer(MOIU.UniversalFallback(OSQPModel{Float64}()), optimizer)
+    return MOI.Bridges.full_bridge_optimizer(cached, Float64)
 end
 
 @testset "CachingOptimizer: unit" begin
@@ -121,9 +122,7 @@ end
                 # Integer and ZeroOne sets are not supported
                 "solve_integer_edge_cases", "solve_objbound_edge_cases"]
 
-    optimizer = defaultoptimizer()
-    MOIT.unittest(MOIU.CachingOptimizer(MOIU.UniversalFallback(OSQPModel{Float64}()), optimizer),
-                  config, excludes)
+    MOIT.unittest(bridged_optimizer(), config, excludes)
 end
 
 @testset "CachingOptimizer: linear problems" begin
@@ -134,14 +133,13 @@ end
     else
         []
     end)
-    optimizer = defaultoptimizer()
-    MOIT.contlineartest(MOIU.CachingOptimizer(OSQPModel{Float64}(), optimizer), config, excludes)
+    MOIT.contlineartest(bridged_optimizer(), config, excludes)
 end
 
 @testset "CachingOptimizer: quadratic problems" begin
     excludes = String[]
     optimizer = defaultoptimizer()
-    MOIT.qptest(MOIU.CachingOptimizer(OSQPModel{Float64}(), optimizer), config, excludes)
+    MOIT.qptest(bridged_optimizer(), config, excludes)
 end
 
 function test_optimizer_modification(modfun::Base.Callable, model::MOI.ModelLike, optimizer::T, idxmap::MOIU.IndexMap,
