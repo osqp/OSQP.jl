@@ -3,6 +3,7 @@ using OSQP.MathOptInterfaceOSQP
 using LinearAlgebra
 using Random
 using SparseArrays
+using Test
 
 using MathOptInterface
 const MOI = MathOptInterface
@@ -111,7 +112,9 @@ function bridged_optimizer()
 end
 
 @testset "CachingOptimizer: unit" begin
-    excludes = [# Quadratic constraints are not supported
+    excludes = [# TODO
+                "time_limit_sec",
+                # Quadratic constraints are not supported
                 "solve_qcp_edge_cases",
                 # No method get(::Optimizer, ::MathOptInterface.ConstraintPrimal, ::MathOptInterface.ConstraintIndex{MathOptInterface.VectorAffineFunction{Float64},MathOptInterface.Nonpositives})
                 "solve_duplicate_terms_vector_affine",
@@ -120,7 +123,10 @@ end
                 # ConstraintPrimal not supported
                 "solve_affine_deletion_edge_cases",
                 # Integer and ZeroOne sets are not supported
-                "solve_integer_edge_cases", "solve_objbound_edge_cases"]
+                "solve_integer_edge_cases", "solve_objbound_edge_cases",
+                "solve_zero_one_with_bounds_1",
+                "solve_zero_one_with_bounds_2",
+                "solve_zero_one_with_bounds_3"]
 
     MOIT.unittest(bridged_optimizer(), config, excludes)
 end
