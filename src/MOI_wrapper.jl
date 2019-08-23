@@ -17,10 +17,8 @@ const VI = MOI.VariableIndex
 
 const SparseTriplets = Tuple{Vector{Int}, Vector{Int}, Vector{<:Any}}
 
-const SingleVariable = MOI.SingleVariable
 const Affine = MOI.ScalarAffineFunction{Float64}
 const Quadratic = MOI.ScalarQuadraticFunction{Float64}
-const AffineConvertible = Union{Affine, SingleVariable}
 const VectorAffine = MOI.VectorAffineFunction{Float64}
 
 const Interval = MOI.Interval{Float64}
@@ -35,14 +33,6 @@ const Nonpositives = MOI.Nonpositives
 const SupportedVectorSets = Union{Zeros, Nonnegatives, Nonpositives}
 
 import OSQP
-
-# TODO: consider moving to MOI:
-constant(f::MOI.SingleVariable) = 0
-constant(f::MOI.ScalarAffineFunction) = f.constant
-# constant(f::MOI.ScalarQuadraticFunction) = f.constant
-
-dimension(s::MOI.AbstractSet) = MOI.dimension(s)
-dimension(::MOI.AbstractScalarSet) = 1
 
 lower(::Zeros, i::Int) = 0.0
 lower(::Nonnegatives, i::Int) = 0.0
@@ -64,6 +54,7 @@ mutable struct Optimizer <: MOI.AbstractOptimizer
     hasresults::Bool
     results::OSQP.Results
     is_empty::Bool
+    silent::Bool
     settings::Dict{Symbol, Any} # need to store these, because they should be preserved if empty! is called
     sense::MOI.OptimizationSense
     objconstant::Float64
@@ -77,29 +68,38 @@ mutable struct Optimizer <: MOI.AbstractOptimizer
         hasresults = false
         results = OSQP.Results()
         is_empty = true
-        settings = Dict{Symbol, Any}()
-        for (name, value) in kwargs
-            settings[Symbol(name)] = value
-        end
         sense = MOI.MIN_SENSE
         objconstant = 0.
         constrconstant = Float64[]
         modcache = ProblemModificationCache{Float64}()
         warmstartcache = WarmStartCache{Float64}()
         rowranges = Dict{Int, UnitRange{Int}}()
-        new(inner, hasresults, results, is_empty, settings, sense, objconstant, constrconstant, modcache, warmstartcache, rowranges)
+        optimizer = new(inner, hasresults, results, is_empty, false,
+                        Dict{Symbol, Any}(:verbose => true), sense, objconstant,
+                        constrconstant, modcache, warmstartcache, rowranges)
+        for (key, value) in kwargs
+            MOI.set(optimizer, MOI.RawParameter(key), value)
+        end
+        return optimizer
     end
 end
 
 MOI.get(::Optimizer, ::MOI.SolverName) = "OSQP"
 
-# used to smooth out transition of OSQP v0.4 -> v0.5, TODO: remove on OSQP v0.6
-export OSQPOptimizer
-function OSQPOptimizer()
-    Base.depwarn("OSQPOptimizer() is deprecated, use OSQP.Optimizer() instead.",
-                 :OSQPOptimizer)
-    return Optimizer()
+MOI.supports(::Optimizer, ::MOI.Silent) = true
+function MOI.set(optimizer::Optimizer, ::MOI.Silent, value::Bool)
+    if optimizer.silent != value
+        optimizer.silent = value
+        if !MOI.is_empty(optimizer)
+            if optimizer.silent
+                OSQP.update_settings!(optimizer.inner; :verbose => false)
+            else
+                OSQP.update_settings!(optimizer.inner; :verbose => optimizer.settings[:verbose])
+            end
+        end
+    end
 end
+MOI.get(optimizer::Optimizer, ::MOI.Silent) = optimizer.silent
 
 hasresults(optimizer::Optimizer) = optimizer.hasresults
 
@@ -127,6 +127,9 @@ function MOI.copy_to(dest::Optimizer, src::MOI.ModelLike; copy_names=false)
     dest.sense, P, q, dest.objconstant = processobjective(src, idxmap)
     A, l, u, dest.constrconstant = processconstraints(src, idxmap, dest.rowranges)
     OSQP.setup!(dest.inner; P = P, q = q, A = A, l = l, u = u, dest.settings...)
+    if dest.silent
+        OSQP.update_settings!(dest.inner; :verbose => false)
+    end
     dest.modcache = ProblemModificationCache(P, q, A, l, u)
     dest.warmstartcache = WarmStartCache{Float64}(size(A, 2), size(A, 1))
     processprimalstart!(dest.warmstartcache.x, src, idxmap)
@@ -163,7 +166,7 @@ function assign_constraint_row_ranges!(rowranges::Dict{Int, UnitRange{Int}}, idx
         for ci_src in cis_src
             set = MOI.get(src, MOI.ConstraintSet(), ci_src)
             ci_dest = idxmap[ci_src]
-            endrow = startrow + dimension(set) - 1
+            endrow = startrow + MOI.dimension(set) - 1
             rowranges[ci_dest.value] = startrow : endrow
             startrow = endrow + 1
         end
@@ -282,8 +285,8 @@ function processconstraints!(triplets::SparseTriplets, bounds::Tuple{<:Vector, <
     nothing
 end
 
-function processconstant!(c::Vector{Float64}, row::Int, f::AffineConvertible)
-    c[row] = constant(f)
+function processconstant!(c::Vector{Float64}, row::Int, f::Affine)
+    c[row] = MOI.constant(f, Float64)
     nothing
 end
 
@@ -291,15 +294,6 @@ function processconstant!(c::Vector{Float64}, rows::UnitRange{Int}, f::VectorAff
     for (i, row) in enumerate(rows)
         c[row] = f.constants[i]
     end
-end
-
-function processlinearpart!(triplets::SparseTriplets, f::MOI.SingleVariable, row::Int, idxmap)
-    (I, J, V) = triplets
-    col = idxmap[f.variable].value
-    push!(I, row)
-    push!(J, col)
-    push!(V, 1)
-    nothing
 end
 
 function processlinearpart!(triplets::SparseTriplets, f::MOI.ScalarAffineFunction, row::Int, idxmap)
@@ -430,13 +424,20 @@ end # module
 
 using .OSQPSettings
 
-function MOI.set(optimizer::Optimizer, a::OSQPAttribute, value)
+_symbol(param::MOI.RawParameter) = Symbol(param.name)
+_symbol(a::OSQPAttribute) = Symbol(a)
+OSQPSettings.isupdatable(param::MOI.RawParameter) = _contains(OSQP.UPDATABLE_SETTINGS, _symbol(param))
+function MOI.set(optimizer::Optimizer, a::Union{OSQPAttribute, MOI.RawParameter}, value)
     (isupdatable(a) || MOI.is_empty(optimizer)) || throw(MOI.SetAttributeNotAllowed(a))
-    setting = Symbol(a)
+    setting = _symbol(a)
     optimizer.settings[setting] = value
     if !MOI.is_empty(optimizer)
         OSQP.update_settings!(optimizer.inner; setting => value)
     end
+end
+
+function MOI.get(optimizer::Optimizer, a::Union{OSQPAttribute, MOI.RawParameter})
+    return optimizer.settings[_symbol(a)]
 end
 
 
@@ -512,7 +513,11 @@ function MOI.get(optimizer::Optimizer, a::MOI.SolveTime)
     return optimizer.results.info.run_time
 end
 
-function MOI.get(optimizer::Optimizer, a::MOI.TerminationStatus)
+function MOI.get(optimizer::Optimizer, ::MOI.RawStatusString)
+    return string(optimizer.results.info.status)
+end
+
+function MOI.get(optimizer::Optimizer, ::MOI.TerminationStatus)
     hasresults(optimizer) || return MOI.OPTIMIZE_NOT_CALLED
     osqpstatus = optimizer.results.info.status
     if osqpstatus == :Unsolved
@@ -645,7 +650,7 @@ function MOI.set(optimizer::Optimizer, attr::MOI.ConstraintFunction, ci::CI{Vect
 end
 
 # set modification:
-function MOI.set(optimizer::Optimizer, attr::MOI.ConstraintSet, ci::CI{<:AffineConvertible, S}, s::S) where {S <: IntervalConvertible}
+function MOI.set(optimizer::Optimizer, attr::MOI.ConstraintSet, ci::CI{Affine, S}, s::S) where {S <: IntervalConvertible}
     MOI.is_valid(optimizer, ci) || throw(MOI.InvalidIndex(ci))
     interval = S <: Interval ? s : MOI.Interval(s)
     row = constraint_rows(optimizer, ci)
@@ -655,7 +660,7 @@ function MOI.set(optimizer::Optimizer, attr::MOI.ConstraintSet, ci::CI{<:AffineC
     nothing
 end
 
-function MOI.set(optimizer::Optimizer,  attr::MOI.ConstraintSet, ci::CI{<:VectorAffine, S}, s::S) where {S <: SupportedVectorSets}
+function MOI.set(optimizer::Optimizer,  attr::MOI.ConstraintSet, ci::CI{VectorAffine, S}, s::S) where {S <: SupportedVectorSets}
     MOI.is_valid(optimizer, ci) || throw(MOI.InvalidIndex(ci))
     rows = constraint_rows(optimizer, ci)
     for (i, row) in enumerate(rows)
@@ -676,7 +681,7 @@ end
 
 # TODO: MultirowChange?
 
-MOI.supports_constraint(optimizer::Optimizer, ::Type{<:AffineConvertible}, ::Type{<:IntervalConvertible}) = true
+MOI.supports_constraint(optimizer::Optimizer, ::Type{Affine}, ::Type{<:IntervalConvertible}) = true
 MOI.supports_constraint(optimizer::Optimizer, ::Type{VectorAffine}, ::Type{<:SupportedVectorSets}) = true
 
 ## Constraint attributes:
@@ -705,7 +710,7 @@ MOIU.@model(OSQPModel, # modelname
     (MOI.Interval, MOI.LessThan, MOI.GreaterThan, MOI.EqualTo), # typedscalarsets
     (MOI.Zeros, MOI.Nonnegatives, MOI.Nonpositives), # vectorsets
     (), # typedvectorsets
-    (MOI.SingleVariable,), # scalarfunctions
+    (), # scalarfunctions
     (MOI.ScalarAffineFunction, MOI.ScalarQuadraticFunction), # typedscalarfunctions
     (), # vectorfunctions
     (MOI.VectorAffineFunction,) # typedvectorfunctions

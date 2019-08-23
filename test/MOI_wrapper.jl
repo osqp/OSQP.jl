@@ -3,15 +3,12 @@ using OSQP.MathOptInterfaceOSQP
 using LinearAlgebra
 using Random
 using SparseArrays
+using Test
 
 using MathOptInterface
 const MOI = MathOptInterface
-
-using MathOptInterface.Test
-const MOIT = MathOptInterface.Test
-
-using MathOptInterface.Utilities
-const MOIU = MathOptInterface.Utilities
+const MOIT = MOI.Test
+const MOIU = MOI.Utilities
 
 const Affine = MOI.ScalarAffineFunction{Float64}
 
@@ -88,10 +85,6 @@ const Affine = MOI.ScalarAffineFunction{Float64}
 end
 
 # FIXME: type piracy. Generalize and move to MOIU.
-function MOI.get(optimizer::MOIU.CachingOptimizer, ::MOI.ConstraintPrimal, ci::MOI.ConstraintIndex{<:MOI.SingleVariable, <:Any})
-    f = MOI.get(optimizer, MOI.ConstraintFunction(), ci)
-    MOI.get(optimizer, MOI.VariablePrimal(), f.variable)
-end
 function MOI.get(optimizer::MOIU.CachingOptimizer, ::MOI.ConstraintPrimal, ci::MOI.ConstraintIndex{<:MOI.ScalarAffineFunction, <:Any})
     f = MOI.get(optimizer, MOI.ConstraintFunction(), ci)
     ret = f.constant
@@ -105,16 +98,23 @@ const config = MOIT.TestConfig(atol=1e-4, rtol=1e-4)
 
 function defaultoptimizer()
     optimizer = OSQP.Optimizer()
-    MOI.set(optimizer, OSQPSettings.Verbose(), false)
+    MOI.set(optimizer, MOI.Silent(), true)
     MOI.set(optimizer, OSQPSettings.EpsAbs(), 1e-8)
     MOI.set(optimizer, OSQPSettings.EpsRel(), 1e-16)
     MOI.set(optimizer, OSQPSettings.MaxIter(), 10000)
     MOI.set(optimizer, OSQPSettings.AdaptiveRhoInterval(), 25) # required for deterministic behavior
-    optimizer
+    return optimizer
+end
+function bridged_optimizer()
+    optimizer = defaultoptimizer()
+    cached = MOIU.CachingOptimizer(MOIU.UniversalFallback(OSQPModel{Float64}()), optimizer)
+    return MOI.Bridges.full_bridge_optimizer(cached, Float64)
 end
 
 @testset "CachingOptimizer: unit" begin
-    excludes = [# Quadratic constraints are not supported
+    excludes = [# TODO
+                "time_limit_sec",
+                # Quadratic constraints are not supported
                 "solve_qcp_edge_cases",
                 # No method get(::Optimizer, ::MathOptInterface.ConstraintPrimal, ::MathOptInterface.ConstraintIndex{MathOptInterface.VectorAffineFunction{Float64},MathOptInterface.Nonpositives})
                 "solve_duplicate_terms_vector_affine",
@@ -123,29 +123,34 @@ end
                 # ConstraintPrimal not supported
                 "solve_affine_deletion_edge_cases",
                 # Integer and ZeroOne sets are not supported
-                "solve_integer_edge_cases", "solve_objbound_edge_cases"]
+                "solve_integer_edge_cases", "solve_objbound_edge_cases",
+                "solve_zero_one_with_bounds_1",
+                "solve_zero_one_with_bounds_2",
+                "solve_zero_one_with_bounds_3"]
 
-    optimizer = defaultoptimizer()
-    MOIT.unittest(MOIU.CachingOptimizer(OSQPModel{Float64}(), optimizer),
-                  config, excludes)
+    MOIT.unittest(bridged_optimizer(), config, excludes)
 end
 
 @testset "CachingOptimizer: linear problems" begin
-    excludes = ["partial_start"]  # See comment https://github.com/JuliaOpt/MathOptInterface.jl/blob/ecf691545e67552ff437ed26ec4ddfff03c50327/src/Test/contlinear.jl#L1715
+    excludes = [
+        "partial_start",  # See comment https://github.com/JuliaOpt/MathOptInterface.jl/blob/ecf691545e67552ff437ed26ec4ddfff03c50327/src/Test/contlinear.jl#L1715
+        "linear1", # `ConstraintPrimal` not available
+        "linear8a" # It expects `ResultCount` to be 0 as we disable `duals`.
+    ]
     append!(excludes,
     if Int == Int32
         ["linear7"] # https://github.com/JuliaOpt/MathOptInterface.jl/issues/377#issuecomment-394912761
     else
         []
     end)
-    optimizer = defaultoptimizer()
-    MOIT.contlineartest(MOIU.CachingOptimizer(OSQPModel{Float64}(), optimizer), config, excludes)
+    # We disable duals as DualObjectiveValue is not implemented
+    MOIT.contlineartest(bridged_optimizer(), MOIT.TestConfig(atol=1e-4, rtol=1e-4, duals=false), excludes)
 end
 
 @testset "CachingOptimizer: quadratic problems" begin
     excludes = String[]
     optimizer = defaultoptimizer()
-    MOIT.qptest(MOIU.CachingOptimizer(OSQPModel{Float64}(), optimizer), config, excludes)
+    MOIT.qptest(bridged_optimizer(), config, excludes)
 end
 
 function test_optimizer_modification(modfun::Base.Callable, model::MOI.ModelLike, optimizer::T, idxmap::MOIU.IndexMap,
@@ -215,8 +220,8 @@ term(c, x::MOI.VariableIndex, y::MOI.VariableIndex) = MOI.ScalarQuadraticTerm(c,
     x, y = v
     cf = MOI.ScalarAffineFunction([term.([0.0, 0.0], v); term.([1.0, 1.0], v); term.([0.0, 0.0], v)], 0.0)
     c = MOI.add_constraint(model, cf, MOI.Interval(-Inf, 1.0))
-    vc1 = MOI.add_constraint(model, MOI.SingleVariable(v[1]), MOI.Interval(0.0, Inf))
-    vc2 = MOI.add_constraint(model, v[2], MOI.Interval(0.0, Inf))
+    vc1 = MOI.add_constraint(model, 1.0MOI.SingleVariable(v[1]), MOI.Interval(0.0, Inf))
+    vc2 = MOI.add_constraint(model, 1.0MOI.SingleVariable(v[2]), MOI.Interval(0.0, Inf))
     objf = MOI.ScalarAffineFunction([term.([0.0, 0.0], v); term.([-1.0, 0.0], v); term.([0.0, 0.0], v)], 0.0)
     MOI.set(model, MOI.ObjectiveFunction{MOI.ScalarAffineFunction{Float64}}(), objf)
     MOI.set(model, MOI.ObjectiveSense(), MOI.MIN_SENSE)
@@ -526,7 +531,7 @@ end
     model = OSQPModel{Float64}()
     MOI.empty!(model)
     x = MOI.add_variable(model)
-    c = MOI.add_constraint(model, x, MOI.GreaterThan(2.0))
+    c = MOI.add_constraint(model, 1.0MOI.SingleVariable(x), MOI.GreaterThan(2.0))
     MOI.set(model, MOI.ObjectiveSense(), MOI.MIN_SENSE)
     MOI.set(model, MOI.ObjectiveFunction{MOI.SingleVariable}(), MOI.SingleVariable(x))
 
@@ -542,8 +547,10 @@ struct ExoticFunction <: MOI.AbstractScalarFunction end
 MOI.get(src::BadObjectiveModel, ::MOI.ObjectiveFunctionType) = ExoticFunction
 
 @testset "failcopy" begin
-    # TODO change OSQPOptimizer() to OSQP.Optimizer() in OSQP v0.6
-    optimizer = OSQPOptimizer()
-    MOIT.failcopytestc(optimizer)
-    @test_throws MOI.UnsupportedAttribute{MOI.ObjectiveFunction{ExoticFunction}} MOI.copy_to(optimizer, BadObjectiveModel())
+    # FIXME https://github.com/JuliaOpt/MathOptInterface.jl/issues/851
+    #MOIT.failcopytestc(bridged_optimizer())
+    #optimizer = bridged_optimizer()
+    #MOI.copy_to(optimizer, BadObjectiveModel())
+    # FIXME UndefRefError: access to undefined reference
+    #@test_throws MOI.UnsupportedAttribute{MOI.ObjectiveFunction{ExoticFunction}} MOI.optimize!(optimizer)
 end
