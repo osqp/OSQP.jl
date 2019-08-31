@@ -2,7 +2,7 @@ const QDLDL_SOLVER = 0
 const MKL_PARDISO_SOLVER = 1
 
 # Define OSQP infinity constants
-const OSQP_INFTY = 1e20
+const OSQP_INFTY = 1e30
 
 # OSQP return values
 # https://github.com/oxfordcontrol/osqp/blob/master/include/constants.h

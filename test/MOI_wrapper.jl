@@ -342,6 +342,7 @@ term(c, x::MOI.VariableIndex, y::MOI.VariableIndex) = MOI.ScalarQuadraticTerm(c,
 
     # update settings
     @test optimizer.results.info.status_polish == 0
+    print("ERROR STUFF")
     MOI.set(optimizer, OSQPSettings.Polish(), true)
     MOI.optimize!(optimizer)
     @test optimizer.results.info.status_polish == 1

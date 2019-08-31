@@ -88,14 +88,13 @@ MOI.get(::Optimizer, ::MOI.SolverName) = "OSQP"
 
 MOI.supports(::Optimizer, ::MOI.Silent) = true
 function MOI.set(optimizer::Optimizer, ::MOI.Silent, value::Bool)
-    if optimizer.silent != value
-        optimizer.silent = value
-        if !MOI.is_empty(optimizer)
-            if optimizer.silent
-                OSQP.update_settings!(optimizer.inner; :verbose => false)
-            else
-                OSQP.update_settings!(optimizer.inner; :verbose => optimizer.settings[:verbose])
-            end
+    optimizer.silent = value
+    optimizer.settings[:verbose] = !value
+    if !MOI.is_empty(optimizer)
+        if optimizer.silent
+            OSQP.update_settings!(optimizer.inner; :verbose => false)
+        else
+            OSQP.update_settings!(optimizer.inner; :verbose => optimizer.settings[:verbose])
         end
     end
 end
