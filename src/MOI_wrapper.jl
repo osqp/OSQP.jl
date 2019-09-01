@@ -93,7 +93,7 @@ function MOI.set(optimizer::Optimizer, ::MOI.Silent, value::Bool)
         if optimizer.silent
             OSQP.update_settings!(optimizer.inner; :verbose => false)
         else
-            OSQP.update_settings!(optimizer.inner; :verbose => true)
+            OSQP.update_settings!(optimizer.inner; :verbose => optimizer.settings[:verbose])
         end
     end
 end
