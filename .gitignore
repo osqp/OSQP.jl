@@ -14,3 +14,4 @@ deps/build.log
 .vscode/
 
 Manifest.toml
+.editorconfig
