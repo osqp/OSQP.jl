@@ -88,18 +88,36 @@ MOI.get(::Optimizer, ::MOI.SolverName) = "OSQP"
 
 MOI.supports(::Optimizer, ::MOI.Silent) = true
 function MOI.set(optimizer::Optimizer, ::MOI.Silent, value::Bool)
-    if optimizer.silent != value
-        optimizer.silent = value
-        if !MOI.is_empty(optimizer)
-            if optimizer.silent
-                OSQP.update_settings!(optimizer.inner; :verbose => false)
-            else
-                OSQP.update_settings!(optimizer.inner; :verbose => optimizer.settings[:verbose])
-            end
+    optimizer.silent = value
+    if !MOI.is_empty(optimizer)
+        if optimizer.silent
+            OSQP.update_settings!(optimizer.inner; :verbose => false)
+        else
+            OSQP.update_settings!(optimizer.inner; :verbose => optimizer.settings[:verbose])
         end
     end
 end
 MOI.get(optimizer::Optimizer, ::MOI.Silent) = optimizer.silent
+
+
+
+MOI.supports(::Optimizer, ::MOI.TimeLimitSec) = true
+function MOI.set(model::Optimizer, ::MOI.TimeLimitSec, limit::Real)
+    MOI.set(model, OSQPSettings.TimeLimit(), limit)
+    return
+end
+
+function MOI.set(model::Optimizer, attr::MOI.TimeLimitSec, ::Nothing)
+    delete!(model.settings, :time_limit)
+    OSQP.update_settings!(model.inner, time_limit=0.0)
+    return
+end
+
+function MOI.get(model::Optimizer, ::MOI.TimeLimitSec)
+    return get(model.settings, :time_limit, nothing)
+end
+
+
 
 hasresults(optimizer::Optimizer) = optimizer.hasresults
 

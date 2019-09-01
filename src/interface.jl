@@ -112,6 +112,11 @@ function setup!(model::OSQP.Model;
         A = sparse(A)
     end
 
+    # Constructing upper triangular from P
+    if !istriu(P)
+        P = triu(P)
+    end
+
     # Convert lower and upper bounds from Julia infinity to OSQP infinity
     u = min.(u, OSQP_INFTY)
     l = max.(l, -OSQP_INFTY)
@@ -146,12 +151,16 @@ function setup!(model::OSQP.Model;
                         pointer(q),
                         pointer(l), pointer(u))
 
+
         # Perform setup
-        model.workspace = ccall((:osqp_setup, OSQP.osqp), Ptr{OSQP.Workspace},
-            (Ptr{OSQP.Data}, Ptr{OSQP.Settings}), Ref(data), Ref(stgs))
+	workspace = Ref{Ptr{OSQP.Workspace}}()
+        exitflag = ccall((:osqp_setup, OSQP.osqp), Cc_int,
+	                 (Ptr{Ptr{OSQP.Workspace}}, Ptr{OSQP.Data}, Ptr{OSQP.Settings}),
+			 workspace, Ref(data), Ref(stgs))
+	model.workspace = workspace[]
     end
 
-    if model.workspace == C_NULL
+    if exitflag != 0
         error("Error in OSQP setup")
     end
 
@@ -160,8 +169,7 @@ end
 
 function solve!(model::OSQP.Model, results::Results = Results())
     ccall((:osqp_solve, OSQP.osqp), Cc_int,
-             (Ptr{OSQP.Workspace}, ),
-             model.workspace)
+             (Ptr{OSQP.Workspace}, ), model.workspace)
     workspace = unsafe_load(model.workspace)
     info = results.info
     copyto!(info, unsafe_load(workspace.info))

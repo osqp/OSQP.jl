@@ -5,7 +5,7 @@ const verbose = "--verbose" in ARGS
 const prefix = Prefix(get([a for a in ARGS if a != "--verbose"], 1, joinpath(@__DIR__, "usr")))
 
 # Current version
-version = "0.5.0"
+version = "0.6.0"
 
 # Get current operating system
 osqp_platform =

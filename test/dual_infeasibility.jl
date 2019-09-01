@@ -2,7 +2,7 @@ function setup_dual_infeasibility()
         options = Dict(:verbose => false,
                        :eps_abs => 1e-05,
                        :eps_rel => 1e-05,
-               :eps_prim_inf => 1e-18,
+               :eps_prim_inf => 1e-15,
                :check_termination => 1)
     return options
 end
@@ -56,7 +56,7 @@ tol = 1e-5
         OSQP.setup!(model; P=P, q=q, A=A, l=l, u=u, options...)
 
         # Warm start to avoid infeasibility detection at first step
-        OSQP.warm_start!(model, x=[25.; 25], y=[-2.; -2; -2; -2])
+        OSQP.warm_start!(model, x=[50.; 30.], y=[-2.; -2; -2; -2])
 
         results = OSQP.solve!(model)
 

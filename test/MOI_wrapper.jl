@@ -112,9 +112,7 @@ function bridged_optimizer()
 end
 
 @testset "CachingOptimizer: unit" begin
-    excludes = [# TODO
-                "time_limit_sec",
-                # Quadratic constraints are not supported
+    excludes = [# Quadratic constraints are not supported
                 "solve_qcp_edge_cases",
                 # No method get(::Optimizer, ::MathOptInterface.ConstraintPrimal, ::MathOptInterface.ConstraintIndex{MathOptInterface.VectorAffineFunction{Float64},MathOptInterface.Nonpositives})
                 "solve_duplicate_terms_vector_affine",
