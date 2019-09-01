@@ -100,6 +100,26 @@ function MOI.set(optimizer::Optimizer, ::MOI.Silent, value::Bool)
 end
 MOI.get(optimizer::Optimizer, ::MOI.Silent) = optimizer.silent
 
+
+
+MOI.supports(::Optimizer, ::MOI.TimeLimitSec) = true
+function MOI.set(model::Optimizer, ::MOI.TimeLimitSec, limit::Real)
+    MOI.set(model, OSQPSettings.TimeLimit(), limit)
+    return
+end
+
+function MOI.set(model::Optimizer, attr::MOI.TimeLimitSec, ::Nothing)
+    delete!(model.settings, :time_limit)
+    OSQP.update_settings!(model.inner, time_limit=0.0)
+    return
+end
+
+function MOI.get(model::Optimizer, ::MOI.TimeLimitSec)
+    return get(model.settings, :time_limit, nothing)
+end
+
+
+
 hasresults(optimizer::Optimizer) = optimizer.hasresults
 
 function MOI.empty!(optimizer::Optimizer)

@@ -112,9 +112,7 @@ function bridged_optimizer()
 end
 
 @testset "CachingOptimizer: unit" begin
-    excludes = [# TODO
-                "time_limit_sec",
-                # Quadratic constraints are not supported
+    excludes = [# Quadratic constraints are not supported
                 "solve_qcp_edge_cases",
                 # No method get(::Optimizer, ::MathOptInterface.ConstraintPrimal, ::MathOptInterface.ConstraintIndex{MathOptInterface.VectorAffineFunction{Float64},MathOptInterface.Nonpositives})
                 "solve_duplicate_terms_vector_affine",
@@ -342,7 +340,6 @@ term(c, x::MOI.VariableIndex, y::MOI.VariableIndex) = MOI.ScalarQuadraticTerm(c,
 
     # update settings
     @test optimizer.results.info.status_polish == 0
-    print("ERROR STUFF")
     MOI.set(optimizer, OSQPSettings.Polish(), true)
     MOI.optimize!(optimizer)
     @test optimizer.results.info.status_polish == 1
