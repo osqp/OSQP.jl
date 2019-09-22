@@ -73,7 +73,7 @@ const Affine = MOI.ScalarAffineFunction{Float64}
     Pmod = sparse(1.0I, n, n)
     OSQP.setup!(model4; P = Pmod, q = modcache.q.data, A = Amod, l = l, u = u, verbose = false, eps_abs = 1e-8, eps_rel = 1e-16)
     Pmod_setup_results = OSQP.solve!(model4)
-    @test Pmod_update_results.x ≈ Pmod_setup_results.x atol = 1e-8
+    @test Pmod_update_results.x ≈ Pmod_setup_results.x atol = 1e-7
 
     # Modifying the sparsity pattern is not allowed
     nzinds = map(CartesianIndex, zip(rows, cols))
@@ -303,7 +303,7 @@ term(c, x::MOI.VariableIndex, y::MOI.VariableIndex) = MOI.ScalarQuadraticTerm(c,
     # flip the feasible set around from what it was originally and minimize +x
     test_optimizer_modification(model, optimizer, idxmap, defaultoptimizer(), config) do m
         # objective
-        newobjf = MOI.SingleVariable(mapfrommodel(m, x))
+        newobjf = convert(MOI.ScalarAffineFunction{Float64}, MOI.SingleVariable(mapfrommodel(m, x)))
         F = typeof(newobjf)
         MOI.set(m, MOI.ObjectiveFunction{F}(), newobjf)
 
@@ -530,8 +530,10 @@ end
     MOI.empty!(model)
     x = MOI.add_variable(model)
     c = MOI.add_constraint(model, 1.0MOI.SingleVariable(x), MOI.GreaterThan(2.0))
+    fx = MOI.SingleVariable(x)
+    obj = convert(MOI.ScalarAffineFunction{Float64}, fx)
     MOI.set(model, MOI.ObjectiveSense(), MOI.MIN_SENSE)
-    MOI.set(model, MOI.ObjectiveFunction{MOI.SingleVariable}(), MOI.SingleVariable(x))
+    MOI.set(model, MOI.ObjectiveFunction{typeof(obj)}(), obj)
 
     MOI.copy_to(optimizer, model)
     inner = MOI.get(optimizer, MOI.RawSolver())
