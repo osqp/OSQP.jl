@@ -209,12 +209,7 @@ function processobjective(src::MOI.ModelLike, idxmap)
     q = zeros(n)
     if sense != MOI.FEASIBILITY_SENSE
         function_type = MOI.get(src, MOI.ObjectiveFunctionType())
-        if function_type == MOI.SingleVariable
-            fsingle = MOI.get(src, MOI.ObjectiveFunction{MOI.SingleVariable}())
-            P = spzeros(n, n)
-            q[idxmap[fsingle.variable].value] = 1
-            c = 0.
-        elseif function_type == MOI.ScalarAffineFunction{Float64}
+        if function_type == MOI.ScalarAffineFunction{Float64}
             faffine = MOI.get(src, MOI.ObjectiveFunction{MOI.ScalarAffineFunction{Float64}}())
             P = spzeros(n, n)
             processlinearterms!(q, faffine.terms, idxmap)
@@ -476,25 +471,15 @@ end
 MOI.get(optimizer::Optimizer, ::MOI.RawSolver) = optimizer.inner
 MOI.get(optimizer::Optimizer, ::MOI.ResultCount) = 1
 
-MOI.supports(::Optimizer, ::MOI.ObjectiveFunction{MOI.SingleVariable}) = true
 MOI.supports(::Optimizer, ::MOI.ObjectiveFunction{MOI.ScalarAffineFunction{Float64}}) = true
 MOI.supports(::Optimizer, ::MOI.ObjectiveFunction{Quadratic}) = true
 MOI.supports(::Optimizer, ::MOI.ObjectiveSense) = true
-
-function MOI.set(optimizer::Optimizer, a::MOI.ObjectiveFunction{MOI.SingleVariable}, obj::MOI.SingleVariable)
-    MOI.is_empty(optimizer) && throw(MOI.SetAttributeNotAllowed(a))
-    optimizer.modcache.P[:] = 0
-    optimizer.modcache.q[:] = 0
-    optimizer.modcache.q[obj.variable.value] = 1
-    optimizer.objconstant = 0
-    nothing
-end
 
 function MOI.set(optimizer::Optimizer, a::MOI.ObjectiveFunction{MOI.ScalarAffineFunction{Float64}}, obj::MOI.ScalarAffineFunction{Float64})
     MOI.is_empty(optimizer) && throw(MOI.SetAttributeNotAllowed(a))
     optimizer.modcache.P[:] = 0
     processlinearterms!(optimizer.modcache.q, obj.terms)
-    optimizer.objconstant = obj.constant
+    optimizer.objconstant = MOI.constant(obj)
     nothing
 end
 
@@ -510,7 +495,7 @@ function MOI.set(optimizer::Optimizer, a::MOI.ObjectiveFunction{Quadratic}, obj:
         cache.P[row, col] += coeff
     end
     processlinearterms!(optimizer.modcache.q, obj.affine_terms)
-    optimizer.objconstant = obj.constant
+    optimizer.objconstant = MOI.constant(obj)
     nothing
 end
 
