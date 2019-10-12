@@ -469,7 +469,7 @@ end
 
 ## Optimizer attributes:
 MOI.get(optimizer::Optimizer, ::MOI.RawSolver) = optimizer.inner
-MOI.get(optimizer::Optimizer, ::MOI.ResultCount) = 1
+MOI.get(optimizer::Optimizer, ::MOI.ResultCount) = optimizer.hasresults ? 1 : 0
 
 MOI.supports(::Optimizer, ::MOI.ObjectiveFunction{MOI.ScalarAffineFunction{Float64}}) = true
 MOI.supports(::Optimizer, ::MOI.ObjectiveFunction{Quadratic}) = true
@@ -500,6 +500,7 @@ function MOI.set(optimizer::Optimizer, a::MOI.ObjectiveFunction{Quadratic}, obj:
 end
 
 function MOI.get(optimizer::Optimizer, a::MOI.ObjectiveValue)
+    MOI.check_result_index_bounds(optimizer, a)
     rawobj = optimizer.results.info.obj_val + optimizer.objconstant
     ifelse(optimizer.sense == MOI.MAX_SENSE, -rawobj, rawobj)
 end
@@ -547,7 +548,9 @@ function MOI.get(optimizer::Optimizer, ::MOI.TerminationStatus)
 end
 
 function MOI.get(optimizer::Optimizer, a::MOI.PrimalStatus)
-    hasresults(optimizer) || return MOI.NO_SOLUTION
+    if a.N > MOI.get(optimizer, MOI.ResultCount())
+        return MOI.NO_SOLUTION
+    end
     osqpstatus = optimizer.results.info.status
     if osqpstatus == :Unsolved
         return MOI.NO_SOLUTION
@@ -565,7 +568,9 @@ function MOI.get(optimizer::Optimizer, a::MOI.PrimalStatus)
 end
 
 function MOI.get(optimizer::Optimizer, a::MOI.DualStatus)
-    hasresults(optimizer) || return MOI.NO_SOLUTION
+    if a.N > MOI.get(optimizer, MOI.ResultCount())
+        return MOI.NO_SOLUTION
+    end
     osqpstatus = optimizer.results.info.status
     if osqpstatus == :Unsolved
         return MOI.NO_SOLUTION
@@ -591,6 +596,7 @@ end
 
 ## Variable attributes:
 function MOI.get(optimizer::Optimizer, a::MOI.VariablePrimal, vi::VI)
+    MOI.check_result_index_bounds(optimizer, a)
     x = ifelse(_contains(OSQP.SOLUTION_PRESENT, optimizer.results.info.status), optimizer.results.x, optimizer.results.dual_inf_cert)
     x[vi.value]
 end
@@ -690,6 +696,7 @@ MOI.supports_constraint(optimizer::Optimizer, ::Type{VectorAffine}, ::Type{<:Sup
 
 ## Constraint attributes:
 function MOI.get(optimizer::Optimizer, a::MOI.ConstraintDual, ci::CI)
+    MOI.check_result_index_bounds(optimizer, a)
     y = ifelse(_contains(OSQP.SOLUTION_PRESENT, optimizer.results.info.status), optimizer.results.y, optimizer.results.prim_inf_cert)
     rows = constraint_rows(optimizer, ci)
     -y[rows]

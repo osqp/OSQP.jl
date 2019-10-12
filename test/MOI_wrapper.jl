@@ -85,7 +85,8 @@ const Affine = MOI.ScalarAffineFunction{Float64}
 end
 
 # FIXME: type piracy. Generalize and move to MOIU.
-function MOI.get(optimizer::MOIU.CachingOptimizer, ::MOI.ConstraintPrimal, ci::MOI.ConstraintIndex{<:MOI.ScalarAffineFunction, <:Any})
+function MOI.get(optimizer::MOIU.CachingOptimizer, a::MOI.ConstraintPrimal, ci::MOI.ConstraintIndex{<:MOI.ScalarAffineFunction, <:Any})
+    MOI.check_result_index_bounds(optimizer, a)
     f = MOI.get(optimizer, MOI.ConstraintFunction(), ci)
     ret = f.constant
     for term in f.terms
@@ -113,7 +114,9 @@ end
 
 @testset "CachingOptimizer: unit" begin
     excludes = [# Quadratic constraints are not supported
-                "solve_qcp_edge_cases",
+                "solve_qcp_edge_cases", "delete_soc_variables",
+                # FIXME Not implemented
+                "number_threads",
                 # No method get(::Optimizer, ::MathOptInterface.ConstraintPrimal, ::MathOptInterface.ConstraintIndex{MathOptInterface.VectorAffineFunction{Float64},MathOptInterface.Nonpositives})
                 "solve_duplicate_terms_vector_affine",
                 # FIXME KeyError: key CartesianIndex(1, 2) not found
@@ -126,6 +129,8 @@ end
                 "solve_zero_one_with_bounds_2",
                 "solve_zero_one_with_bounds_3"]
 
+    # We disable duals as DualObjectiveValue is not implemented
+    config = MOIT.TestConfig(atol=1e-4, rtol=1e-4, duals=false)
     MOIT.unittest(bridged_optimizer(), config, excludes)
 end
 
