@@ -48,6 +48,18 @@ function ManagedCcsc(M::SparseMatrixCSC)
     ManagedCcsc(length(M.nzval), m, n, p, i, x, -1)
 end
 
+import Base.unsafe_convert
+# TODO this is a pun on the function
+function Base.unsafe_convert(::Type{SparseMatrixCSC}, c::OSQP.Ccsc)
+  m = c.m
+  n = c.n
+  nzmax = c.nzmax
+  nzval = [unsafe_load(c.x, i) for i=1:nzmax]
+  rowval = [unsafe_load(c.i, i) for i=1:nzmax] .+ 1
+  colptr = [unsafe_load(c.p, i) for i=1:(n+1)] .+ 1
+  SparseMatrixCSC(m, n, colptr, rowval, nzval)
+end
+
 # Returns an Ccsc matrix. The vectors are *not* GC tracked in the struct.
 # Use this only when you know that the managed matrix will outlive the Ccsc
 # matrix.
