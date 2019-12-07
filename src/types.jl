@@ -48,7 +48,6 @@ function ManagedCcsc(M::SparseMatrixCSC)
     ManagedCcsc(length(M.nzval), m, n, p, i, x, -1)
 end
 
-import Base.unsafe_convert
 # TODO this is a pun on the function
 function Base.unsafe_convert(::Type{SparseMatrixCSC}, c::OSQP.Ccsc)
   m = c.m
