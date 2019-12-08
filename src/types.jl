@@ -49,7 +49,7 @@ function ManagedCcsc(M::SparseMatrixCSC)
 end
 
 # TODO this is a pun on the function
-function Base.unsafe_convert(::Type{SparseMatrixCSC}, c::OSQP.Ccsc)
+function Base.convert(::Type{SparseMatrixCSC}, c::OSQP.Ccsc)
   m = c.m
   n = c.n
   nzmax = c.nzmax

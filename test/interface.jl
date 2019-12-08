@@ -5,6 +5,6 @@ using OSQP: Ccsc, ManagedCcsc
     jl = sparse(I(5))
     mc = ManagedCcsc(jl)
     c = Ccsc(mc)
-    jl2 = Base.unsafe_convert(SparseMatrixCSC, c)
+    jl2 = convert(SparseMatrixCSC, c)
     @test jl == jl2
 end
