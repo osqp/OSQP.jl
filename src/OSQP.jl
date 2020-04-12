@@ -4,24 +4,29 @@ export OSQPMathProgBaseInterface
 using SparseArrays
 using LinearAlgebra
 
-
-if isfile(joinpath(dirname(@__FILE__), "..", "deps", "deps.jl"))
-    include("../deps/deps.jl")
+if VERSION < v"1.3"
+    if isfile(joinpath(dirname(@__FILE__), "..", "deps", "deps.jl"))
+        include("../deps/deps.jl")
+    else
+        error("OSQP not properly installed. Please run Pkg.build(\"OSQP\")")
+    end
 else
-    error("OSQP not properly installed. Please run Pkg.build(\"OSQP\")")
+    using OSQP_jll
 end
 
 
 function __init__()
     # Get version
-    ver_array = split(version(), ".")
-    ver_string = string(ver_array[1], ".", ver_array[2], ".", ver_array[3])  # Get string without dev vers
-    vnum = VersionNumber(ver_string)
+    if VERSION < v"1.3"
+        ver_array = split(version(), ".")
+        ver_string = string(ver_array[1], ".", ver_array[2], ".", ver_array[3])  # Get string without dev vers
+        vnum = VersionNumber(ver_string)
 
 
-    depsdir = realpath(joinpath(dirname(@__FILE__), "..", "deps"))
-    if (vnum.major != 0 && vnum.minor != 6)
-        error("Current OSQP version installed is $(osqp_version()), but we require version 0.6.*. Delete the contents of the `$depsdir` directory except for the files `build.jl` and `.gitignore`, then rerun Pkg.build(\"OSQP\").")
+        depsdir = realpath(joinpath(dirname(@__FILE__), "..", "deps"))
+        if (vnum.major != 0 && vnum.minor != 6)
+            error("Current OSQP version installed is $(osqp_version()), but we require version 0.6.*. Delete the contents of the `$depsdir` directory except for the files `build.jl` and `.gitignore`, then rerun Pkg.build(\"OSQP\").")
+        end
     end
 end
 
