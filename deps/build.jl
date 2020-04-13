@@ -5,8 +5,8 @@ using BinaryProvider # requires BinaryProvider 0.3.0 or later
 const verbose = "--verbose" in ARGS
 const prefix = Prefix(get([a for a in ARGS if a != "--verbose"], 1, joinpath(@__DIR__, "usr")))
 products = [
-    LibraryProduct(["libqdldl"], :qdldl),
-    LibraryProduct(["libosqp"], :osqp),
+    LibraryProduct(prefix, ["libqdldl"], :qdldl),
+    LibraryProduct(prefix, ["libosqp"], :osqp),
 ]
 
 # Download binaries from hosted location
