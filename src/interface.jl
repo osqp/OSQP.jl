@@ -19,9 +19,9 @@ mutable struct Model
     workspace::Ptr{OSQP.Workspace}
     lcache::Vector{Float64} # to facilitate converting l to use OSQP_INFTY
     ucache::Vector{Float64} # to facilitate converting u to use OSQP_INFTY
-
+	isempty::Bool			# a flag to keep track of the model's setup status
     function Model()
-        model = new(C_NULL, Float64[], Float64[])
+        model = new(C_NULL, Float64[], Float64[], true)
         finalizer(OSQP.clean!, model)
         return model
 
@@ -164,10 +164,14 @@ function setup!(model::OSQP.Model;
         error("Error in OSQP setup")
     end
 
+	model.isempty = false
+
 end
 
 
 function solve!(model::OSQP.Model, results::Results = Results())
+
+	model.isempty && throw(ErrorException("You are trying to solve an empty model. Please setup the model before calling solve!()."))
     ccall((:osqp_solve, OSQP.osqp), Cc_int,
              (Ptr{OSQP.Workspace}, ), model.workspace)
     workspace = unsafe_load(model.workspace)
