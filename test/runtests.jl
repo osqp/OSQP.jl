@@ -1,7 +1,7 @@
 using OSQP
 using Test, SparseArrays, LinearAlgebra
 using Random: seed!
-
+using FileIO
 tests = [
     "basic.jl",
     "dual_infeasibility.jl",
