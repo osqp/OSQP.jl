@@ -49,7 +49,9 @@ end
 
 tol = 1e-5
 
-if VERSION < VersionNumber("1.1")
+# This unit test relies on a precomputed reference solution for a randomly generated problem (done in Julia v1.0).
+# However, in newer versions of Julia the random number stream changed leading to a different problem being generated.
+if VERSION < v"1.1"
 
         @testset "update_matrices" begin
 
