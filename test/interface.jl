@@ -8,3 +8,10 @@ using OSQP: Ccsc, ManagedCcsc
     jl2 = convert(SparseMatrixCSC, c)
     @test jl == jl2
 end
+
+
+# Check model error handling
+@testset "Model error handling" begin
+    model = OSQP.Model()
+    @test_throws ErrorException OSQP.solve!(model)
+end
