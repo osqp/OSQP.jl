@@ -400,7 +400,7 @@ end
         newcoeffs = copy(coeffs)
         modindex = rand(rng, 1 : length(newcoeffs))
         newcoeffs[modindex] = 0
-        newconst = 5 .* (rand(rng, length(u)) .- 0.5)
+        newconst = round.(5 .* (rand(rng, length(u)) .- 0.5); digits = 2)
         test_optimizer_modification(model, optimizer, idxmap, defaultoptimizer(), randvectorconfig) do m
             attr = MOI.ConstraintFunction()
             ci = mapfrommodel(m, c)
