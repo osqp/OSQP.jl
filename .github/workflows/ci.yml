@@ -74,8 +74,6 @@ jobs:
             ${{ runner.os }}-test-
             ${{ runner.os }}-
       - uses: julia-actions/julia-buildpkg@v1
-        with:
-          depwarn: error
       - uses: julia-actions/julia-runtest@v1
         with:
           depwarn: error
