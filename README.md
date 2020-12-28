@@ -1,6 +1,6 @@
 # OSQP.jl
-[![Build Status](https://travis-ci.org/oxfordcontrol/OSQP.jl.svg?branch=master)](https://travis-ci.org/oxfordcontrol/OSQP.jl)
-[![Build status](https://ci.appveyor.com/api/projects/status/t9t79ncgl9449k1a/branch/master?svg=true)](https://ci.appveyor.com/project/bstellato/osqp-jl-v2y0g/branch/master)
+
+[![Build Status](https://github.com/oxfordcontrol/OSQP.jl/workflows/CI/badge.svg)](https://github.com/oxfordcontrol/OSQP.jl/actions) 
 [![codecov.io](http://codecov.io/github/oxfordcontrol/OSQP.jl/coverage.svg?branch=master)](http://codecov.io/github/oxfordcontrol/OSQP.jl?branch=master)
 
 Julia wrapper for [OSQP](https://osqp.org/): the Operator Splitting QP Solver.
