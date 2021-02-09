@@ -37,7 +37,7 @@ function ManagedCcsc(M::SparseMatrixCSC)
     n = M.n
 
     # Get vectors of data, rows indices and column pointers
-    x = convert(Array{Float64,1}, M.nzval)
+    x = convert(Array{Cdouble,1}, M.nzval)
     # C is 0 indexed
     i = convert(Array{Cc_int,1}, M.rowval .- 1)
     # C is 0 indexed
