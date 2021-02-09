@@ -1,12 +1,11 @@
 # Types defined in types.h
 # https://github.com/oxfordcontrol/osqp/blob/master/include/types.h
 
-# Integer type from C
-if Sys.WORD_SIZE == 64   # 64bit system
-    const Cc_int = Clonglong
-else  # 32bit system
-    const Cc_int = Cint
-end
+# If `DLONG` is set when compiling OSQP, `Clonglong` is used, otherwise, `Cint` is used:
+# https://github.com/oxfordcontrol/osqp/blob/master/include/glob_opts.h#L78-L83
+# By default `DLONG` is set of 64-bits and unset of 32-bits:
+# https://github.com/oxfordcontrol/osqp/blob/master/CMakeLists.txt#L79-L83
+const Cc_int = Sys.WORD_SIZE == 64 ? Clonglong : Cint
 
 struct Ccsc
     nzmax::Cc_int
