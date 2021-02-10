@@ -119,8 +119,6 @@ end
                 "number_threads",
                 # No method get(::Optimizer, ::MathOptInterface.ConstraintPrimal, ::MathOptInterface.ConstraintIndex{MathOptInterface.VectorAffineFunction{Float64},MathOptInterface.Nonpositives})
                 "solve_duplicate_terms_vector_affine",
-                # FIXME KeyError: key CartesianIndex(1, 2) not found
-                "solve_qp_edge_cases",
                 # ConstraintPrimal not supported
                 "solve_affine_deletion_edge_cases",
                 # Integer and ZeroOne sets are not supported
@@ -152,7 +150,6 @@ end
 
 @testset "CachingOptimizer: quadratic problems" begin
     excludes = String[]
-    optimizer = defaultoptimizer()
     MOIT.qptest(bridged_optimizer(), config, excludes)
 end
 

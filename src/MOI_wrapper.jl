@@ -492,6 +492,9 @@ function MOI.set(optimizer::Optimizer, a::MOI.ObjectiveFunction{Quadratic}, obj:
         col = term.variable_index_2.value
         coeff = term.coefficient
         row > col && ((row, col) = (col, row)) # upper triangle only
+        if !(CartesianIndex(row, col) in cache.P.cartesian_indices_set)
+            throw(MOI.SetAttributeNotAllowed(a, "This nonzero entry was not in the sparsity pattern of the objective function provided at `MOI.copy_to` and OSQP does not support changing the sparsity pattern."))
+        end
         cache.P[row, col] += coeff
     end
     processlinearterms!(optimizer.modcache.q, obj.affine_terms)
