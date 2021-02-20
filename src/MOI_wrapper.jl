@@ -219,7 +219,7 @@ function processobjective(src::MOI.ModelLike, idxmap)
             I = [Int(idxmap[term.variable_index_1].value) for term in fquadratic.quadratic_terms]
             J = [Int(idxmap[term.variable_index_2].value) for term in fquadratic.quadratic_terms]
             V = [term.coefficient for term in fquadratic.quadratic_terms]
-            symmetrize!(I, J, V)
+            upper_triangularize!(I, J, V)
             P = sparse(I, J, V, n, n)
             processlinearterms!(q, fquadratic.affine_terms, idxmap)
             c = fquadratic.constant
@@ -253,14 +253,12 @@ function processlinearterms!(q, terms::Vector{<:MOI.ScalarAffineTerm}, idxmap::M
     processlinearterms!(q, terms, var -> idxmap[var])
 end
 
-function symmetrize!(I::Vector{Int}, J::Vector{Int}, V::Vector)
+function upper_triangularize!(I::Vector{Int}, J::Vector{Int}, V::Vector)
     n = length(V)
     (length(I) == length(J) == n) || error()
     for i = 1 : n
-        if I[i] != J[i]
-            push!(I, J[i])
-            push!(J, I[i])
-            push!(V, V[i])
+        if I[i] > J[i]
+            I[i], J[i] = J[i], I[i]
         end
     end
 end

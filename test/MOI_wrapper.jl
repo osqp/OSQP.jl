@@ -357,7 +357,7 @@ end
     u = [0., 0., -15, 100, 80]
     A = sparse(Float64[-1 0; 0 -1; -1 -3; 2 5; 3 4])
     I, J, coeffs = findnz(A)
-    objf = MOI.ScalarQuadraticFunction(term.(q, x), [term(2 * P11, x[1], x[1])], 0.0)
+    objf = MOI.ScalarQuadraticFunction(term.(q, x), [term(2 * P11, x[1], x[1]), term(0.0, x[1], x[2])], 0.0)
     MOI.set(model, MOI.ObjectiveFunction{MOI.ScalarAffineFunction{Float64}}(), objf)
     MOI.set(model, MOI.ObjectiveSense(), MOI.MIN_SENSE)
     cf = MOI.VectorAffineFunction(MOI.VectorAffineTerm.(Int64.(I), term.(coeffs, map(j -> getindex(x, j), J))), -u)
