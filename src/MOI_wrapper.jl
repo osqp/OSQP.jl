@@ -109,7 +109,9 @@ end
 
 function MOI.set(model::Optimizer, attr::MOI.TimeLimitSec, ::Nothing)
     delete!(model.settings, :time_limit)
-    OSQP.update_settings!(model.inner, time_limit=0.0)
+    if !MOI.is_empty(model)
+        OSQP.update_settings!(model.inner, time_limit=0.0)
+    end
     return
 end
 
@@ -125,7 +127,6 @@ function MOI.empty!(optimizer::Optimizer)
     optimizer.inner = OSQP.Model()
     optimizer.hasresults = false
     optimizer.results = OSQP.Results()
-    optimizer.is_empty = true
     optimizer.sense = MOI.MIN_SENSE # model parameter, so needs to be reset
     optimizer.objconstant = 0.
     optimizer.constrconstant = Float64[]
@@ -135,7 +136,7 @@ function MOI.empty!(optimizer::Optimizer)
     optimizer
 end
 
-MOI.is_empty(optimizer::Optimizer) = optimizer.is_empty
+MOI.is_empty(optimizer::Optimizer) = optimizer.inner.isempty
 
 function MOI.copy_to(dest::Optimizer, src::MOI.ModelLike)
     MOI.empty!(dest)
@@ -152,7 +153,6 @@ function MOI.copy_to(dest::Optimizer, src::MOI.ModelLike)
     dest.warmstartcache = WarmStartCache{Float64}(size(A, 2), size(A, 1))
     processprimalstart!(dest.warmstartcache.x, src, idxmap)
     processdualstart!(dest.warmstartcache.y, src, idxmap, dest.rowranges)
-    dest.is_empty = false
     return idxmap
 end
 
@@ -513,7 +513,7 @@ function check_has_results(optimizer::Optimizer)
 end
 
 # Since these aren't explicitly returned by OSQP, I feel like it would be better to have a fallback method compute these:
-function MOI.get(optimizer::Optimizer, a::MOI.SolveTimeSec)
+function MOI.get(optimizer::Optimizer, ::MOI.SolveTimeSec)
     check_has_results(optimizer)
     return optimizer.results.info.run_time
 end
@@ -555,11 +555,12 @@ function MOI.get(optimizer::Optimizer, a::MOI.PrimalStatus)
     if osqpstatus == :Unsolved
         return MOI.NO_SOLUTION
     elseif osqpstatus == :Primal_infeasible
-        return MOI.INFEASIBILITY_CERTIFICATE
+        # FIXME is it `NO_SOLUTION` (e.g. `NaN`s) or `INFEASIBLE_POINT` (e.g. current primal solution that we know is infeasible with the dual certificate)
+        return MOI.NO_SOLUTION
     elseif osqpstatus == :Solved
         return MOI.FEASIBLE_POINT
     elseif osqpstatus == :Primal_infeasible_inaccurate
-        return MOI.NEARLY_INFEASIBILITY_CERTIFICATE
+        return MOI.UNKNOWN_RESULT_STATUS
     elseif osqpstatus == :Dual_infeasible
         return MOI.INFEASIBILITY_CERTIFICATE
     else # :Interrupted, :Max_iter_reached, :Solved_inaccurate, :Non_convex (TODO: good idea? use OSQP.SOLUTION_PRESENT?)
@@ -575,7 +576,8 @@ function MOI.get(optimizer::Optimizer, a::MOI.DualStatus)
     if osqpstatus == :Unsolved
         return MOI.NO_SOLUTION
     elseif osqpstatus == :Dual_infeasible
-        return MOI.INFEASIBILITY_CERTIFICATE
+        # FIXME is it `NO_SOLUTION` (e.g. `NaN`s) or `INFEASIBLE_POINT` (e.g. current dual solution that we know is infeasible with the dual certificate)
+        return MOI.NO_SOLUTION
     elseif osqpstatus == :Primal_infeasible
         return MOI.INFEASIBILITY_CERTIFICATE
     elseif osqpstatus == :Primal_infeasible_inaccurate

@@ -1,18 +1,84 @@
-using OSQP
-using OSQP.MathOptInterfaceOSQP
+module TestECOS
+
+using Test
 using LinearAlgebra
 using Random
 using SparseArrays
-using Test
 
 using MathOptInterface
 const MOI = MathOptInterface
-const MOIT = MOI.DeprecatedTest
 const MOIU = MOI.Utilities
+
+using OSQP
+using OSQP.MathOptInterfaceOSQP
 
 const Affine = MOI.ScalarAffineFunction{Float64}
 
-@testset "ProblemModificationCache" begin
+function runtests()
+    for name in names(@__MODULE__; all = true)
+        if startswith("$(name)", "test_")
+            @testset "$(name)" begin
+                getfield(@__MODULE__, name)()
+            end
+        end
+    end
+    return
+end
+
+const config = MOI.Test.Config(
+    atol=1e-4,
+    rtol=1e-4,
+    exclude = Any[
+        MOI.ConstraintBasisStatus,
+        MOI.VariableBasisStatus,
+        MOI.ConstraintName,
+        MOI.VariableName,
+        MOI.ObjectiveBound,
+        MOI.DualObjectiveValue,
+    ],
+)
+
+function defaultoptimizer()
+    optimizer = OSQP.Optimizer()
+    MOI.set(optimizer, MOI.Silent(), true)
+    MOI.set(optimizer, OSQPSettings.EpsAbs(), 1e-8)
+    MOI.set(optimizer, OSQPSettings.EpsRel(), 1e-16)
+    MOI.set(optimizer, OSQPSettings.MaxIter(), 10000)
+    MOI.set(optimizer, OSQPSettings.AdaptiveRhoInterval(), 25) # required for deterministic behavior
+    return optimizer
+end
+function bridged_optimizer()
+    optimizer = defaultoptimizer()
+    cached = MOIU.CachingOptimizer(MOIU.UniversalFallback(OSQPModel{Float64}()), optimizer)
+    return MOI.Bridges.full_bridge_optimizer(cached, Float64)
+end
+
+# FIXME: type piracy. Needs https://github.com/jump-dev/MathOptInterface.jl/issues/1310
+function MOI.get(optimizer::MOIU.CachingOptimizer, attr::MOI.ConstraintPrimal, ci::MOI.ConstraintIndex)
+    # FIXME `get_fallback` should do this first line
+    MOI.check_result_index_bounds(optimizer, attr)
+    return MOI.Utilities.get_fallback(optimizer, attr, ci)
+end
+
+function test_runtests()
+    model = bridged_optimizer()
+    MOI.Test.runtests(
+        model,
+        config,
+        exclude = String[
+            # Expected test failures:
+            #   MathOptInterface.jl issue #1431
+            "test_model_LowerBoundAlreadySet",
+            "test_model_UpperBoundAlreadySet",
+            # FIXME Might be a but in objective modification
+            "test_modification_coef_scalar_objective",
+            "test_modification_const_scalar_objective",
+        ],
+    )
+    return
+end
+
+function test_ProblemModificationCache()
     rng = MersenneTwister(1234)
     n = 15
     m = 10
@@ -84,77 +150,8 @@ const Affine = MOI.ScalarAffineFunction{Float64}
     @test_throws ArgumentError modcache.A[:] = 1
 end
 
-# FIXME: type piracy. Generalize and move to MOIU.
-function MOI.get(optimizer::MOIU.CachingOptimizer, a::MOI.ConstraintPrimal, ci::MOI.ConstraintIndex{<:MOI.ScalarAffineFunction, <:Any})
-    MOI.check_result_index_bounds(optimizer, a)
-    f = MOI.get(optimizer, MOI.ConstraintFunction(), ci)
-    ret = f.constant
-    for term in f.terms
-        ret += term.coefficient * MOI.get(optimizer, MOI.VariablePrimal(), term.variable)
-    end
-    ret
-end
-
-const config = MOIT.Config(atol=1e-4, rtol=1e-4)
-
-function defaultoptimizer()
-    optimizer = OSQP.Optimizer()
-    MOI.set(optimizer, MOI.Silent(), true)
-    MOI.set(optimizer, OSQPSettings.EpsAbs(), 1e-8)
-    MOI.set(optimizer, OSQPSettings.EpsRel(), 1e-16)
-    MOI.set(optimizer, OSQPSettings.MaxIter(), 10000)
-    MOI.set(optimizer, OSQPSettings.AdaptiveRhoInterval(), 25) # required for deterministic behavior
-    return optimizer
-end
-function bridged_optimizer()
-    optimizer = defaultoptimizer()
-    cached = MOIU.CachingOptimizer(MOIU.UniversalFallback(OSQPModel{Float64}()), optimizer)
-    return MOI.Bridges.full_bridge_optimizer(cached, Float64)
-end
-
-@testset "CachingOptimizer: unit" begin
-    excludes = [# Quadratic constraints are not supported
-                "solve_qcp_edge_cases", "delete_soc_variables",
-                # FIXME Not implemented
-                "number_threads",
-                # No method get(::Optimizer, ::MathOptInterface.ConstraintPrimal, ::MathOptInterface.ConstraintIndex{MathOptInterface.VectorAffineFunction{Float64},MathOptInterface.Nonpositives})
-                "solve_duplicate_terms_vector_affine",
-                # ConstraintPrimal not supported
-                "solve_affine_deletion_edge_cases",
-                # Integer and ZeroOne sets are not supported
-                "solve_integer_edge_cases", "solve_objbound_edge_cases",
-                "solve_zero_one_with_bounds_1",
-                "solve_zero_one_with_bounds_2",
-                "solve_zero_one_with_bounds_3"]
-
-    # We disable duals as DualObjectiveValue is not implemented
-    config = MOIT.Config(atol=1e-4, rtol=1e-4, duals=false)
-    MOIT.unittest(bridged_optimizer(), config, excludes)
-end
-
-@testset "CachingOptimizer: linear problems" begin
-    excludes = [
-        "partial_start",  # See comment https://github.com/JuliaOpt/MathOptInterface.jl/blob/ecf691545e67552ff437ed26ec4ddfff03c50327/src/Test/contlinear.jl#L1715
-        "linear1", # `ConstraintPrimal` not available
-        "linear8a" # It expects `ResultCount` to be 0 as we disable `duals`.
-    ]
-    append!(excludes,
-    if Int == Int32
-        ["linear7"] # https://github.com/JuliaOpt/MathOptInterface.jl/issues/377#issuecomment-394912761
-    else
-        []
-    end)
-    # We disable duals as DualObjectiveValue is not implemented
-    MOIT.contlineartest(bridged_optimizer(), MOIT.Config(atol=1e-4, rtol=1e-4, duals=false), excludes)
-end
-
-@testset "CachingOptimizer: quadratic problems" begin
-    excludes = String[]
-    MOIT.qptest(bridged_optimizer(), config, excludes)
-end
-
-function test_optimizer_modification(modfun::Base.Callable, model::MOI.ModelLike, optimizer::T, idxmap::MOIU.IndexMap,
-        cleanoptimizer::T, config::MOIT.Config) where T<:MOI.AbstractOptimizer
+function _test_optimizer_modification(modfun::Base.Callable, model::MOI.ModelLike, optimizer::T, idxmap::MOIU.IndexMap,
+        cleanoptimizer::T, config::MOI.Test.Config) where T<:MOI.AbstractOptimizer
     # apply modfun to both the model and the optimizer
     modfun(model)
     modfun(optimizer)
@@ -183,15 +180,13 @@ function test_optimizer_modification(modfun::Base.Callable, model::MOI.ModelLike
         end
     end
 
-    if config.duals
-        @test MOI.get(optimizer, MOI.DualStatus()) == MOI.get(cleanoptimizer, MOI.DualStatus())
-        if MOI.get(optimizer, MOI.DualStatus()) == MOI.FEASIBLE_POINT
-            for (F, S) in MOI.get(model, MOI.ListOfConstraintTypesPresent())
-                cis_model = MOI.get(model, MOI.ListOfConstraintIndices{F, S}())
-                for ci_model in cis_model
-                    ci_optimizer = idxmap[ci_model]
-                    @test MOI.get(optimizer, MOI.ConstraintDual(), ci_optimizer) ≈ MOI.get(cleanoptimizer, MOI.ConstraintDual(), ci_optimizer) atol=atol rtol=rtol
-                end
+    @test MOI.get(optimizer, MOI.DualStatus()) == MOI.get(cleanoptimizer, MOI.DualStatus())
+    if MOI.get(optimizer, MOI.DualStatus()) == MOI.FEASIBLE_POINT
+        for (F, S) in MOI.get(model, MOI.ListOfConstraintTypesPresent())
+            cis_model = MOI.get(model, MOI.ListOfConstraintIndices{F, S}())
+            for ci_model in cis_model
+                ci_optimizer = idxmap[ci_model]
+                @test MOI.get(optimizer, MOI.ConstraintDual(), ci_optimizer) ≈ MOI.get(cleanoptimizer, MOI.ConstraintDual(), ci_optimizer) atol=atol rtol=rtol
             end
         end
     end
@@ -209,8 +204,8 @@ end
 term(c, x::MOI.VariableIndex) = MOI.ScalarAffineTerm(c, x)
 term(c, x::MOI.VariableIndex, y::MOI.VariableIndex) = MOI.ScalarQuadraticTerm(c, x, y)
 
-@testset "No CachingOptimizer: problem modification after copy_to" begin
-    # Initial setup: modified version of MOIT.linear1test
+function test_no_CachingOptimizer_problem_modification_after_copy_to()
+    # Initial setup: modified version of MOI.Test.linear1test
     # min -x
     # st   x + y <= 1   (x + y - 1 ∈ Nonpositives)
     #       x, y >= 0   (x, y ∈ Nonnegatives)
@@ -220,8 +215,8 @@ term(c, x::MOI.VariableIndex, y::MOI.VariableIndex) = MOI.ScalarQuadraticTerm(c,
     x, y = v
     cf = MOI.ScalarAffineFunction([term.([0.0, 0.0], v); term.([1.0, 1.0], v); term.([0.0, 0.0], v)], 0.0)
     c = MOI.add_constraint(model, cf, MOI.Interval(-Inf, 1.0))
-    vc1 = MOI.add_constraint(model, 1.0MOI.SingleVariable(v[1]), MOI.Interval(0.0, Inf))
-    vc2 = MOI.add_constraint(model, 1.0MOI.SingleVariable(v[2]), MOI.Interval(0.0, Inf))
+    vc1 = MOI.add_constraint(model, 1.0v[1], MOI.Interval(0.0, Inf))
+    vc2 = MOI.add_constraint(model, 1.0v[2], MOI.Interval(0.0, Inf))
     objf = MOI.ScalarAffineFunction([term.([0.0, 0.0], v); term.([-1.0, 0.0], v); term.([0.0, 0.0], v)], 0.0)
     MOI.set(model, MOI.ObjectiveFunction{MOI.ScalarAffineFunction{Float64}}(), objf)
     MOI.set(model, MOI.ObjectiveSense(), MOI.MIN_SENSE)
@@ -260,13 +255,13 @@ term(c, x::MOI.VariableIndex, y::MOI.VariableIndex) = MOI.ScalarQuadraticTerm(c,
 
     # ensure that solving a second time results in the same answer after zeroing warm start
     zero_warm_start!(optimizer, values(idxmap.var_map), values(idxmap.con_map))
-    test_optimizer_modification(m -> (), model, optimizer, idxmap, defaultoptimizer(), MOIT.Config(atol=0.0, rtol=0.0))
+    _test_optimizer_modification(m -> (), model, optimizer, idxmap, defaultoptimizer(), MOI.Test.Config(atol=0.0, rtol=0.0))
 
     mapfrommodel(::MOI.AbstractOptimizer, x::Union{MOI.VariableIndex, <:MOI.ConstraintIndex}) = idxmap[x]
     mapfrommodel(::MOI.ModelLike, x::Union{MOI.VariableIndex, <:MOI.ConstraintIndex}) = x
 
     # change objective to min -2y
-    test_optimizer_modification(model, optimizer, idxmap, defaultoptimizer(), config) do m
+    _test_optimizer_modification(model, optimizer, idxmap, defaultoptimizer(), config) do m
         newobjf = MOI.ScalarAffineFunction([term(-2.0, mapfrommodel(m, y))], 0.0)
         F = typeof(newobjf)
         MOI.set(m, MOI.ObjectiveFunction{F}(), newobjf)
@@ -275,7 +270,7 @@ term(c, x::MOI.VariableIndex, y::MOI.VariableIndex) = MOI.ScalarQuadraticTerm(c,
     # add a constant to the objective
     objval_before = MOI.get(optimizer, MOI.ObjectiveValue())
     objconstant = 1.5
-    test_optimizer_modification(model, optimizer, idxmap, defaultoptimizer(), config) do m
+    _test_optimizer_modification(model, optimizer, idxmap, defaultoptimizer(), config) do m
         attr = MOI.ObjectiveFunction{Affine}()
         MOI.modify(m, attr, MOI.ScalarConstantChange(objconstant))
     end
@@ -283,29 +278,29 @@ term(c, x::MOI.VariableIndex, y::MOI.VariableIndex) = MOI.ScalarQuadraticTerm(c,
     @test objval_after ≈ objval_before + objconstant atol = 1e-8
 
     # change objective to min -y using ScalarCoefficientChange
-    test_optimizer_modification(model, optimizer, idxmap, defaultoptimizer(), config) do m
+    _test_optimizer_modification(model, optimizer, idxmap, defaultoptimizer(), config) do m
         attr = MOI.ObjectiveFunction{Affine}()
         MOI.modify(m, attr, MOI.ScalarCoefficientChange(mapfrommodel(m, y), -1.0))
     end
     @test MOI.get(optimizer, MOI.ObjectiveValue()) ≈ 0.5 * objval_before + objconstant atol = 1e-8
 
     # change x + y <= 1 to x + 2 y + 0.5 <= 1
-    test_optimizer_modification(model, optimizer, idxmap, defaultoptimizer(), config) do m
+    _test_optimizer_modification(model, optimizer, idxmap, defaultoptimizer(), config) do m
         attr = MOI.ConstraintFunction()
         ci =  mapfrommodel(m, c)
         MOI.set(m, attr, ci, MOI.ScalarAffineFunction(term.([1.0, 1.0, 1.0], mapfrommodel.(Ref(m), [x, x, y])), 0.5))
     end
 
     # change back to x + y <= 1 using ScalarCoefficientChange
-    test_optimizer_modification(model, optimizer, idxmap, defaultoptimizer(), config) do m
+    _test_optimizer_modification(model, optimizer, idxmap, defaultoptimizer(), config) do m
         ci = mapfrommodel(m, c)
         MOI.modify(m, ci, MOI.ScalarCoefficientChange(mapfrommodel(m, y), 1.0))
     end
 
     # flip the feasible set around from what it was originally and minimize +x
-    test_optimizer_modification(model, optimizer, idxmap, defaultoptimizer(), config) do m
+    _test_optimizer_modification(model, optimizer, idxmap, defaultoptimizer(), config) do m
         # objective
-        newobjf = convert(MOI.ScalarAffineFunction{Float64}, MOI.SingleVariable(mapfrommodel(m, x)))
+        newobjf = convert(MOI.ScalarAffineFunction{Float64}, mapfrommodel(m, x))
         F = typeof(newobjf)
         MOI.set(m, MOI.ObjectiveFunction{F}(), newobjf)
 
@@ -348,7 +343,7 @@ term(c, x::MOI.VariableIndex, y::MOI.VariableIndex) = MOI.ScalarQuadraticTerm(c,
     testflipped()
 end
 
-@testset "No CachingOptimizer: Vector problem modification after copy_to" begin
+function no_CachingOptimizer_Vector_problem_modification_after_copy_to()
     # from basic.jl:
     model = OSQPModel{Float64}()
     x = MOI.add_variables(model, 2)
@@ -357,7 +352,7 @@ end
     u = [0., 0., -15, 100, 80]
     A = sparse(Float64[-1 0; 0 -1; -1 -3; 2 5; 3 4])
     I, J, coeffs = findnz(A)
-    objf = MOI.ScalarQuadraticFunction(term.(q, x), [term(2 * P11, x[1], x[1]), term(0.0, x[1], x[2])], 0.0)
+    objf = MOI.ScalarQuadraticFunction([term(2 * P11, x[1], x[1]), term(0.0, x[1], x[2])], term.(q, x), 0.0)
     MOI.set(model, MOI.ObjectiveFunction{typeof(objf)}(), objf)
     MOI.set(model, MOI.ObjectiveSense(), MOI.MIN_SENSE)
     cf = MOI.VectorAffineFunction(MOI.VectorAffineTerm.(Int64.(I), term.(coeffs, map(j -> getindex(x, j), J))), -u)
@@ -391,14 +386,14 @@ end
     mapfrommodel(::MOI.ModelLike, x::Union{MOI.VariableIndex, <:MOI.ConstraintIndex}) = x
 
     # make random modifications to constraints
-    randvectorconfig = MOIT.Config(atol=Inf, rtol=1e-4)
+    randvectorconfig = MOI.Test.Config(atol=Inf, rtol=1e-4)
     rng = MersenneTwister(1234)
     for i = 1 : 100
         newcoeffs = copy(coeffs)
         modindex = rand(rng, 1 : length(newcoeffs))
         newcoeffs[modindex] = 0
         newconst = round.(5 .* (rand(rng, length(u)) .- 0.5); digits = 2)
-        test_optimizer_modification(model, optimizer, idxmap, defaultoptimizer(), randvectorconfig) do m
+        _test_optimizer_modification(model, optimizer, idxmap, defaultoptimizer(), randvectorconfig) do m
             attr = MOI.ConstraintFunction()
             ci = mapfrommodel(m, c)
             newcf = MOI.VectorAffineFunction(MOI.VectorAffineTerm.(Int64.(I), term.(newcoeffs, map(j -> getindex(x, j), J))), newconst)
@@ -407,7 +402,7 @@ end
     end
 end
 
-@testset "No CachingOptimizer: Warm starting" begin
+function test_no_CachingOptimizer_Warm_starting()
     # define QP:
     # min 1/2 x'Px + q'x
     # s.t. Ax <= u   <=> -Ax + u in Nonnegatives
@@ -453,7 +448,7 @@ end
     @test optimizer.warmstartcache.y.data[y_c2_rows] == -y_c2
 end
 
-@testset "Vector equality constraint" begin
+function test_vector_equality_constraint()
     # Minimize ||A x - b||^2 = x' A' A x - (2 * A' * b)' x + b' * b
     # subject to C x = d
 
@@ -476,7 +471,7 @@ end
 
     make_objective = function (P, q, r, x)
         I, J, coeffs = findnz(P.data)
-        MOI.ScalarQuadraticFunction(term.(q, x), term.(2 * coeffs, map(i -> x[i]::MOI.VariableIndex, I), map(j -> x[j]::MOI.VariableIndex, J)), r)
+        MOI.ScalarQuadraticFunction(term.(2 * coeffs, map(i -> x[i]::MOI.VariableIndex, I), map(j -> x[j]::MOI.VariableIndex, J)), term.(q, x), r)
     end
 
     make_constraint_fun = function (C, d, x)
@@ -520,7 +515,7 @@ end
     end
 end
 
-@testset "RawSolver" begin
+function test_RawSolver()
     optimizer = defaultoptimizer()
     let inner = MOI.get(optimizer, MOI.RawSolver())
         @test inner.workspace == C_NULL
@@ -531,9 +526,8 @@ end
     model = OSQPModel{Float64}()
     MOI.empty!(model)
     x = MOI.add_variable(model)
-    c = MOI.add_constraint(model, 1.0MOI.SingleVariable(x), MOI.GreaterThan(2.0))
-    fx = MOI.SingleVariable(x)
-    obj = convert(MOI.ScalarAffineFunction{Float64}, fx)
+    c = MOI.add_constraint(model, 1.0x, MOI.GreaterThan(2.0))
+    obj = convert(MOI.ScalarAffineFunction{Float64}, x)
     MOI.set(model, MOI.ObjectiveSense(), MOI.MIN_SENSE)
     MOI.set(model, MOI.ObjectiveFunction{typeof(obj)}(), obj)
 
@@ -542,17 +536,21 @@ end
     @test inner.workspace != C_NULL
 end
 
-# TODO: consider moving to MOIT. However, current default copy_to is fine with BadObjectiveModel.
-struct BadObjectiveModel <: MOIT.BadModel end # objective sense is not FEASIBILITY_SENSE, but can't get objective function
+# TODO: consider moving to MOI.Test. However, current default copy_to is fine with BadObjectiveModel.
+struct BadObjectiveModel <: MOI.Test.BadModel end # objective sense is not FEASIBILITY_SENSE, but can't get objective function
 MOI.get(src::BadObjectiveModel, ::MOI.ObjectiveSense) = MOI.MIN_SENSE
 struct ExoticFunction <: MOI.AbstractScalarFunction end
 MOI.get(src::BadObjectiveModel, ::MOI.ObjectiveFunctionType) = ExoticFunction
 
 @testset "failcopy" begin
     # FIXME https://github.com/JuliaOpt/MathOptInterface.jl/issues/851
-    #MOIT.failcopytestc(bridged_optimizer())
+    #MOI.Test.failcopytestc(bridged_optimizer())
     #optimizer = bridged_optimizer()
     #MOI.copy_to(optimizer, BadObjectiveModel())
     # FIXME UndefRefError: access to undefined reference
     #@test_throws MOI.UnsupportedAttribute{MOI.ObjectiveFunction{ExoticFunction}} MOI.optimize!(optimizer)
 end
+
+end  # module
+
+TestECOS.runtests()
