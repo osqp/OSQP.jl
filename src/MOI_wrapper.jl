@@ -78,7 +78,7 @@ mutable struct Optimizer <: MOI.AbstractOptimizer
                         Dict{Symbol, Any}(:verbose => true), sense, objconstant,
                         constrconstant, modcache, warmstartcache, rowranges)
         for (key, value) in kwargs
-            MOI.set(optimizer, MOI.RawParameter(key), value)
+            MOI.set(optimizer, MOI.RawOptimizerAttribute(key), value)
         end
         return optimizer
     end
@@ -137,8 +137,7 @@ end
 
 MOI.is_empty(optimizer::Optimizer) = optimizer.is_empty
 
-function MOI.copy_to(dest::Optimizer, src::MOI.ModelLike; copy_names=false)
-    copy_names && error("Copying names is not supported.")
+function MOI.copy_to(dest::Optimizer, src::MOI.ModelLike)
     MOI.empty!(dest)
     idxmap = MOIU.IndexMap(dest, src)
     assign_constraint_row_ranges!(dest.rowranges, idxmap, src)
@@ -154,7 +153,7 @@ function MOI.copy_to(dest::Optimizer, src::MOI.ModelLike; copy_names=false)
     processprimalstart!(dest.warmstartcache.x, src, idxmap)
     processdualstart!(dest.warmstartcache.y, src, idxmap, dest.rowranges)
     dest.is_empty = false
-    idxmap
+    return idxmap
 end
 
 """
@@ -167,7 +166,7 @@ function MOIU.IndexMap(dest::Optimizer, src::MOI.ModelLike)
         idxmap[vis_src[i]] = VI(i)
     end
     i = 0
-    for (F, S) in MOI.get(src, MOI.ListOfConstraints())
+    for (F, S) in MOI.get(src, MOI.ListOfConstraintTypesPresent())
         MOI.supports_constraint(dest, F, S) || throw(MOI.UnsupportedConstraint{F, S}())
         cis_src = MOI.get(src, MOI.ListOfConstraintIndices{F, S}())
         for ci in cis_src
@@ -180,7 +179,7 @@ end
 
 function assign_constraint_row_ranges!(rowranges::Dict{Int, UnitRange{Int}}, idxmap::MOIU.IndexMap, src::MOI.ModelLike)
     startrow = 1
-    for (F, S) in MOI.get(src, MOI.ListOfConstraints())
+    for (F, S) in MOI.get(src, MOI.ListOfConstraintTypesPresent())
         cis_src = MOI.get(src, MOI.ListOfConstraintIndices{F, S}())
         for ci_src in cis_src
             set = MOI.get(src, MOI.ConstraintSet(), ci_src)
@@ -216,8 +215,8 @@ function processobjective(src::MOI.ModelLike, idxmap)
             c = faffine.constant
         elseif function_type == MOI.ScalarQuadraticFunction{Float64}
             fquadratic = MOI.get(src, MOI.ObjectiveFunction{MOI.ScalarQuadraticFunction{Float64}}())
-            I = [Int(idxmap[term.variable_index_1].value) for term in fquadratic.quadratic_terms]
-            J = [Int(idxmap[term.variable_index_2].value) for term in fquadratic.quadratic_terms]
+            I = [Int(idxmap[term.variable_1].value) for term in fquadratic.quadratic_terms]
+            J = [Int(idxmap[term.variable_2].value) for term in fquadratic.quadratic_terms]
             V = [term.coefficient for term in fquadratic.quadratic_terms]
             upper_triangularize!(I, J, V)
             P = sparse(I, J, V, n, n)
@@ -243,7 +242,7 @@ function processlinearterms!(q, terms::Vector{<:MOI.ScalarAffineTerm}, idxmapfun
         q .= 0
     end
     for term in terms
-        var = term.variable_index
+        var = term.variable
         coeff = term.coefficient
         q[idxmapfun(var).value] += coeff
     end
@@ -272,7 +271,7 @@ function processconstraints(src::MOI.ModelLike, idxmap, rowranges::Dict{Int, Uni
     I = Int[]
     J = Int[]
     V = Float64[]
-    for (F, S) in MOI.get(src, MOI.ListOfConstraints())
+    for (F, S) in MOI.get(src, MOI.ListOfConstraintTypesPresent())
         processconstraints!((I, J, V), bounds, constant, src, idxmap, rowranges, F, S)
     end
     l .-= constant
@@ -311,7 +310,7 @@ end
 function processlinearpart!(triplets::SparseTriplets, f::MOI.ScalarAffineFunction, row::Int, idxmap)
     (I, J, V) = triplets
     for term in f.terms
-        var = term.variable_index
+        var = term.variable
         coeff = term.coefficient
         col = idxmap[var].value
         push!(I, row)
@@ -324,7 +323,7 @@ function processlinearpart!(triplets::SparseTriplets, f::MOI.VectorAffineFunctio
     (I, J, V) = triplets
     for term in f.terms
         row = rows[term.output_index]
-        var = term.scalar_term.variable_index
+        var = term.scalar_term.variable
         coeff = term.scalar_term.coefficient
         col = idxmap[var].value
         push!(I, row)
@@ -371,7 +370,7 @@ function processprimalstart!(x, src::MOI.ModelLike, idxmap)
 end
 
 function processdualstart!(y, src::MOI.ModelLike, idxmap, rowranges::Dict{Int, UnitRange{Int}})
-    for (F, S) in MOI.get(src, MOI.ListOfConstraints())
+    for (F, S) in MOI.get(src, MOI.ListOfConstraintTypesPresent())
         has_dual_start = false
         for attr in MOI.get(src, MOI.ListOfConstraintAttributesSet{F, S}())
             if attr isa MOI.ConstraintDualStart
@@ -436,10 +435,10 @@ end # module
 
 using .OSQPSettings
 
-_symbol(param::MOI.RawParameter) = Symbol(param.name)
+_symbol(param::MOI.RawOptimizerAttribute) = Symbol(param.name)
 _symbol(a::OSQPAttribute) = Symbol(a)
-OSQPSettings.isupdatable(param::MOI.RawParameter) = _contains(OSQP.UPDATABLE_SETTINGS, _symbol(param))
-function MOI.set(optimizer::Optimizer, a::Union{OSQPAttribute, MOI.RawParameter}, value)
+OSQPSettings.isupdatable(param::MOI.RawOptimizerAttribute) = _contains(OSQP.UPDATABLE_SETTINGS, _symbol(param))
+function MOI.set(optimizer::Optimizer, a::Union{OSQPAttribute, MOI.RawOptimizerAttribute}, value)
     (isupdatable(a) || MOI.is_empty(optimizer)) || throw(MOI.SetAttributeNotAllowed(a))
     setting = _symbol(a)
     optimizer.settings[setting] = value
@@ -448,7 +447,7 @@ function MOI.set(optimizer::Optimizer, a::Union{OSQPAttribute, MOI.RawParameter}
     end
 end
 
-function MOI.get(optimizer::Optimizer, a::Union{OSQPAttribute, MOI.RawParameter})
+function MOI.get(optimizer::Optimizer, a::Union{OSQPAttribute, MOI.RawOptimizerAttribute})
     return optimizer.settings[_symbol(a)]
 end
 
@@ -486,8 +485,8 @@ function MOI.set(optimizer::Optimizer, a::MOI.ObjectiveFunction{Quadratic}, obj:
     cache = optimizer.modcache
     cache.P[:] = 0
     for term in obj.quadratic_terms
-        row = term.variable_index_1.value
-        col = term.variable_index_2.value
+        row = term.variable_1.value
+        col = term.variable_2.value
         coeff = term.coefficient
         row > col && ((row, col) = (col, row)) # upper triangle only
         if !(CartesianIndex(row, col) in cache.P.cartesian_indices_set)
@@ -514,7 +513,7 @@ function check_has_results(optimizer::Optimizer)
 end
 
 # Since these aren't explicitly returned by OSQP, I feel like it would be better to have a fallback method compute these:
-function MOI.get(optimizer::Optimizer, a::MOI.SolveTime)
+function MOI.get(optimizer::Optimizer, a::MOI.SolveTimeSec)
     check_has_results(optimizer)
     return optimizer.results.info.run_time
 end
@@ -549,7 +548,7 @@ function MOI.get(optimizer::Optimizer, ::MOI.TerminationStatus)
 end
 
 function MOI.get(optimizer::Optimizer, a::MOI.PrimalStatus)
-    if a.N > MOI.get(optimizer, MOI.ResultCount())
+    if a.result_index > MOI.get(optimizer, MOI.ResultCount())
         return MOI.NO_SOLUTION
     end
     osqpstatus = optimizer.results.info.status
@@ -569,7 +568,7 @@ function MOI.get(optimizer::Optimizer, a::MOI.PrimalStatus)
 end
 
 function MOI.get(optimizer::Optimizer, a::MOI.DualStatus)
-    if a.N > MOI.get(optimizer, MOI.ResultCount())
+    if a.result_index > MOI.get(optimizer, MOI.ResultCount())
         return MOI.NO_SOLUTION
     end
     osqpstatus = optimizer.results.info.status
@@ -629,7 +628,7 @@ function MOI.set(optimizer::Optimizer, attr::MOI.ConstraintFunction, ci::CI{Affi
     row = constraint_rows(optimizer, ci)
     optimizer.modcache.A[row, :] = 0
     for term in f.terms
-        col = term.variable_index.value
+        col = term.variable.value
         coeff = term.coefficient
         optimizer.modcache.A[row, col] += coeff
     end
@@ -648,7 +647,7 @@ function MOI.set(optimizer::Optimizer, attr::MOI.ConstraintFunction, ci::CI{Vect
     end
     for term in f.terms
         row = rows[term.output_index]
-        col = term.scalar_term.variable_index.value
+        col = term.scalar_term.variable.value
         coeff = term.scalar_term.coefficient
         optimizer.modcache.A[row, col] += coeff
     end

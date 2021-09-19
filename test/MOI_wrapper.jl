@@ -7,7 +7,7 @@ using Test
 
 using MathOptInterface
 const MOI = MathOptInterface
-const MOIT = MOI.Test
+const MOIT = MOI.DeprecatedTest
 const MOIU = MOI.Utilities
 
 const Affine = MOI.ScalarAffineFunction{Float64}
@@ -90,12 +90,12 @@ function MOI.get(optimizer::MOIU.CachingOptimizer, a::MOI.ConstraintPrimal, ci::
     f = MOI.get(optimizer, MOI.ConstraintFunction(), ci)
     ret = f.constant
     for term in f.terms
-        ret += term.coefficient * MOI.get(optimizer, MOI.VariablePrimal(), term.variable_index)
+        ret += term.coefficient * MOI.get(optimizer, MOI.VariablePrimal(), term.variable)
     end
     ret
 end
 
-const config = MOIT.TestConfig(atol=1e-4, rtol=1e-4)
+const config = MOIT.Config(atol=1e-4, rtol=1e-4)
 
 function defaultoptimizer()
     optimizer = OSQP.Optimizer()
@@ -128,7 +128,7 @@ end
                 "solve_zero_one_with_bounds_3"]
 
     # We disable duals as DualObjectiveValue is not implemented
-    config = MOIT.TestConfig(atol=1e-4, rtol=1e-4, duals=false)
+    config = MOIT.Config(atol=1e-4, rtol=1e-4, duals=false)
     MOIT.unittest(bridged_optimizer(), config, excludes)
 end
 
@@ -145,7 +145,7 @@ end
         []
     end)
     # We disable duals as DualObjectiveValue is not implemented
-    MOIT.contlineartest(bridged_optimizer(), MOIT.TestConfig(atol=1e-4, rtol=1e-4, duals=false), excludes)
+    MOIT.contlineartest(bridged_optimizer(), MOIT.Config(atol=1e-4, rtol=1e-4, duals=false), excludes)
 end
 
 @testset "CachingOptimizer: quadratic problems" begin
@@ -154,15 +154,15 @@ end
 end
 
 function test_optimizer_modification(modfun::Base.Callable, model::MOI.ModelLike, optimizer::T, idxmap::MOIU.IndexMap,
-        cleanoptimizer::T, config::MOIT.TestConfig) where T<:MOI.AbstractOptimizer
+        cleanoptimizer::T, config::MOIT.Config) where T<:MOI.AbstractOptimizer
     # apply modfun to both the model and the optimizer
     modfun(model)
     modfun(optimizer)
 
     # copy model into clean optimizer
     cleanidxmap = MOI.copy_to(cleanoptimizer, model)
-    @test cleanidxmap.varmap == idxmap.varmap
-    @test cleanidxmap.conmap == idxmap.conmap
+    @test cleanidxmap.var_map == idxmap.var_map
+    @test cleanidxmap.con_map == idxmap.con_map
 
     # call optimize! on both optimizers
     MOI.optimize!(optimizer)
@@ -186,7 +186,7 @@ function test_optimizer_modification(modfun::Base.Callable, model::MOI.ModelLike
     if config.duals
         @test MOI.get(optimizer, MOI.DualStatus()) == MOI.get(cleanoptimizer, MOI.DualStatus())
         if MOI.get(optimizer, MOI.DualStatus()) == MOI.FEASIBLE_POINT
-            for (F, S) in MOI.get(model, MOI.ListOfConstraints())
+            for (F, S) in MOI.get(model, MOI.ListOfConstraintTypesPresent())
                 cis_model = MOI.get(model, MOI.ListOfConstraintIndices{F, S}())
                 for ci_model in cis_model
                     ci_optimizer = idxmap[ci_model]
@@ -259,8 +259,8 @@ term(c, x::MOI.VariableIndex, y::MOI.VariableIndex) = MOI.ScalarQuadraticTerm(c,
     @test allocs == 0
 
     # ensure that solving a second time results in the same answer after zeroing warm start
-    zero_warm_start!(optimizer, values(idxmap.varmap), values(idxmap.conmap))
-    test_optimizer_modification(m -> (), model, optimizer, idxmap, defaultoptimizer(), MOIT.TestConfig(atol=0.0, rtol=0.0))
+    zero_warm_start!(optimizer, values(idxmap.var_map), values(idxmap.con_map))
+    test_optimizer_modification(m -> (), model, optimizer, idxmap, defaultoptimizer(), MOIT.Config(atol=0.0, rtol=0.0))
 
     mapfrommodel(::MOI.AbstractOptimizer, x::Union{MOI.VariableIndex, <:MOI.ConstraintIndex}) = idxmap[x]
     mapfrommodel(::MOI.ModelLike, x::Union{MOI.VariableIndex, <:MOI.ConstraintIndex}) = x
@@ -391,7 +391,7 @@ end
     mapfrommodel(::MOI.ModelLike, x::Union{MOI.VariableIndex, <:MOI.ConstraintIndex}) = x
 
     # make random modifications to constraints
-    randvectorconfig = MOIT.TestConfig(atol=Inf, rtol=1e-4)
+    randvectorconfig = MOIT.Config(atol=Inf, rtol=1e-4)
     rng = MersenneTwister(1234)
     for i = 1 : 100
         newcoeffs = copy(coeffs)
@@ -420,8 +420,8 @@ end
     optimizer = defaultoptimizer();
 
     x = MOI.add_variables(model, 2);
-    objectiveFunction = MOI.ScalarQuadraticFunction{Float64}([MOI.ScalarAffineTerm(1.0, x[1]); MOI.ScalarAffineTerm(1.0, x[2])], [MOI.ScalarQuadraticTerm(4.0, x[1], x[1]); MOI.ScalarQuadraticTerm(1.0, x[1], x[2]); MOI.ScalarQuadraticTerm(2.0, x[2], x[2])] , 0);
-    MOI.set(model, MOI.ObjectiveFunction{MOI.ScalarQuadraticFunction{Float64}}(), objectiveFunction);
+    objective_function = 1.0x[1] + 1.0x[2] + 2.0x[1]*x[1] + 1.0x[1] * x[2] + 1.0x[2]  * x[2]
+    MOI.set(model, MOI.ObjectiveFunction{MOI.ScalarQuadraticFunction{Float64}}(), objective_function);
     MOI.set(model, MOI.ObjectiveSense(), MOI.MIN_SENSE);
     Aneg = [MOI.VectorAffineTerm(1, MOI.ScalarAffineTerm(-1.0, x[1])),MOI.VectorAffineTerm(1, MOI.ScalarAffineTerm(-1.0, x[2])),MOI.VectorAffineTerm(2, MOI.ScalarAffineTerm(-1.0, x[1])),MOI.VectorAffineTerm(3, MOI.ScalarAffineTerm(-1.0, x[2]))];
     MOI.add_constraint(model, MOI.VectorAffineFunction(Aneg, u), MOI.Nonnegatives(3));
