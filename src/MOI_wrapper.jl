@@ -708,12 +708,20 @@ end
 # Objective modification
 function MOI.modify(optimizer::Optimizer, attr::MOI.ObjectiveFunction, change::MOI.ScalarConstantChange)
     MOI.is_empty(optimizer) && throw(MOI.ModifyObjectiveNotAllowed(change))
-    optimizer.objconstant = change.new_constant
+    constant = change.new_constant
+    if optimizer.sense == MOI.MAX_SENSE
+        constant = -constant
+    end
+    optimizer.objconstant = constant
 end
 
 function MOI.modify(optimizer::Optimizer, attr::MOI.ObjectiveFunction, change::MOI.ScalarCoefficientChange)
     MOI.is_empty(optimizer) && throw(MOI.ModifyObjectiveNotAllowed(change))
-    optimizer.modcache.q[change.variable.value] = change.new_coefficient
+    coef = change.new_coefficient
+    if optimizer.sense == MOI.MAX_SENSE
+        coef = -coef
+    end
+    optimizer.modcache.q[change.variable.value] = coef
 end
 
 # There is currently no ScalarQuadraticCoefficientChange.

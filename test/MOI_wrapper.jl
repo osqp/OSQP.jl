@@ -70,9 +70,6 @@ function test_runtests()
             #   MathOptInterface.jl issue #1431
             "test_model_LowerBoundAlreadySet",
             "test_model_UpperBoundAlreadySet",
-            # FIXME Might be a but in objective modification
-            "test_modification_coef_scalar_objective",
-            "test_modification_const_scalar_objective",
         ],
     )
     return
