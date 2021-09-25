@@ -1,4 +1,4 @@
-module TestECOS
+module TestOSQP
 
 using Test
 using LinearAlgebra
@@ -550,4 +550,4 @@ end
 
 end  # module
 
-TestECOS.runtests()
+TestOSQP.runtests()
