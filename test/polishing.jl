@@ -75,7 +75,7 @@ tol = 1e-3
     @testset "polish_random" begin
 
         # load randomly generated problem with known accurate solution from Mosek
-        problem_data = FileIO.load("./problem_data/random_polish_qp.jld2");
+        problem_data = FileIO.load(joinpath(@__DIR__, "problem_data/random_polish_qp.jld2"))
         P = problem_data["P"]; q = problem_data["q"]; A = problem_data["A"]; u = problem_data["u"]; l = problem_data["l"];
         options = setup_polishing()
         model = OSQP.Model()
