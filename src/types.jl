@@ -243,7 +243,7 @@ function copyto!(info::Info, cinfo::CInfo)
     info.polish_time = cinfo.polish_time
     info.run_time = cinfo.run_time
     info.rho_updates = cinfo.rho_updates
-    info.rho_estimate
+    info.rho_estimate = cinfo.rho_estimate
     info
 end
 
