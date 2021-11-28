@@ -66,6 +66,7 @@ function test_runtests()
         model,
         config,
         exclude = String[
+            "test_attribute_SolverVersion",
             # Expected test failures:
             #   MathOptInterface.jl issue #1431
             "test_model_LowerBoundAlreadySet",
