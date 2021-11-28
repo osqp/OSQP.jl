@@ -66,6 +66,7 @@ function test_runtests()
         model,
         config,
         exclude = String[
+            "test_attribute_SolverVersion",
             # Expected test failures:
             #   MathOptInterface.jl issue #1431
             "test_model_LowerBoundAlreadySet",
@@ -531,21 +532,6 @@ function test_RawSolver()
     MOI.copy_to(optimizer, model)
     inner = MOI.get(optimizer, MOI.RawSolver())
     @test inner.workspace != C_NULL
-end
-
-# TODO: consider moving to MOI.Test. However, current default copy_to is fine with BadObjectiveModel.
-struct BadObjectiveModel <: MOI.Test.BadModel end # objective sense is not FEASIBILITY_SENSE, but can't get objective function
-MOI.get(src::BadObjectiveModel, ::MOI.ObjectiveSense) = MOI.MIN_SENSE
-struct ExoticFunction <: MOI.AbstractScalarFunction end
-MOI.get(src::BadObjectiveModel, ::MOI.ObjectiveFunctionType) = ExoticFunction
-
-@testset "failcopy" begin
-    # FIXME https://github.com/JuliaOpt/MathOptInterface.jl/issues/851
-    #MOI.Test.failcopytestc(bridged_optimizer())
-    #optimizer = bridged_optimizer()
-    #MOI.copy_to(optimizer, BadObjectiveModel())
-    # FIXME UndefRefError: access to undefined reference
-    #@test_throws MOI.UnsupportedAttribute{MOI.ObjectiveFunction{ExoticFunction}} MOI.optimize!(optimizer)
 end
 
 end  # module
