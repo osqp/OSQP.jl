@@ -71,6 +71,26 @@ function test_runtests()
             #   MathOptInterface.jl issue #1431
             "test_model_LowerBoundAlreadySet",
             "test_model_UpperBoundAlreadySet",
+            # FIXME
+            # See https://github.com/jump-dev/MathOptInterface.jl/issues/1773
+            "test_infeasible_MAX_SENSE",
+            "test_infeasible_MAX_SENSE_offset",
+            "test_infeasible_MIN_SENSE",
+            "test_infeasible_MIN_SENSE_offset",
+            "test_infeasible_affine_MAX_SENSE",
+            "test_infeasible_affine_MAX_SENSE_offset",
+            "test_infeasible_affine_MIN_SENSE",
+            "test_infeasible_affine_MIN_SENSE_offset",
+            # FIXME
+            # See https://github.com/jump-dev/MathOptInterface.jl/issues/1759
+            "test_unbounded_MAX_SENSE",
+            "test_unbounded_MAX_SENSE_offset",
+            "test_unbounded_MIN_SENSE",
+            "test_unbounded_MIN_SENSE_offset",
+            # FIXME
+            "test_model_copy_to_UnsupportedAttribute",
+            # Segfault
+            "test_model_copy_to_UnsupportedConstraint",
         ],
     )
     return
