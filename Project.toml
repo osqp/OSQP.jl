@@ -14,7 +14,7 @@ OSQP_jll = "9c4f68bf-6205-5545-a508-2878b064d984"
 SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
 
 [compat]
-MathOptInterface = "~0.10.3"
+MathOptInterface = "1"
 OSQP_jll = "=0.6.2, ~0.600.200"
 julia = "1.6"
 
