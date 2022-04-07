@@ -6,7 +6,7 @@
         # Setup problem
         P = sparse([2. 5.; 5. 1.])
         q = [3.; 4]
-        A = sparse([-1 0; 0 -1; -1 -3; 2 5; 3 4])
+        A = sparse([-1 0; 0 -1; -1 3; 2 5; 3 4])
         u = [0.; 0.; -15; 100; 80]
         l = -Inf * ones(length(u))
         options = Dict(:verbose => false, :sigma => 1e-06)
@@ -29,7 +29,7 @@
         # Setup workspace with new sigma
         P = sparse([2. 5.; 5. 1.])
         q = [3.; 4]
-        A = sparse([-1 0; 0 -1; -1 -3; 2 5; 3 4])
+        A = sparse([-1 0; 0 -1; -1 3; 2 5; 3 4])
         u = [0.; 0.; -15; 100; 80]
         l = -Inf * ones(length(u))
         options = Dict(:verbose => false, :sigma => 5.)

@@ -2,7 +2,7 @@ function setup_warm_start()
     options = Dict(:verbose => false,
                    :eps_abs => 1e-08,
                    :eps_rel => 1e-08,
-                   :polish => false,
+                   :polishing => false,
                    :adaptive_rho => false,
                    :check_termination => 1)
     return options

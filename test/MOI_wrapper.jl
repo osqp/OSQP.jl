@@ -355,7 +355,7 @@ function test_no_CachingOptimizer_problem_modification_after_copy_to()
 
     # update settings
     @test optimizer.results.info.status_polish == 0
-    MOI.set(optimizer, OSQPSettings.Polish(), true)
+    MOI.set(optimizer, OSQPSettings.Polishing(), true)
     MOI.optimize!(optimizer)
     @test optimizer.results.info.status_polish == 1
     testflipped()
@@ -536,7 +536,7 @@ end
 function test_RawSolver()
     optimizer = defaultoptimizer()
     let inner = MOI.get(optimizer, MOI.RawSolver())
-        @test inner.workspace == C_NULL
+        @test inner.solver == C_NULL
     end
 
     @test MOI.get(optimizer, MOI.SolverName()) == "OSQP"
@@ -551,7 +551,7 @@ function test_RawSolver()
 
     MOI.copy_to(optimizer, model)
     inner = MOI.get(optimizer, MOI.RawSolver())
-    @test inner.workspace != C_NULL
+    @test inner.solver != C_NULL
 end
 
 end  # module

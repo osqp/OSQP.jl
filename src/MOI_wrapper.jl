@@ -422,7 +422,7 @@ function _contains(haystack, needle)
     false
 end
 
-for setting in fieldnames(OSQP.Settings)
+for setting in fieldnames(OSQP.OSQPSettings)
     Attribute = Symbol(mapreduce(uppercasefirst, *, split(String(setting), '_'))) # to camelcase
     @eval begin
         export $Attribute

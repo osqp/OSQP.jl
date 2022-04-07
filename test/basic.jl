@@ -12,7 +12,7 @@ function setup_basic()
                    :eps_abs => 1e-09,
                    :eps_rel => 1e-09,
                    :check_termination => 1,
-                   :polish => false,
+                   :polishing => false,
                    :max_iter => 4000,
                    :rho => 0.1,
                    :adaptive_rho => false,

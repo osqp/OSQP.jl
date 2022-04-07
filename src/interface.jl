@@ -16,12 +16,14 @@ end
 Initialize OSQP model
 """
 mutable struct Model
-    workspace::Ptr{OSQP.Workspace}
+    solver::Ptr{OSQP.OSQPSolver}
+    m::Cc_int
+    n::Cc_int
     lcache::Vector{Float64} # to facilitate converting l to use OSQP_INFTY
     ucache::Vector{Float64} # to facilitate converting u to use OSQP_INFTY
 	isempty::Bool			# a flag to keep track of the model's setup status
     function Model()
-        model = new(C_NULL, Float64[], Float64[], true)
+        model = new(C_NULL, 0, 0, Float64[], Float64[], true)
         finalizer(OSQP.clean!, model)
         return model
 
@@ -141,30 +143,41 @@ function setup!(model::OSQP.Model;
         end
     end
 
-    stgs = OSQP.Settings(settings_dict)
+    stgs = OSQP.OSQPSettings(settings_dict)
 
     @preserve managedP Pdata managedA Adata q l u begin
-        # Create OSQP data using the managed matrices pointers
-        data = OSQP.Data(n, m,
-                        Base.unsafe_convert(Ptr{OSQP.Ccsc}, Pdata),
-                        Base.unsafe_convert(Ptr{OSQP.Ccsc}, Adata),
-                        pointer(q),
-                        pointer(l), pointer(u))
 
+    # # Perform setup
+    solver = Ref{Ptr{OSQP.OSQPSolver}}()
+    exitflag = ccall(
+        (:osqp_setup, OSQP.osqp),
+        OSQP.Cc_int,
 
-        # Perform setup
-	workspace = Ref{Ptr{OSQP.Workspace}}()
-        exitflag = ccall((:osqp_setup, OSQP.osqp), Cc_int,
-	                 (Ptr{Ptr{OSQP.Workspace}}, Ptr{OSQP.Data}, Ptr{OSQP.Settings}),
-			 workspace, Ref(data), Ref(stgs))
-	model.workspace = workspace[]
+        (Ptr{Ptr{OSQP.OSQPSolver}}, Ptr{OSQP.Ccsc}, Ptr{Cdouble},
+        Ptr{OSQP.Ccsc}, Ptr{Cdouble}, Ptr{Cdouble}, OSQP.Cc_int, OSQP.Cc_int,
+        Ptr{OSQP.OSQPSettings}),
+
+        solver,
+        Base.unsafe_convert(Ptr{OSQP.Ccsc}, Pdata),
+        pointer(q),
+        Base.unsafe_convert(Ptr{OSQP.Ccsc}, Adata),
+        pointer(l),
+        pointer(u),
+        m,
+        n,
+        Ref(stgs)
+    )
+	model.solver = solver[]
+
     end
 
     if exitflag != 0
         error("Error in OSQP setup")
     end
 
-	model.isempty = false
+    model.isempty = false
+    model.m = m
+    model.n = n
 
 end
 
@@ -172,15 +185,15 @@ end
 function solve!(model::OSQP.Model, results::Results = Results())
 
 	model.isempty && throw(ErrorException("You are trying to solve an empty model. Please setup the model before calling solve!()."))
-    ccall((:osqp_solve, OSQP.osqp), Cc_int,
-             (Ptr{OSQP.Workspace}, ), model.workspace)
-    workspace = unsafe_load(model.workspace)
+    ccall((:osqp_solve, OSQP.osqp), OSQP.Cc_int,
+        (Ref{OSQP.OSQPSolver}, ), model.solver)
+
+    _solver = unsafe_load(model.solver)
+    solution = unsafe_load(_solver.solution)
     info = results.info
-    copyto!(info, unsafe_load(workspace.info))
-    solution = unsafe_load(workspace.solution)
-    data = unsafe_load(workspace.data)
-    n = data.n
-    m = data.m
+    copyto!(info, unsafe_load(_solver.info))
+    n = model.n
+    m = model.m
     resize!(results, n, m)
     has_solution = false
     for status in SOLUTION_PRESENT
@@ -197,11 +210,11 @@ function solve!(model::OSQP.Model, results::Results = Results())
         fill!(results.x, NaN)
         fill!(results.y, NaN)
         if info.status == :Primal_infeasible || info.status == :Primal_infeasible_inaccurate
-            unsafe_copyto!(pointer(results.prim_inf_cert), workspace.delta_y, m)
+            unsafe_copyto!(pointer(results.prim_inf_cert), solution.prim_inf_cert, m)
             fill!(results.dual_inf_cert, NaN)
         elseif info.status == :Dual_infeasible || info.status == :Dual_infeasible_inaccurate
             fill!(results.prim_inf_cert, NaN)
-            unsafe_copyto!(pointer(results.dual_inf_cert), workspace.delta_x, n)
+            unsafe_copyto!(pointer(results.dual_inf_cert), solution.dual_inf_cert, n)
         else
             fill!(results.prim_inf_cert, NaN)
             fill!(results.dual_inf_cert, NaN)
@@ -213,6 +226,7 @@ function solve!(model::OSQP.Model, results::Results = Results())
     end
 
     results
+
 end
 
 
@@ -222,7 +236,7 @@ end
 
 function clean!(model::OSQP.Model)
     exitflag = ccall((:osqp_cleanup, OSQP.osqp), Cc_int,
-             (Ptr{OSQP.Workspace},), model.workspace)
+             (Ptr{OSQP.OSQPSolver},), model.solver)
     if exitflag != 0
         error("Error in OSQP cleanup")
     end
@@ -233,7 +247,7 @@ function update_q!(model::OSQP.Model, q::Vector{Float64})
     if length(q) != n
         error("q must have length n = $(n)")
     end
-    exitflag = ccall((:osqp_update_lin_cost, OSQP.osqp), Cc_int, (Ptr{OSQP.Workspace}, Ptr{Cdouble}), model.workspace, q)
+    exitflag = ccall((:osqp_update_data_vec, OSQP.osqp), Cc_int, (Ptr{OSQP.OSQPSolver}, Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Cdouble}), model.solver, q, C_NULL, C_NULL)
     if exitflag != 0 error("Error updating q") end
 end
 
@@ -243,7 +257,7 @@ function update_l!(model::OSQP.Model, l::Vector{Float64})
         error("l must have length m = $(m)")
     end
     model.lcache .= max.(l, -OSQP_INFTY)
-    exitflag = ccall((:osqp_update_lower_bound, OSQP.osqp), Cc_int, (Ptr{OSQP.Workspace}, Ptr{Cdouble}), model.workspace, model.lcache)
+    exitflag = ccall((:osqp_update_data_vec, OSQP.osqp), Cc_int, (Ptr{OSQP.OSQPSolver}, Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Cdouble}), model.solver, C_NULL, model.lcache, C_NULL)
     if exitflag != 0 error("Error updating l") end
 end
 
@@ -253,7 +267,7 @@ function update_u!(model::OSQP.Model, u::Vector{Float64})
         error("u must have length m = $(m)")
     end
     model.ucache .= min.(u, OSQP_INFTY)
-    exitflag = ccall((:osqp_update_upper_bound, OSQP.osqp), Cc_int, (Ptr{OSQP.Workspace}, Ptr{Cdouble}), model.workspace, model.ucache)
+    exitflag = ccall((:osqp_update_data_vec, OSQP.osqp), Cc_int, (Ptr{OSQP.OSQPSolver}, Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Cdouble}), model.solver, C_NULL, C_NULL, model.ucache)
     if exitflag != 0 error("Error updating u") end
 end
 
@@ -267,8 +281,7 @@ function update_bounds!(model::OSQP.Model, l::Vector{Float64}, u::Vector{Float64
     end
     model.lcache .= max.(l, -OSQP_INFTY)
     model.ucache .= min.(u, OSQP_INFTY)
-    exitflag = ccall((:osqp_update_bounds, OSQP.osqp), Cc_int, (Ptr{OSQP.Workspace}, Ptr{Cdouble}, Ptr{Cdouble}),
-        model.workspace, model.lcache, model.ucache)
+    exitflag = ccall((:osqp_update_data_vec, OSQP.osqp), Cc_int, (Ptr{OSQP.OSQPSolver}, Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Cdouble}), model.solver, C_NULL, model.lcache, model.ucache)
     if exitflag != 0 error("Error updating bounds l and u") end
 end
 
@@ -289,16 +302,16 @@ end
 
 function update_P!(model::OSQP.Model, Px::Vector{Float64}, Px_idx::Union{Vector{Int}, Nothing})
     Px_idx_prepped = prep_idx_vector_for_ccall(Px_idx, length(Px), :P)
-    exitflag = ccall((:osqp_update_P, OSQP.osqp), Cc_int, (Ptr{OSQP.Workspace}, Ptr{Cdouble}, Ptr{Cc_int}, Cc_int),
-        model.workspace, Px, Px_idx_prepped, length(Px))
+    exitflag = ccall((:osqp_update_data_mat, OSQP.osqp), Cc_int, (Ptr{OSQP.OSQPSolver}, Ptr{Cdouble}, Ptr{Cc_int}, Cc_int, Ptr{Cdouble}, Ptr{Cc_int}, Cc_int),
+        model.solver, Px, Px_idx_prepped, length(Px), C_NULL, C_NULL, 0)
     restore_idx_vector_after_ccall!(Px_idx)
     if exitflag != 0 error("Error updating P") end
 end
 
 function update_A!(model::OSQP.Model, Ax::Vector{Float64}, Ax_idx::Union{Vector{Int}, Nothing})
     Ax_idx_prepped = prep_idx_vector_for_ccall(Ax_idx, length(Ax), :A)
-    exitflag = ccall((:osqp_update_A, OSQP.osqp), Cc_int, (Ptr{OSQP.Workspace}, Ptr{Cdouble}, Ptr{Cc_int}, Cc_int),
-        model.workspace, Ax, Ax_idx_prepped, length(Ax))
+    exitflag = ccall((:osqp_update_data_mat, OSQP.osqp), Cc_int, (Ptr{OSQP.OSQPSolver}, Ptr{Cdouble}, Ptr{Cc_int}, Cc_int, Ptr{Cdouble}, Ptr{Cc_int}, Cc_int),
+        model.solver, C_NULL, C_NULL, 0, Ax, Ax_idx_prepped, length(Ax))
     restore_idx_vector_after_ccall!(Ax_idx)
     if exitflag != 0 error("Error updating A") end
 end
@@ -306,9 +319,8 @@ end
 function update_P_A!(model::OSQP.Model, Px::Vector{Float64}, Px_idx::Union{Vector{Int}, Nothing}, Ax::Vector{Float64}, Ax_idx::Union{Vector{Int}, Nothing})
     Px_idx_prepped = prep_idx_vector_for_ccall(Px_idx, length(Px), :P)
     Ax_idx_prepped = prep_idx_vector_for_ccall(Ax_idx, length(Ax), :A)
-    exitflag = ccall((:osqp_update_P_A, OSQP.osqp), Cc_int, (Ptr{OSQP.Workspace}, Ptr{Cdouble},
-        Ptr{Cc_int}, Cc_int, Ptr{Cdouble}, Ptr{Cc_int}, Cc_int),
-        model.workspace, Px, Px_idx_prepped, length(Px), Ax, Ax_idx_prepped, length(Ax))
+    exitflag = ccall((:osqp_update_data_mat, OSQP.osqp), Cc_int, (Ptr{OSQP.OSQPSolver}, Ptr{Cdouble}, Ptr{Cc_int}, Cc_int, Ptr{Cdouble}, Ptr{Cc_int}, Cc_int),
+        model.solver, Px, Px_idx_prepped, length(Px), Ax, Ax_idx_prepped, length(Ax))
     restore_idx_vector_after_ccall!(Ax_idx)
     restore_idx_vector_after_ccall!(Px_idx)
     if exitflag != 0 error("Error updating P and A") end
@@ -343,120 +355,37 @@ end
 
 function update_settings!(model::OSQP.Model; kwargs...)
 
-    if isempty(kwargs)
-        return
-    else
-        data = Dict{Symbol,Any}()
-        for (key, value) in kwargs
-            if !(key in UPDATABLE_SETTINGS)
-                error("$(key) cannot be updated or is not recognized")
-            else
-                data[key] = value
-            end
-        end
-    end
-
-    # Get arguments
-    max_iter = get(data, :max_iter, nothing)
-    eps_abs = get(data, :eps_abs, nothing)
-    eps_rel = get(data, :eps_rel, nothing)
-    eps_prim_inf = get(data, :eps_prim_inf, nothing)
-    eps_dual_inf = get(data, :eps_dual_inf, nothing)
-    rho = get(data, :rho, nothing)
-    alpha = get(data, :alpha, nothing)
-    delta = get(data, :delta, nothing)
-    polish = get(data, :polish, nothing)
-    polish_refine_iter = get(data, :polish_refine_iter, nothing)
-    verbose = get(data, :verbose, nothing)
-    scaled_termination = get(data, :early_terminate, nothing)
-    check_termination = get(data, :check_termination, nothing)
-    warm_start = get(data, :warm_start, nothing)
-    time_limit = get(data, :time_limit, nothing)
-
-    # Update individual settings
-    if max_iter != nothing
-        exitflag = ccall((:osqp_update_max_iter, OSQP.osqp), Cc_int, (Ptr{OSQP.Workspace}, Cc_int), model.workspace, max_iter)
-        if exitflag != 0 error("Error updating max_iter") end
-    end
-
-    if eps_abs != nothing
-        exitflag = ccall((:osqp_update_eps_abs, OSQP.osqp), Cc_int, (Ptr{OSQP.Workspace}, Cdouble), model.workspace, eps_abs)
-        if exitflag != 0 error("Error updating eps_abs") end
-    end
-
-    if eps_rel != nothing
-        exitflag = ccall((:osqp_update_eps_rel, OSQP.osqp), Cc_int, (Ptr{OSQP.Workspace}, Cdouble), model.workspace, eps_rel)
-        if exitflag != 0 error("Error updating eps_rel") end
-    end
-
-
-    if eps_prim_inf != nothing
-        exitflag = ccall((:osqp_update_eps_prim_inf, OSQP.osqp), Cc_int, (Ptr{OSQP.Workspace}, Cdouble), model.workspace, eps_prim_inf)
-        if exitflag != 0 error("Error updating eps_prim_inf") end
-    end
-
-    if eps_dual_inf != nothing
-        exitflag = ccall((:osqp_update_eps_dual_inf, OSQP.osqp), Cc_int, (Ptr{OSQP.Workspace}, Cdouble), model.workspace, eps_dual_inf)
-        if exitflag != 0 error("Error updating eps_dual_inf") end
-    end
-
-    if rho != nothing
-        exitflag = ccall((:osqp_update_rho, OSQP.osqp), Cc_int, (Ptr{OSQP.Workspace}, Cdouble), model.workspace, rho)
+    new_settings = Dict(kwargs)
+    if :rho in keys(new_settings)
+        rho = pop!(new_settings, :rho)
+        exitflag = ccall((:osqp_update_rho, OSQP.osqp), Cc_int, (Ptr{OSQP.OSQPSolver}, Cdouble), model.solver, rho)
         if exitflag != 0 error("Error updating rho") end
     end
 
-    if alpha != nothing
-        exitflag = ccall((:osqp_update_alpha, OSQP.osqp), Cc_int, (Ptr{OSQP.Workspace}, Cdouble), model.workspace, alpha)
-        if exitflag != 0 error("Error updating alpha") end
-    end
+    if !isempty(new_settings)
+        for (key, _) in new_settings
+            if !(key in UPDATABLE_SETTINGS)
+                error("$(key) cannot be updated or is not recognized. Not updating anything.")
+            end
+        end
 
-    if delta != nothing
-        exitflag = ccall((:osqp_update_delta, OSQP.osqp), Cc_int, (Ptr{OSQP.Workspace}, Cdouble), model.workspace, delta)
-        if exitflag != 0 error("Error updating delta") end
-    end
+        data = Dict{Symbol,Any}()
+        old_settings = unsafe_load(unsafe_load(model.solver).data)
+        for fieldname in fieldnames(OSQP.OSQPSettings)
+            data[fieldname] = getfield(old_settings, fieldname)
+        end
+        data = merge(data, new_settings)
 
-    if polish != nothing
-        exitflag = ccall((:osqp_update_polish, OSQP.osqp), Cc_int, (Ptr{OSQP.Workspace}, Cc_int), model.workspace, polish)
-        if exitflag != 0 error("Error updating polish") end
+        settings = OSQPSettings(data)
+        exitflag = ccall((:osqp_update_settings, OSQP.osqp), Cc_int, (Ptr{OSQP.OSQPSolver}, Ptr{OSQP.OSQPSettings}), model.solver, Ref(settings))
+        if exitflag != 0 error("Error updating settings") end
     end
-
-    if polish_refine_iter != nothing
-        exitflag = ccall((:osqp_update_polish_refine_iter, OSQP.osqp), Cc_int, (Ptr{OSQP.Workspace}, Cc_int), model.workspace, polish_refine_iter)
-        if exitflag != 0 error("Error updating polish_refine_iter") end
-    end
-
-    if verbose != nothing
-        exitflag = ccall((:osqp_update_verbose, OSQP.osqp), Cc_int, (Ptr{OSQP.Workspace}, Cc_int), model.workspace, verbose)
-        if exitflag != 0 error("Error updating verbose") end
-    end
-
-    if scaled_termination != nothing
-        exitflag = ccall((:osqp_update_scaled_termination, OSQP.osqp), Cc_int, (Ptr{OSQP.Workspace}, Cc_int), model.workspace, scaled_termination)
-        if exitflag != 0 error("Error updating scaled_termination") end
-    end
-
-    if check_termination != nothing
-        exitflag = ccall((:osqp_update_check_termination, OSQP.osqp), Cc_int, (Ptr{OSQP.Workspace}, Cc_int), model.workspace, check_termination)
-        if exitflag != 0 error("Error updating check_termination") end
-    end
-
-    if warm_start != nothing
-        exitflag = ccall((:osqp_update_warm_start, OSQP.osqp), Cc_int, (Ptr{OSQP.Workspace}, Cc_int), model.workspace, warm_start)
-        if exitflag != 0 error("Error updating warm_start") end
-    end
-
-   if time_limit != nothing
-        exitflag = ccall((:osqp_update_time_limit, OSQP.osqp), Cc_int, (Ptr{OSQP.Workspace}, Cdouble), model.workspace, time_limit)
-        if exitflag != 0 error("Error updating time_limit") end
-    end
-
-    return nothing
 end
 
 function warm_start_x!(model::OSQP.Model, x::Vector{Float64})
     (n, m) = OSQP.dimensions(model)
     length(x) == n || error("Wrong dimension for variable x")
-    exitflag = ccall((:osqp_warm_start_x, OSQP.osqp), Cc_int, (Ptr{OSQP.Workspace}, Ptr{Cdouble}), model.workspace, x)
+    exitflag = ccall((:osqp_warm_start, OSQP.osqp), Cc_int, (Ptr{OSQP.OSQPSolver}, Ptr{Cdouble}, Ptr{Cdouble}), model.solver, x, C_NULL)
     exitflag == 0  || error("Error in warm starting x")
     nothing
 end
@@ -464,7 +393,7 @@ end
 function warm_start_y!(model::OSQP.Model, y::Vector{Float64})
     (n, m) = OSQP.dimensions(model)
     length(y) == m || error("Wrong dimension for variable y")
-    exitflag = ccall((:osqp_warm_start_y, OSQP.osqp), Cc_int, (Ptr{OSQP.Workspace}, Ptr{Cdouble}), model.workspace, y)
+    exitflag = ccall((:osqp_warm_start, OSQP.osqp), Cc_int, (Ptr{OSQP.OSQPSolver}, Ptr{Cdouble}, Ptr{Cdouble}), model.solver, C_NULL, y)
     exitflag == 0 || error("Error in warm starting y")
     nothing
 end
@@ -473,7 +402,7 @@ function warm_start_x_y!(model::OSQP.Model, x::Vector{Float64}, y::Vector{Float6
     (n, m) = OSQP.dimensions(model)
     length(x) == n || error("Wrong dimension for variable x")
     length(y) == m || error("Wrong dimension for variable y")
-    exitflag = ccall((:osqp_warm_start, OSQP.osqp), Cc_int, (Ptr{OSQP.Workspace}, Ptr{Cdouble}, Ptr{Cdouble}), model.workspace, x, y)
+    exitflag = ccall((:osqp_warm_start, OSQP.osqp), Cc_int, (Ptr{OSQP.OSQPSolver}, Ptr{Cdouble}, Ptr{Cdouble}), model.solver, x, y)
     exitflag == 0 || error("Error in warm starting x and y")
     nothing
 end
@@ -489,8 +418,6 @@ function warm_start!(model::OSQP.Model; x::Union{Vector{Float64}, Nothing} = not
     end
 end
 
-
-
 # Auxiliary low-level functions
 """
     dimensions(model::OSQP.Model)
@@ -498,41 +425,34 @@ end
 Obtain problem dimensions from OSQP model
 """
 function dimensions(model::OSQP.Model)
-
-    workspace = unsafe_load(model.workspace)
-    if workspace == C_NULL
-        error("Workspace has not been setup yet")
-    end
-    data = unsafe_load(workspace.data)
-    return data.n, data.m
+    # TODO: Why was this function returning (n, m) instead of (m, n)?
+    return model.n, model.m
 end
 
 
-
-
 function linsys_solver_str_to_int!(settings_dict::Dict{Symbol,Any})
-         # linsys_str = pop!(settings_dict, :linsys_solver)
     linsys_str = get(settings_dict, :linsys_solver, nothing)
 
     if linsys_str != nothing
          # Check type
         if !isa(linsys_str, String)
-            error("linsys_solver is required to be a string")
+            # If linsys_str is already an expected value, do nothing
+            if !(linsys_str in (OSQP_DIRECT_SOLVER, OSQP_INDIRECT_SOLVER))
+                error("Linear system solver not recognized.")
+            else
+                return
+            end
         end
 
          # Convert to lower case
         linsys_str = lowercase(linsys_str)
 
-        if linsys_str == "qdldl"
-            settings_dict[:linsys_solver] = QDLDL_SOLVER
-        elseif linsys_str == "mkl pardiso"
-            settings_dict[:linsys_solver] = MKL_PARDISO_SOLVER
-        elseif linsys_str == ""
-            settings_dict[:linsys_solver] = QDLDL_SOLVER
+        if linsys_str == "direct"
+            settings_dict[:linsys_solver] = OSQP_DIRECT_SOLVER
+        elseif linsys_str == "indirect"
+            settings_dict[:linsys_solver] = OSQP_INDIRECT_SOLVER
         else
-            @warn("Linear system solver not recognized. Using default QDLDL")
-            settings_dict[:linsys_solver] = QDLDL_SOLVER
-
+            error("Linear system solver not recognized.")
         end
     end
 end

@@ -4,7 +4,7 @@ export OSQPMathProgBaseInterface
 using SparseArrays
 using LinearAlgebra
 
-using OSQP_jll
+using OSQPd_jll
 
 include("constants.jl")
 include("types.jl")

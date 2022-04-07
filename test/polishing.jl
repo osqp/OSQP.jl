@@ -1,6 +1,6 @@
 function setup_polishing()
     options = Dict(:verbose => false,
-                   :polish => true,
+                   :polishing => true,
                    :eps_abs => 1e-03,
                    :eps_rel => 1e-03,
                    :verbose => false,

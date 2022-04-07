@@ -9,25 +9,24 @@ else  # 32bit system
 end
 
 struct Ccsc
-    nzmax::Cc_int
     m::Cc_int
     n::Cc_int
     p::Ptr{Cc_int}
     i::Ptr{Cc_int}
     x::Ptr{Cdouble}
+    nzmax::Cc_int
     nz::Cc_int
 end
 
 
 struct ManagedCcsc
-    nzmax::Cc_int
     m::Cc_int
     n::Cc_int
     p::Vector{Cc_int}
     i::Vector{Cc_int}
     x::Vector{Cdouble}
+    nzmax::Cc_int
     nz::Cc_int
-
 end
 
 # Construct ManagedCcsc matrix from SparseMatrixCSC
@@ -45,7 +44,7 @@ function ManagedCcsc(M::SparseMatrixCSC)
     p = convert(Array{Cc_int,1}, M.colptr .- 1)
 
     # Create new ManagedCcsc matrix
-    ManagedCcsc(length(M.nzval), m, n, p, i, x, -1)
+    ManagedCcsc(m, n, p, i, x, length(M.nzval), -1)
 end
 
 function Base.convert(::Type{SparseMatrixCSC}, c::OSQP.Ccsc)
@@ -62,86 +61,63 @@ end
 # Use this only when you know that the managed matrix will outlive the Ccsc
 # matrix.
 Ccsc(m::ManagedCcsc) =
-    Ccsc(m.nzmax, m.m, m.n, pointer(m.p), pointer(m.i), pointer(m.x), m.nz)
+    Ccsc(m.m, m.n, pointer(m.p), pointer(m.i), pointer(m.x), m.nzmax, m.nz)
 
 
-struct Solution
+struct OSQPSolution
     x::Ptr{Cdouble}
     y::Ptr{Cdouble}
+    prim_inf_cert::Ptr{Cdouble}
+    dual_inf_cert::Ptr{Cdouble}
 end
 
-# Internal C type for info
-# N.B. This is not the one returned to the user!
-struct CInfo
-    iter::Cc_int
-    # We need to allocate 32 bytes for a character string, so we allocate 256 bits
-    # of integer instead
-    # TODO: Find a better way to do this
-    status::NTuple{32,Cchar}
-    status_val::Cc_int
-    status_polish::Cc_int
-    obj_val::Cdouble
-    pri_res::Cdouble
-    dua_res::Cdouble
-    setup_time::Cdouble
-    solve_time::Cdouble
-    update_time::Cdouble
-    polish_time::Cdouble
-    run_time::Cdouble
-    rho_updates::Cc_int
-    rho_estimate::Cdouble
-end
-
-struct Data
-    n::Cc_int
-    m::Cc_int
-    P::Ptr{Ccsc}
-    A::Ptr{Ccsc}
-    q::Ptr{Cdouble}
-    l::Ptr{Cdouble}
-    u::Ptr{Cdouble}
-end
-
-
-struct Settings
-    rho::Cdouble
-    sigma::Cdouble
+struct OSQPSettings
+    device::Cc_int
+    linsys_solver::Cint  # Enum type
+    verbose::Cc_int
+    warm_starting::Cc_int
     scaling::Cc_int
+    polishing::Cc_int
+    rho::Cdouble
+    rho_is_vec::Cc_int
+    sigma::Cdouble
+    alpha::Cdouble
+    cg_max_iter::Cc_int
+    cg_tol_reduction::Cc_int
+    cg_tol_fraction::Cdouble
     adaptive_rho::Cc_int
     adaptive_rho_interval::Cc_int
-    adaptive_rho_tolerance::Cdouble
     adaptive_rho_fraction::Cdouble
+    adaptive_rho_tolerance::Cdouble
     max_iter::Cc_int
     eps_abs::Cdouble
     eps_rel::Cdouble
     eps_prim_inf::Cdouble
     eps_dual_inf::Cdouble
-    alpha::Cdouble
-    linsys_solver::Cint  # Enum type
-    delta::Cdouble
-    polish::Cc_int
-    polish_refine_iter::Cc_int
-    verbose::Cc_int
     scaled_termination::Cc_int
     check_termination::Cc_int
-    warm_start::Cc_int
     time_limit::Cdouble
+    delta::Cdouble
+    polish_refine_iter::Cc_int
 end
 
-function Settings()
-    s = Ref{OSQP.Settings}()
+# UPDATABLE_SETTINGS
+# Since OSQP's osqp_update_settings function takes a pointer to an OSQPSettings object,
+# all fields of the OSQPSettings struct are updatable.
+const UPDATABLE_SETTINGS = fieldnames(OSQPSettings)
+    
+function OSQPSettings()
+    s = Ref{OSQP.OSQPSettings}()
     ccall((:osqp_set_default_settings, OSQP.osqp), Nothing,
-          (Ref{OSQP.Settings},), s)
+          (Ref{OSQP.OSQPSettings},), s)
     return s[]
 end
 
-function Settings(settings_dict::Dict{Symbol,Any})
-#  function Settings(settings::Base.Iterators.IndexValue)
-#  function Settings(settings::Array{Any, 1})
-    default_settings = OSQP.Settings()
+function OSQPSettings(settings_dict::Dict{Symbol,Any})
+    default_settings = OSQP.OSQPSettings()
 
 
-       # Convert linsys_solver string to number
+    # Convert linsys_solver string to number
     linsys_solver_str_to_int!(settings_dict)
 
     # Get list with elements of default and user settings
@@ -154,96 +130,77 @@ function Settings(settings_dict::Dict{Symbol,Any})
              for setting in fieldnames(typeof(default_settings))]
 
     # Create new settings with new dictionary
-    s = OSQP.Settings(settings_list...)
+    s = OSQP.OSQPSettings(settings_list...)
     return s
 
 end
 
+struct OSQPInfo
+    # We need to allocate 32 bytes for a character string, so we allocate 256 bits
+    # of integer instead
+    # TODO: Find a better way to do this
+    status::NTuple{32,Cchar}
+    status_val::Cc_int
+    status_polish::Cc_int
+    obj_val::Cdouble
+    prim_res::Cdouble
+    dual_res::Cdouble
+    iter::Cc_int
+    rho_updates::Cc_int
+    rho_estimate::Cdouble
+    setup_time::Cdouble
+    solve_time::Cdouble
+    update_time::Cdouble
+    polish_time::Cdouble
+    run_time::Cdouble
+end
 
+# OSQPWorkspace is an internal struct and remains opaque to us
+mutable struct OSQPWorkspace
+end
 
-struct Workspace
-    data::Ptr{OSQP.Data}
-    linsys_solver::Ptr{Nothing}
-    pol::Ptr{Nothing}
-
-    rho_vec::Ptr{Cdouble}
-    rho_inv_vec::Ptr{Cdouble}
-    constr_type::Ptr{Cc_int}
-
-    # Iterates
-    x::Ptr{Cdouble}
-    y::Ptr{Cdouble}
-    z::Ptr{Cdouble}
-    xz_tilde::Ptr{Cdouble}
-    x_prev::Ptr{Cdouble}
-    z_prev::Ptr{Cdouble}
-
-    # Primal and dual residuals
-    Ax::Ptr{Cdouble}
-    Px::Ptr{Cdouble}
-    Aty::Ptr{Cdouble}
-
-    # Primal infeasibility
-    delta_y::Ptr{Cdouble}
-    Atdelta_y::Ptr{Cdouble}
-
-    # Dual infeasibility
-    delta_x::Ptr{Cdouble}
-    Pdelta_x::Ptr{Cdouble}
-    Adelta_x::Ptr{Cdouble}
-
-
-    # Scaling
-    D_temp::Ptr{Cdouble}
-    D_temp_A::Ptr{Cdouble}
-    E_temp::Ptr{Cdouble}
-
-    settings::Ptr{OSQP.Settings}
-    scaling::Ptr{Nothing}
-    solution::Ptr{OSQP.Solution}
-    info::Ptr{OSQP.CInfo}
-
-    timer::Ptr{Nothing}
-    first_run::Cc_int
-    summary_printed::Cc_int
-
+mutable struct OSQPSolver
+    data::Ptr{OSQP.OSQPSettings}
+    solution::Ptr{OSQP.OSQPSolution}
+    info::Ptr{OSQP.OSQPInfo}
+    work::Ptr{OSQP.OSQPWorkspace}
 end
 
 
 mutable struct Info
-    iter::Int64
     status::Symbol
     status_val::Int64
     status_polish::Int64
     obj_val::Float64
-    pri_res::Float64
-    dua_res::Float64
+    prim_res::Float64
+    dual_res::Float64
+    iter::Int64
+    rho_updates::Int64
+    rho_estimate::Float64
     setup_time::Float64
     solve_time::Float64
     update_time::Float64
     polish_time::Float64
     run_time::Float64
-    rho_updates::Int64
-    rho_estimate::Float64
 
     Info() = new()
 end
 
-function copyto!(info::Info, cinfo::CInfo)
-    info.iter = cinfo.iter
+function copyto!(info::Info, cinfo::OSQPInfo)
     info.status = OSQP.status_map[cinfo.status_val]
     info.status_val = cinfo.status_val
     info.status_polish = cinfo.status_polish
     info.obj_val = cinfo.obj_val
-    info.pri_res = cinfo.pri_res
-    info.dua_res = cinfo.dua_res
+    info.prim_res = cinfo.prim_res
+    info.dual_res = cinfo.dual_res
+    info.iter = cinfo.iter
+    info.rho_updates = cinfo.rho_updates
+    info.rho_estimate = cinfo.rho_estimate
     info.setup_time = cinfo.setup_time
     info.solve_time = cinfo.solve_time
     info.update_time = cinfo.update_time
     info.polish_time = cinfo.polish_time
     info.run_time = cinfo.run_time
-    info.rho_updates = cinfo.rho_updates
-    info.rho_estimate = cinfo.rho_estimate
     info
 end
 
