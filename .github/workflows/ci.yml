@@ -65,7 +65,8 @@ jobs:
           arch: ${{ matrix.arch }}
       - name: Install OSQP_jll.jl from custom repo
         run: |
-          julia --project=@. -e 'using Pkg; Pkg.add(url="https://github.com/osqp/OSQP_jll.jl.git")' 
+          julia --project=@. -e 'using Pkg; Pkg.add(url="https://github.com/osqp/OSQP_jll.jl.git")'
+        shell: bash  
       - uses: actions/cache@v1
         env:
           cache-name: cache-artifacts
