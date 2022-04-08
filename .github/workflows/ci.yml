@@ -73,6 +73,9 @@ jobs:
             ${{ runner.os }}-test-${{ env.cache-name }}-
             ${{ runner.os }}-test-
             ${{ runner.os }}-
+      - name: Install OSQP_jll.jl from custom repo
+        run: |
+          julia -e 'using Pkg; Pkg.add(url="https://github.com/osqp/OSQP_jll.jl.git")' 
       - uses: julia-actions/julia-buildpkg@v1
       - uses: julia-actions/julia-runtest@v1
         with:
