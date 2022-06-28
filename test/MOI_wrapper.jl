@@ -53,13 +53,6 @@ function bridged_optimizer()
     return MOI.Bridges.full_bridge_optimizer(cached, Float64)
 end
 
-# FIXME: type piracy. Needs https://github.com/jump-dev/MathOptInterface.jl/issues/1310
-function MOI.get(optimizer::MOIU.CachingOptimizer, attr::MOI.ConstraintPrimal, ci::MOI.ConstraintIndex)
-    # FIXME `get_fallback` should do this first line
-    MOI.check_result_index_bounds(optimizer, attr)
-    return MOI.Utilities.get_fallback(optimizer, attr, ci)
-end
-
 function test_runtests()
     model = bridged_optimizer()
     MOI.Test.runtests(
