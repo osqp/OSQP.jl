@@ -7,7 +7,6 @@ using SparseArrays
 
 using MathOptInterface
 const MOI = MathOptInterface
-const MOIU = MOI.Utilities
 
 using OSQP
 using OSQP.MathOptInterfaceOSQP
@@ -49,8 +48,8 @@ function defaultoptimizer()
 end
 function bridged_optimizer()
     optimizer = defaultoptimizer()
-    cached = MOIU.CachingOptimizer(
-        MOIU.UniversalFallback(OSQPModel{Float64}()),
+    cached = MOI.Utilities.CachingOptimizer(
+        MOI.Utilities.UniversalFallback(OSQPModel{Float64}()),
         optimizer,
     )
     return MOI.Bridges.full_bridge_optimizer(cached, Float64)
@@ -58,7 +57,7 @@ end
 
 # FIXME: type piracy. Needs https://github.com/jump-dev/MathOptInterface.jl/issues/1310
 function MOI.get(
-    optimizer::MOIU.CachingOptimizer,
+    optimizer::MOI.Utilities.CachingOptimizer,
     attr::MOI.ConstraintPrimal,
     ci::MOI.ConstraintIndex,
 )
@@ -219,7 +218,7 @@ function _test_optimizer_modification(
     modfun::Base.Callable,
     model::MOI.ModelLike,
     optimizer::T,
-    idxmap::MOIU.IndexMap,
+    idxmap::MOI.Utilities.IndexMap,
     cleanoptimizer::T,
     config::MOI.Test.Config,
 ) where {T<:MOI.AbstractOptimizer}
@@ -633,7 +632,7 @@ function test_no_CachingOptimizer_Warm_starting()
     l = [1.0; 0; 0]
     u = [1.0; 0.7; 0.7]
 
-    model = MOIU.UniversalFallback(OSQPModel{Float64}())
+    model = MOI.Utilities.UniversalFallback(OSQPModel{Float64}())
     optimizer = defaultoptimizer()
 
     x = MOI.add_variables(model, 2)
