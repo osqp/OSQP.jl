@@ -18,7 +18,6 @@ struct Ccsc
     nz::Cc_int
 end
 
-
 struct ManagedCcsc
     nzmax::Cc_int
     m::Cc_int
@@ -27,7 +26,6 @@ struct ManagedCcsc
     i::Vector{Cc_int}
     x::Vector{Cdouble}
     nz::Cc_int
-
 end
 
 # Construct ManagedCcsc matrix from SparseMatrixCSC
@@ -45,25 +43,33 @@ function ManagedCcsc(M::SparseMatrixCSC)
     p = convert(Array{Cc_int,1}, M.colptr .- 1)
 
     # Create new ManagedCcsc matrix
-    ManagedCcsc(length(M.nzval), m, n, p, i, x, -1)
+    return ManagedCcsc(length(M.nzval), m, n, p, i, x, -1)
 end
 
 function Base.convert(::Type{SparseMatrixCSC}, c::OSQP.Ccsc)
-  m = c.m
-  n = c.n
-  nzmax = c.nzmax
-  nzval = [unsafe_load(c.x, i) for i=1:nzmax]
-  rowval = [unsafe_load(c.i, i) for i=1:nzmax] .+ 1
-  colptr = [unsafe_load(c.p, i) for i=1:(n+1)] .+ 1
-  SparseMatrixCSC(m, n, colptr, rowval, nzval)
+    m = c.m
+    n = c.n
+    nzmax = c.nzmax
+    nzval = [unsafe_load(c.x, i) for i in 1:nzmax]
+    rowval = [unsafe_load(c.i, i) for i in 1:nzmax] .+ 1
+    colptr = [unsafe_load(c.p, i) for i in 1:(n+1)] .+ 1
+    return SparseMatrixCSC(m, n, colptr, rowval, nzval)
 end
 
 # Returns an Ccsc matrix. The vectors are *not* GC tracked in the struct.
 # Use this only when you know that the managed matrix will outlive the Ccsc
 # matrix.
-Ccsc(m::ManagedCcsc) =
-    Ccsc(m.nzmax, m.m, m.n, pointer(m.p), pointer(m.i), pointer(m.x), m.nz)
-
+function Ccsc(m::ManagedCcsc)
+    return Ccsc(
+        m.nzmax,
+        m.m,
+        m.n,
+        pointer(m.p),
+        pointer(m.i),
+        pointer(m.x),
+        m.nz,
+    )
+end
 
 struct Solution
     x::Ptr{Cdouble}
@@ -102,7 +108,6 @@ struct Data
     u::Ptr{Cdouble}
 end
 
-
 struct Settings
     rho::Cdouble
     sigma::Cdouble
@@ -130,36 +135,40 @@ end
 
 function Settings()
     s = Ref{OSQP.Settings}()
-    ccall((:osqp_set_default_settings, OSQP.osqp), Nothing,
-          (Ref{OSQP.Settings},), s)
+    ccall(
+        (:osqp_set_default_settings, OSQP.osqp),
+        Nothing,
+        (Ref{OSQP.Settings},),
+        s,
+    )
     return s[]
 end
 
 function Settings(settings_dict::Dict{Symbol,Any})
-#  function Settings(settings::Base.Iterators.IndexValue)
-#  function Settings(settings::Array{Any, 1})
+    #  function Settings(settings::Base.Iterators.IndexValue)
+    #  function Settings(settings::Array{Any, 1})
     default_settings = OSQP.Settings()
 
-
-       # Convert linsys_solver string to number
+    # Convert linsys_solver string to number
     linsys_solver_str_to_int!(settings_dict)
 
     # Get list with elements of default and user settings
     # If setting is in the passed settings (settings_dict),
     # then convert type to the right type. Otherwise just take
     # the default one
-    settings_list = [setting in keys(settings_dict) ?
-             convert(fieldtype(typeof(default_settings), setting), settings_dict[setting]) :
-             getfield(default_settings, setting)
-             for setting in fieldnames(typeof(default_settings))]
+    settings_list = [
+        setting in keys(settings_dict) ?
+        convert(
+            fieldtype(typeof(default_settings), setting),
+            settings_dict[setting],
+        ) : getfield(default_settings, setting) for
+        setting in fieldnames(typeof(default_settings))
+    ]
 
     # Create new settings with new dictionary
     s = OSQP.Settings(settings_list...)
     return s
-
 end
-
-
 
 struct Workspace
     data::Ptr{OSQP.Data}
@@ -192,7 +201,6 @@ struct Workspace
     Pdelta_x::Ptr{Cdouble}
     Adelta_x::Ptr{Cdouble}
 
-
     # Scaling
     D_temp::Ptr{Cdouble}
     D_temp_A::Ptr{Cdouble}
@@ -206,9 +214,7 @@ struct Workspace
     timer::Ptr{Nothing}
     first_run::Cc_int
     summary_printed::Cc_int
-
 end
-
 
 mutable struct Info
     iter::Int64
@@ -244,7 +250,7 @@ function copyto!(info::Info, cinfo::CInfo)
     info.run_time = cinfo.run_time
     info.rho_updates = cinfo.rho_updates
     info.rho_estimate = cinfo.rho_estimate
-    info
+    return info
 end
 
 mutable struct Results
@@ -262,5 +268,5 @@ function Base.resize!(results::Results, n::Int, m::Int)
     resize!(results.y, m)
     resize!(results.prim_inf_cert, m)
     resize!(results.dual_inf_cert, n)
-    results
+    return results
 end
