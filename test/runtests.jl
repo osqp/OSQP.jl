@@ -14,7 +14,7 @@ tests = [
     "update_matrices.jl",
     "MOI_wrapper.jl",
     "interface.jl",
-    ]
+]
 
 println("Running tests:")
 
