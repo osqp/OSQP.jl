@@ -98,16 +98,6 @@ function setup!(
         error("Incorrect dimensions of u")
     end
 
-    # Check or sparsify matrices
-    if !issparse(P)
-        @warn("P is not sparse. Sparsifying it now (it might take a while)")
-        P = sparse(P)
-    end
-    if !issparse(A)
-        @warn("A is not sparse. Sparsifying it now (it might take a while)")
-        A = sparse(A)
-    end
-
     # Constructing upper triangular from P
     if !istriu(P)
         P = triu(P)
