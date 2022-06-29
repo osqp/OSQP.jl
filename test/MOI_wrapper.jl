@@ -1,17 +1,15 @@
 module TestOSQP
 
-using Test
-using LinearAlgebra
-using Random
-using SparseArrays
-
-using MathOptInterface
-const MOI = MathOptInterface
-
 using OSQP
 using OSQP.MathOptInterfaceOSQP
+using Test
 
-const Affine = MOI.ScalarAffineFunction{Float64}
+import LinearAlgebra
+import MathOptInterface
+import Random
+import SparseArrays
+
+const MOI = MathOptInterface
 
 function runtests()
     for name in names(@__MODULE__; all = true)
@@ -46,6 +44,7 @@ function defaultoptimizer()
     MOI.set(optimizer, OSQPSettings.AdaptiveRhoInterval(), 25) # required for deterministic behavior
     return optimizer
 end
+
 function bridged_optimizer()
     optimizer = defaultoptimizer()
     cached = MOI.Utilities.CachingOptimizer(
@@ -103,15 +102,15 @@ function test_runtests()
 end
 
 function test_ProblemModificationCache()
-    rng = MersenneTwister(1234)
+    rng = Random.MersenneTwister(1234)
     n = 15
     m = 10
     q = randn(rng, n)
-    P = (X = sprandn(rng, n, n, 0.1); X' * X)
-    P += eps() * I # needed for a test later on
+    P = (X = SparseArrays.sprandn(rng, n, n, 0.1); X' * X)
+    P += eps() * LinearAlgebra.I # needed for a test later on
     l = -rand(rng, m)
     u = rand(rng, m)
-    A = sprandn(rng, m, n, 0.6)
+    A = SparseArrays.sprandn(rng, m, n, 0.6)
     modcache = MathOptInterfaceOSQP.ProblemModificationCache(P, q, A, l, u)
 
     model = OSQP.Model()
@@ -154,8 +153,8 @@ function test_ProblemModificationCache()
     @test qmod_update_results.x ≈ qmod_setup_results.x atol = 1e-7
 
     # Modify A, ensure that updating results in the same solution as calling setup! with the modified A and q
-    (rows, cols, _) = findnz(A)
-    Amodindex = rand(rng, 1:nnz(A))
+    (rows, cols, _) = SparseArrays.findnz(A)
+    Amodindex = rand(rng, 1:SparseArrays.nnz(A))
     row = rows[Amodindex]
     col = cols[Amodindex]
     val = randn(rng)
@@ -190,7 +189,7 @@ function test_ProblemModificationCache()
     MathOptInterfaceOSQP.processupdates!(model, modcache)
     Pmod_update_results = OSQP.solve!(model)
     model4 = OSQP.Model()
-    Pmod = sparse(1.0I, n, n)
+    Pmod = SparseArrays.sparse(1.0 * LinearAlgebra.I, n, n)
     OSQP.setup!(
         model4;
         P = Pmod,
@@ -399,7 +398,7 @@ function test_no_CachingOptimizer_problem_modification_after_copy_to()
         defaultoptimizer(),
         config,
     ) do m
-        attr = MOI.ObjectiveFunction{Affine}()
+        attr = MOI.ObjectiveFunction{MOI.ScalarAffineFunction{Float64}}()
         return MOI.modify(m, attr, MOI.ScalarConstantChange(objconstant))
     end
     objval_after = MOI.get(optimizer, MOI.ObjectiveValue())
@@ -413,7 +412,7 @@ function test_no_CachingOptimizer_problem_modification_after_copy_to()
         defaultoptimizer(),
         config,
     ) do m
-        attr = MOI.ObjectiveFunction{Affine}()
+        attr = MOI.ObjectiveFunction{MOI.ScalarAffineFunction{Float64}}()
         return MOI.modify(
             m,
             attr,
@@ -535,8 +534,8 @@ function no_CachingOptimizer_Vector_problem_modification_after_copy_to()
     P11 = 11.0
     q = [3.0, 4.0]
     u = [0.0, 0.0, -15, 100, 80]
-    A = sparse(Float64[-1 0; 0 -1; -1 -3; 2 5; 3 4])
-    I, J, coeffs = findnz(A)
+    A = SparseArrays.sparse(Float64[-1 0; 0 -1; -1 -3; 2 5; 3 4])
+    I, J, coeffs = SparseArrays.findnz(A)
     objf = MOI.ScalarQuadraticFunction(
         [term(2 * P11, x[1], x[1]), term(0.0, x[1], x[2])],
         term.(q, x),
@@ -596,7 +595,7 @@ function no_CachingOptimizer_Vector_problem_modification_after_copy_to()
 
     # make random modifications to constraints
     randvectorconfig = MOI.Test.Config(atol = Inf, rtol = 1e-4)
-    rng = MersenneTwister(1234)
+    rng = Random.MersenneTwister(1234)
     for i in 1:100
         newcoeffs = copy(coeffs)
         modindex = rand(rng, 1:length(newcoeffs))
@@ -710,12 +709,15 @@ function test_vector_equality_constraint()
         b = rand(rng, n)
         C = rand(rng, m, n)
         d = rand(rng, m)
-        C⁺ = pinv(C)
-        Q = I - C⁺ * C
-        expected = Q * (pinv(A * Q) * (b - A * C⁺ * d)) + C⁺ * d # note: can be quite badly conditioned
+        C⁺ = LinearAlgebra.pinv(C)
+        Q = LinearAlgebra.I - C⁺ * C
+        expected =
+            Q * (LinearAlgebra.pinv(A * Q) * (b - A * C⁺ * d)) + C⁺ * d # note: can be quite badly conditioned
         @test C * expected ≈ d atol = 1e-12
 
-        P = Symmetric(sparse(triu(A' * A)))
+        P = LinearAlgebra.Symmetric(
+            SparseArrays.sparse(LinearAlgebra.triu(A' * A)),
+        )
         q = -2 * A' * b
         r = b' * b
 
@@ -723,7 +725,7 @@ function test_vector_equality_constraint()
     end
 
     make_objective = function (P, q, r, x)
-        I, J, coeffs = findnz(P.data)
+        I, J, coeffs = SparseArrays.findnz(P.data)
         return MOI.ScalarQuadraticFunction(
             term.(
                 2 * coeffs,
@@ -736,7 +738,7 @@ function test_vector_equality_constraint()
     end
 
     make_constraint_fun = function (C, d, x)
-        I, J, coeffs = findnz(sparse(C))
+        I, J, coeffs = SparseArrays.findnz(SparseArrays.sparse(C))
         return cf = MOI.VectorAffineFunction(
             MOI.VectorAffineTerm.(
                 Int64.(I),
@@ -755,12 +757,12 @@ function test_vector_equality_constraint()
             getindex.(Ref(idxmap), x),
         ) ≈ expected atol = 1e-4
         @test MOI.get(optimizer, MOI.ObjectiveValue()) ≈
-              norm(A * expected - b)^2 atol = 1e-4
+              LinearAlgebra.norm(A * expected - b)^2 atol = 1e-4
     end
 
     n = 8
     m = 2
-    rng = MersenneTwister(1234)
+    rng = Random.MersenneTwister(1234)
 
     A, b, C, d, P, q, r, expected = generate_problem_data(rng, n, m)
     model = OSQPModel{Float64}()
