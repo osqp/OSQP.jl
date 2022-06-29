@@ -3,7 +3,7 @@ module MathOptInterfaceOSQP
 include("modcaches.jl")
 using .ModificationCaches
 
-import LinearAlgebra: rmul!
+import LinearAlgebra
 import MathOptInterface
 import SparseArrays
 import OSQP
@@ -33,7 +33,9 @@ upper(::MOI.Nonpositives, i::Int) = 0.0
 # TODO: just use ∈ on 0.7 (allocates on 0.6):
 function _contains(haystack, needle)
     for x in haystack
-        x == needle && return true
+        if x == needle
+            return true
+        end
     end
     return false
 end
@@ -266,7 +268,11 @@ function processobjective(src::MOI.ModelLike, idxmap)
                 ),
             )
         end
-        sense == MOI.MAX_SENSE && (rmul!(P, -1); rmul!(q, -1); c = -c)
+        if sense == MOI.MAX_SENSE
+            LinearAlgebra.rmul!(P, -1)
+            LinearAlgebra.rmul!(q, -1)
+            c = -c
+        end
     else
         P = SparseArrays.spzeros(n, n)
         q = zeros(n)
@@ -515,10 +521,7 @@ function MOI.get(optimizer::Optimizer, ::MOI.NumberOfVariables)
 end
 
 function MOI.get(optimizer::Optimizer, ::MOI.ListOfVariableIndices)
-    return [
-        MOI.VariableIndex(i) for
-        i in 1:MOI.get(optimizer, MOI.NumberOfVariables())
-    ] # TODO: support for UnitRange would be nice
+    return map(MOI.VariableIndex, 1:MOI.get(optimizer, MOI.NumberOfVariables()))
 end
 
 ## Solver-specific optimizer attributes:
@@ -575,6 +578,7 @@ function MOI.set(
     if !MOI.is_empty(optimizer)
         OSQP.update_settings!(optimizer.inner; setting => value)
     end
+    return
 end
 
 function MOI.get(
@@ -688,7 +692,9 @@ function MOI.get(optimizer::Optimizer, ::MOI.RawStatusString)
 end
 
 function MOI.get(optimizer::Optimizer, ::MOI.TerminationStatus)
-    hasresults(optimizer) || return MOI.OPTIMIZE_NOT_CALLED
+    if !hasresults(optimizer)
+        return MOI.OPTIMIZE_NOT_CALLED
+    end
     osqpstatus = optimizer.results.info.status
     if osqpstatus == :Unsolved
         return MOI.OPTIMIZE_NOT_CALLED
@@ -776,6 +782,7 @@ function MOI.get(
     vi::MOI.VariableIndex,
 )
     MOI.check_result_index_bounds(optimizer, a)
+    MOI.throw_if_not_valid(optimizer, vi)
     x = ifelse(
         _contains(OSQP.SOLUTION_PRESENT, optimizer.results.info.status),
         optimizer.results.x,
@@ -786,14 +793,13 @@ end
 
 function MOI.set(
     optimizer::Optimizer,
-    a::MOI.VariablePrimalStart,
+    ::MOI.VariablePrimalStart,
     vi::MOI.VariableIndex,
     value,
 )
-    if MOI.is_empty(optimizer)
-        throw(MOI.SetAttributeNotAllowed(a))
-    end
-    return optimizer.warmstartcache.x[vi.value] = value
+    MOI.throw_if_not_valid(optimizer, vi)
+    optimizer.warmstartcache.x[vi.value] = value
+    return
 end
 
 ## Constraints:
@@ -807,11 +813,11 @@ end
 
 function MOI.set(
     optimizer::Optimizer,
-    a::MOI.ConstraintDualStart,
+    ::MOI.ConstraintDualStart,
     ci::MOI.ConstraintIndex,
     value,
 )
-    MOI.is_empty(optimizer) && throw(MOI.SetAttributeNotAllowed(a))
+    MOI.throw_if_not_valid(optimizer, ci)
     rows = constraint_rows(optimizer, ci)
     for (i, row) in enumerate(rows)
         optimizer.warmstartcache.y[row] = -value[i] # opposite dual convention
@@ -830,9 +836,7 @@ function MOI.set(
     },
     f::MOI.ScalarAffineFunction{Float64},
 )
-    if !MOI.is_valid(optimizer, ci)
-        throw(MOI.InvalidIndex(ci))
-    end
+    MOI.throw_if_not_valid(optimizer, ci)
     row = constraint_rows(optimizer, ci)
     optimizer.modcache.A[row, :] = 0
     for term in f.terms
@@ -886,9 +890,7 @@ function MOI.set(
     ci::MOI.ConstraintIndex{MOI.ScalarAffineFunction{Float64},S},
     s::S,
 ) where {S<:IntervalConvertible}
-    if !MOI.is_valid(optimizer, ci)
-        throw(MOI.InvalidIndex(ci))
-    end
+    MOI.throw_if_not_valid(optimizer, ci)
     interval = S <: MOI.Interval ? s : MOI.Interval(s)
     row = constraint_rows(optimizer, ci)
     constant = optimizer.constrconstant[row]
@@ -903,9 +905,7 @@ function MOI.set(
     ci::MOI.ConstraintIndex{MOI.VectorAffineFunction{Float64},S},
     s::S,
 ) where {S<:SupportedVectorSets}
-    if !MOI.is_valid(optimizer, ci)
-        throw(MOI.InvalidIndex(ci))
-    end
+    MOI.throw_if_not_valid(optimizer, ci)
     rows = constraint_rows(optimizer, ci)
     for (i, row) in enumerate(rows)
         constant = optimizer.constrconstant[row]
@@ -925,7 +925,7 @@ function MOI.modify(
     },
     change::MOI.ScalarCoefficientChange,
 )
-    MOI.is_valid(optimizer, ci) || throw(MOI.InvalidIndex(ci))
+    MOI.throw_if_not_valid(optimizer, ci)
     row = constraint_rows(optimizer, ci)
     optimizer.modcache.A[row, change.variable.value] = change.new_coefficient
     return
@@ -973,14 +973,12 @@ function MOI.modify(
     ::MOI.ObjectiveFunction,
     change::MOI.ScalarConstantChange,
 )
-    if MOI.is_empty(optimizer)
-        throw(MOI.ModifyObjectiveNotAllowed(change))
-    end
     constant = change.new_constant
     if optimizer.sense == MOI.MAX_SENSE
         constant = -constant
     end
-    return optimizer.objconstant = constant
+    optimizer.objconstant = constant
+    return
 end
 
 function MOI.modify(
@@ -988,14 +986,12 @@ function MOI.modify(
     ::MOI.ObjectiveFunction,
     change::MOI.ScalarCoefficientChange,
 )
-    if MOI.is_empty(optimizer)
-        throw(MOI.ModifyObjectiveNotAllowed(change))
-    end
     coef = change.new_coefficient
     if optimizer.sense == MOI.MAX_SENSE
         coef = -coef
     end
-    return optimizer.modcache.q[change.variable.value] = coef
+    optimizer.modcache.q[change.variable.value] = coef
+    return
 end
 
 # There is currently no ScalarQuadraticCoefficientChange.
