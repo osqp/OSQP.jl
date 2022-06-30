@@ -43,10 +43,10 @@ function setup!(
 )
 
     # Check problem dimensions
-    if P == nothing
-        if q != nothing
+    if P === nothing
+        if q !== nothing
             n = length(q)
-        elseif A != nothing
+        elseif A !== nothing
             n = size(A, 2)
         else
             error("The problem does not have any variables!")
@@ -56,32 +56,32 @@ function setup!(
         n = size(P, 1)
     end
 
-    if A == nothing
+    if A === nothing
         m = 0
     else
         m = size(A, 1)
     end
 
     # Check if parameters are nothing
-    if ((A == nothing) & ((l != nothing) | (u != nothing))) |
-       ((A != nothing) & ((l == nothing) & (u == nothing)))
+    if ((A === nothing) & ((l !== nothing) | (u !== nothing))) |
+       ((A !== nothing) & ((l === nothing) & (u === nothing)))
         error("A must be supplied together with l and u")
     end
 
-    if (A != nothing) & (l == nothing)
+    if (A !== nothing) & (l === nothing)
         l = -Inf * ones(m)
     end
-    if (A != nothing) & (u == nothing)
+    if (A !== nothing) & (u === nothing)
         u = Inf * ones(m)
     end
 
-    if P == nothing
+    if P === nothing
         P = sparse([], [], [], n, n)
     end
-    if q == nothing
+    if q === nothing
         q = zeros(n)
     end
-    if A == nothing
+    if A === nothing
         A = sparse([], [], [], m, n)
         l = zeros(m)
         u = zeros(m)
@@ -416,25 +416,25 @@ function update!(
     Ax_idx = nothing,
 )
     # q
-    if q != nothing
+    if q !== nothing
         update_q!(model, q)
     end
 
     # l and u
-    if l != nothing && u != nothing
+    if l !== nothing && u !== nothing
         update_bounds!(model, l, u)
-    elseif l != nothing
+    elseif l !== nothing
         update_l!(model, l)
-    elseif u != nothing
+    elseif u !== nothing
         update_u!(model, u)
     end
 
     # P and A
-    if Px != nothing && Ax != nothing
+    if Px !== nothing && Ax !== nothing
         update_P_A!(model, Px, Px_idx, Ax, Ax_idx)
-    elseif Px != nothing
+    elseif Px !== nothing
         update_P!(model, Px, Px_idx)
-    elseif Ax != nothing
+    elseif Ax !== nothing
         update_A!(model, Ax, Ax_idx)
     end
 end
@@ -471,7 +471,7 @@ function update_settings!(model::OSQP.Model; kwargs...)
     time_limit = get(data, :time_limit, nothing)
 
     # Update individual settings
-    if max_iter != nothing
+    if max_iter !== nothing
         exitflag = ccall(
             (:osqp_update_max_iter, OSQP.osqp),
             Cc_int,
@@ -484,7 +484,7 @@ function update_settings!(model::OSQP.Model; kwargs...)
         end
     end
 
-    if eps_abs != nothing
+    if eps_abs !== nothing
         exitflag = ccall(
             (:osqp_update_eps_abs, OSQP.osqp),
             Cc_int,
@@ -497,7 +497,7 @@ function update_settings!(model::OSQP.Model; kwargs...)
         end
     end
 
-    if eps_rel != nothing
+    if eps_rel !== nothing
         exitflag = ccall(
             (:osqp_update_eps_rel, OSQP.osqp),
             Cc_int,
@@ -510,7 +510,7 @@ function update_settings!(model::OSQP.Model; kwargs...)
         end
     end
 
-    if eps_prim_inf != nothing
+    if eps_prim_inf !== nothing
         exitflag = ccall(
             (:osqp_update_eps_prim_inf, OSQP.osqp),
             Cc_int,
@@ -523,7 +523,7 @@ function update_settings!(model::OSQP.Model; kwargs...)
         end
     end
 
-    if eps_dual_inf != nothing
+    if eps_dual_inf !== nothing
         exitflag = ccall(
             (:osqp_update_eps_dual_inf, OSQP.osqp),
             Cc_int,
@@ -536,7 +536,7 @@ function update_settings!(model::OSQP.Model; kwargs...)
         end
     end
 
-    if rho != nothing
+    if rho !== nothing
         exitflag = ccall(
             (:osqp_update_rho, OSQP.osqp),
             Cc_int,
@@ -549,7 +549,7 @@ function update_settings!(model::OSQP.Model; kwargs...)
         end
     end
 
-    if alpha != nothing
+    if alpha !== nothing
         exitflag = ccall(
             (:osqp_update_alpha, OSQP.osqp),
             Cc_int,
@@ -562,7 +562,7 @@ function update_settings!(model::OSQP.Model; kwargs...)
         end
     end
 
-    if delta != nothing
+    if delta !== nothing
         exitflag = ccall(
             (:osqp_update_delta, OSQP.osqp),
             Cc_int,
@@ -575,7 +575,7 @@ function update_settings!(model::OSQP.Model; kwargs...)
         end
     end
 
-    if polish != nothing
+    if polish !== nothing
         exitflag = ccall(
             (:osqp_update_polish, OSQP.osqp),
             Cc_int,
@@ -588,7 +588,7 @@ function update_settings!(model::OSQP.Model; kwargs...)
         end
     end
 
-    if polish_refine_iter != nothing
+    if polish_refine_iter !== nothing
         exitflag = ccall(
             (:osqp_update_polish_refine_iter, OSQP.osqp),
             Cc_int,
@@ -601,7 +601,7 @@ function update_settings!(model::OSQP.Model; kwargs...)
         end
     end
 
-    if verbose != nothing
+    if verbose !== nothing
         exitflag = ccall(
             (:osqp_update_verbose, OSQP.osqp),
             Cc_int,
@@ -614,7 +614,7 @@ function update_settings!(model::OSQP.Model; kwargs...)
         end
     end
 
-    if scaled_termination != nothing
+    if scaled_termination !== nothing
         exitflag = ccall(
             (:osqp_update_scaled_termination, OSQP.osqp),
             Cc_int,
@@ -627,7 +627,7 @@ function update_settings!(model::OSQP.Model; kwargs...)
         end
     end
 
-    if check_termination != nothing
+    if check_termination !== nothing
         exitflag = ccall(
             (:osqp_update_check_termination, OSQP.osqp),
             Cc_int,
@@ -640,7 +640,7 @@ function update_settings!(model::OSQP.Model; kwargs...)
         end
     end
 
-    if warm_start != nothing
+    if warm_start !== nothing
         exitflag = ccall(
             (:osqp_update_warm_start, OSQP.osqp),
             Cc_int,
@@ -653,7 +653,7 @@ function update_settings!(model::OSQP.Model; kwargs...)
         end
     end
 
-    if time_limit != nothing
+    if time_limit !== nothing
         exitflag = ccall(
             (:osqp_update_time_limit, OSQP.osqp),
             Cc_int,
@@ -750,7 +750,7 @@ function linsys_solver_str_to_int!(settings_dict::Dict{Symbol,Any})
     # linsys_str = pop!(settings_dict, :linsys_solver)
     linsys_str = get(settings_dict, :linsys_solver, nothing)
 
-    if linsys_str != nothing
+    if linsys_str !== nothing
         # Check type
         if !isa(linsys_str, String)
             error("linsys_solver is required to be a string")
