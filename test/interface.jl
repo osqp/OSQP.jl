@@ -11,7 +11,6 @@ using OSQP: Ccsc, ManagedCcsc
     end
 end
 
-
 # Check model error handling
 @testset "Model error handling" begin
     model = OSQP.Model()

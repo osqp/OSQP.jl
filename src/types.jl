@@ -18,7 +18,6 @@ struct Ccsc
     nz::Cc_int
 end
 
-
 struct ManagedCcsc
     m::Cc_int
     n::Cc_int
@@ -44,25 +43,33 @@ function ManagedCcsc(M::SparseMatrixCSC)
     p = convert(Array{Cc_int,1}, M.colptr .- 1)
 
     # Create new ManagedCcsc matrix
-    ManagedCcsc(m, n, p, i, x, length(M.nzval), -1)
+    return ManagedCcsc(m, n, p, i, x, length(M.nzval), -1)
 end
 
 function Base.convert(::Type{SparseMatrixCSC}, c::OSQP.Ccsc)
-  m = c.m
-  n = c.n
-  nzmax = c.nzmax
-  nzval = [unsafe_load(c.x, i) for i=1:nzmax]
-  rowval = [unsafe_load(c.i, i) for i=1:nzmax] .+ 1
-  colptr = [unsafe_load(c.p, i) for i=1:(n+1)] .+ 1
-  SparseMatrixCSC(m, n, colptr, rowval, nzval)
+    m = c.m
+    n = c.n
+    nzmax = c.nzmax
+    nzval = [unsafe_load(c.x, i) for i in 1:nzmax]
+    rowval = [unsafe_load(c.i, i) for i in 1:nzmax] .+ 1
+    colptr = [unsafe_load(c.p, i) for i in 1:(n+1)] .+ 1
+    return SparseMatrixCSC(m, n, colptr, rowval, nzval)
 end
 
 # Returns an Ccsc matrix. The vectors are *not* GC tracked in the struct.
 # Use this only when you know that the managed matrix will outlive the Ccsc
 # matrix.
-Ccsc(m::ManagedCcsc) =
-    Ccsc(m.m, m.n, pointer(m.p), pointer(m.i), pointer(m.x), m.nzmax, m.nz)
-
+function Ccsc(m::ManagedCcsc)
+    return Ccsc(
+        m.m,
+        m.n,
+        pointer(m.p),
+        pointer(m.i),
+        pointer(m.x),
+        m.nzmax,
+        m.nz
+    )
+end
 
 struct OSQPSolution
     x::Ptr{Cdouble}
@@ -105,11 +112,15 @@ end
 # Since OSQP's osqp_update_settings function takes a pointer to an OSQPSettings object,
 # all fields of the OSQPSettings struct are updatable.
 const UPDATABLE_SETTINGS = fieldnames(OSQPSettings)
-    
+
 function OSQPSettings()
     s = Ref{OSQP.OSQPSettings}()
-    ccall((:osqp_set_default_settings, OSQP.osqp), Nothing,
-          (Ref{OSQP.OSQPSettings},), s)
+    ccall(
+        (:osqp_set_default_settings, OSQP.osqp),
+        Nothing,
+        (Ref{OSQP.OSQPSettings},),
+        s,
+    )
     return s[]
 end
 
@@ -124,15 +135,18 @@ function OSQPSettings(settings_dict::Dict{Symbol,Any})
     # If setting is in the passed settings (settings_dict),
     # then convert type to the right type. Otherwise just take
     # the default one
-    settings_list = [setting in keys(settings_dict) ?
-             convert(fieldtype(typeof(default_settings), setting), settings_dict[setting]) :
-             getfield(default_settings, setting)
-             for setting in fieldnames(typeof(default_settings))]
+    settings_list = [
+        setting in keys(settings_dict) ?
+        convert(
+            fieldtype(typeof(default_settings), setting),
+            settings_dict[setting],
+        ) : getfield(default_settings, setting) for
+        setting in fieldnames(typeof(default_settings))
+    ]
 
     # Create new settings with new dictionary
     s = OSQP.OSQPSettings(settings_list...)
     return s
-
 end
 
 struct OSQPInfo
@@ -165,7 +179,6 @@ mutable struct OSQPSolver
     info::Ptr{OSQP.OSQPInfo}
     work::Ptr{OSQP.OSQPWorkspace}
 end
-
 
 mutable struct Info
     status::Symbol
@@ -201,7 +214,7 @@ function copyto!(info::Info, cinfo::OSQPInfo)
     info.update_time = cinfo.update_time
     info.polish_time = cinfo.polish_time
     info.run_time = cinfo.run_time
-    info
+    return info
 end
 
 mutable struct Results
@@ -219,5 +232,5 @@ function Base.resize!(results::Results, n::Int, m::Int)
     resize!(results.y, m)
     resize!(results.prim_inf_cert, m)
     resize!(results.dual_inf_cert, n)
-    results
+    return results
 end

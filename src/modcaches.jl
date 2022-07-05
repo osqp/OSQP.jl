@@ -3,8 +3,7 @@ module ModificationCaches
 using LinearAlgebra
 using SparseArrays
 
-export
-    VectorModificationCache,
+export VectorModificationCache,
     MatrixModificationCache,
     ProblemModificationCache,
     WarmStartCache,
@@ -15,13 +14,23 @@ import OSQP
 mutable struct VectorModificationCache{T}
     data::Vector{T}
     dirty::Bool
-    VectorModificationCache(data::Vector{T}) where {T} = new{T}(copy(data), false)
+    function VectorModificationCache(data::Vector{T}) where {T}
+        return new{T}(copy(data), false)
+    end
 end
-Base.setindex!(cache::VectorModificationCache, x, i::Integer) = (cache.dirty = true; cache.data[i] = x)
-Base.setindex!(cache::VectorModificationCache, x, ::Colon) = (cache.dirty = true; cache.data .= x)
+function Base.setindex!(cache::VectorModificationCache, x, i::Integer)
+    return (cache.dirty = true; cache.data[i] = x)
+end
+function Base.setindex!(cache::VectorModificationCache, x, ::Colon)
+    return (cache.dirty = true; cache.data .= x)
+end
 Base.getindex(cache::VectorModificationCache, i::Integer) = cache.data[i]
 
-function processupdates!(model, cache::VectorModificationCache, updatefun::Function)
+function processupdates!(
+    model,
+    cache::VectorModificationCache,
+    updatefun::Function,
+)
     if cache.dirty
         updatefun(model, cache.data)
         cache.dirty = false
@@ -31,54 +40,88 @@ end
 struct MatrixModificationCache{T}
     cartesian_indices::Vector{CartesianIndex{2}}
     cartesian_indices_set::Set{CartesianIndex{2}} # to speed up checking whether indices are out of bounds in setindex!
-    cartesian_indices_per_row::Dict{Int, Vector{CartesianIndex{2}}}
-    modifications::Dict{CartesianIndex{2}, T}
+    cartesian_indices_per_row::Dict{Int,Vector{CartesianIndex{2}}}
+    modifications::Dict{CartesianIndex{2},T}
     vals::Vector{T}
     inds::Vector{Int}
 
-    function MatrixModificationCache(S::SparseMatrixCSC{T}) where T
+    function MatrixModificationCache(S::SparseMatrixCSC{T}) where {T}
         cartesian_indices = Vector{CartesianIndex{2}}(undef, nnz(S))
-        cartesian_indices_per_row = Dict{Int, Vector{CartesianIndex{2}}}()
+        cartesian_indices_per_row = Dict{Int,Vector{CartesianIndex{2}}}()
         sizehint!(cartesian_indices_per_row, nnz(S))
-        @inbounds for col = 1 : S.n, k = S.colptr[col] : (S.colptr[col+1]-1) # from sparse findn
+        @inbounds for col in 1:S.n, k in S.colptr[col]:(S.colptr[col+1]-1) # from sparse findn
             row = S.rowval[k]
             I = CartesianIndex(row, col)
             cartesian_indices[k] = I
-            push!(get!(() -> CartesianIndex{2}[], cartesian_indices_per_row, row), I)
+            push!(
+                get!(() -> CartesianIndex{2}[], cartesian_indices_per_row, row),
+                I,
+            )
         end
-        modifications = Dict{CartesianIndex{2}, Int}()
+        modifications = Dict{CartesianIndex{2},Int}()
         sizehint!(modifications, nnz(S))
-        new{T}(cartesian_indices, Set(cartesian_indices), cartesian_indices_per_row, modifications, T[], Int[])
+        return new{T}(
+            cartesian_indices,
+            Set(cartesian_indices),
+            cartesian_indices_per_row,
+            modifications,
+            T[],
+            Int[],
+        )
     end
 end
 
-function Base.setindex!(cache::MatrixModificationCache, x, row::Integer, col::Integer)
+function Base.setindex!(
+    cache::MatrixModificationCache,
+    x,
+    row::Integer,
+    col::Integer,
+)
     I = CartesianIndex(row, col)
-    @boundscheck I ∈ cache.cartesian_indices_set || throw(ArgumentError("Changing the sparsity pattern is not allowed."))
-    cache.modifications[I] = x
+    @boundscheck I ∈ cache.cartesian_indices_set || throw(
+        ArgumentError("Changing the sparsity pattern is not allowed."),
+    )
+    return cache.modifications[I] = x
 end
 
 function Base.setindex!(cache::MatrixModificationCache, x::Real, ::Colon)
     # used to zero out the entire matrix
-    @boundscheck x == 0 || throw(ArgumentError("Changing the sparsity pattern is not allowed."))
+    @boundscheck x == 0 || throw(
+        ArgumentError("Changing the sparsity pattern is not allowed."),
+    )
     for I in cache.cartesian_indices
         cache.modifications[I] = 0
     end
 end
 
-function Base.setindex!(cache::MatrixModificationCache, x::Real, row::Integer, ::Colon)
+function Base.setindex!(
+    cache::MatrixModificationCache,
+    x::Real,
+    row::Integer,
+    ::Colon,
+)
     # used to zero out a row
-    @boundscheck x == 0 || throw(ArgumentError("Changing the sparsity pattern is not allowed."))
+    @boundscheck x == 0 || throw(
+        ArgumentError("Changing the sparsity pattern is not allowed."),
+    )
     for I in cache.cartesian_indices_per_row[row]
         cache.modifications[I] = 0
     end
 end
 
-function Base.getindex(cache::MatrixModificationCache, row::Integer, col::Integer)
-    cache.modifications[CartesianIndex(row, col)]
+function Base.getindex(
+    cache::MatrixModificationCache,
+    row::Integer,
+    col::Integer,
+)
+    return cache.modifications[CartesianIndex(row, col)]
 end
 
-function processupdates!(model, cache::MatrixModificationCache, updatefun::Function)
+function processupdates!(
+    model,
+    cache::MatrixModificationCache,
+    updatefun::Function,
+)
     dirty = !isempty(cache.modifications)
     if dirty
         nmods = length(cache.modifications)
@@ -107,10 +150,16 @@ struct ProblemModificationCache{T}
     u::VectorModificationCache{T}
 
     ProblemModificationCache{T}() where {T} = new{T}()
-    function ProblemModificationCache(P::SparseMatrixCSC, q::Vector{T}, A::SparseMatrixCSC, l::Vector{T}, u::Vector{T}) where T
+    function ProblemModificationCache(
+        P::SparseMatrixCSC,
+        q::Vector{T},
+        A::SparseMatrixCSC,
+        l::Vector{T},
+        u::Vector{T},
+    ) where {T}
         MC = MatrixModificationCache
         VC = VectorModificationCache
-        new{T}(MC(triu(P)), VC(q), MC(A), VC(l), VC(u))
+        return new{T}(MC(triu(P)), VC(q), MC(A), VC(l), VC(u))
     end
 end
 
@@ -126,7 +175,7 @@ function processupdates!(model::OSQP.Model, cache::ProblemModificationCache)
     processupdates!(model, cache.q, OSQP.update_q!)
     processupdates!(model, cache.A, OSQP.update_A!)
     processupdates!(model, cache.l, OSQP.update_l!)
-    processupdates!(model, cache.u, OSQP.update_u!)
+    return processupdates!(model, cache.u, OSQP.update_u!)
 end
 
 struct WarmStartCache{T}
@@ -134,8 +183,11 @@ struct WarmStartCache{T}
     y::VectorModificationCache{T}
 
     WarmStartCache{T}() where {T} = new{T}()
-    function WarmStartCache{T}(n::Integer, m::Integer) where T
-        new{T}(VectorModificationCache(zeros(T, n)), VectorModificationCache(zeros(T, m)))
+    function WarmStartCache{T}(n::Integer, m::Integer) where {T}
+        return new{T}(
+            VectorModificationCache(zeros(T, n)),
+            VectorModificationCache(zeros(T, m)),
+        )
     end
 end
 
@@ -147,7 +199,7 @@ function processupdates!(model::OSQP.Model, cache::WarmStartCache)
         cache.y.dirty = false
     end
     processupdates!(model, cache.x, OSQP.warm_start_x!)
-    processupdates!(model, cache.y, OSQP.warm_start_y!)
+    return processupdates!(model, cache.y, OSQP.warm_start_y!)
 end
 
 end
