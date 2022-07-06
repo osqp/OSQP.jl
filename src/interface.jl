@@ -11,19 +11,21 @@ else
 end
 
 """
-    Model()
+    Model(; backend::OSQPBackend = OSQPBuiltin())
 
-Initialize OSQP model
+Initialize OSQP model. A linear algebra backend can be specified using the `backend`
+argument. By default, OSQP will use its internal linear algebra routines.
 """
-mutable struct Model
+mutable struct Model{B<:OSQPBackend}
+    backend::B
     solver::Ptr{OSQP.OSQPSolver}
     m::Cc_int
     n::Cc_int
     lcache::Vector{Float64} # to facilitate converting l to use OSQP_INFTY
     ucache::Vector{Float64} # to facilitate converting u to use OSQP_INFTY
     isempty::Bool# a flag to keep track of the model's setup status
-    function Model()
-        model = new(C_NULL, 0, 0, Float64[], Float64[], true)
+    function Model(; backend::OSQPBackend = OSQPBuiltin())
+        model = new{typeof(backend)}(backend, C_NULL, 0, 0, Float64[], Float64[], true)
         finalizer(OSQP.clean!, model)
         return model
     end
@@ -35,14 +37,14 @@ end
 Perform OSQP solver setup of model `model`, using the inputs `P`, `q`, `A`, `l`, `u`.
 """
 function setup!(
-    model::OSQP.Model;
+    model::OSQP.Model{B};
     P::Union{SparseMatrixCSC,Nothing} = nothing,
     q::Union{Vector{Float64},Nothing} = nothing,
     A::Union{SparseMatrixCSC,Nothing} = nothing,
     l::Union{Vector{Float64},Nothing} = nothing,
     u::Union{Vector{Float64},Nothing} = nothing,
     settings...,
-)
+) where {B <: OSQPBackend}
 
     # Check problem dimensions
     if P === nothing
@@ -135,8 +137,10 @@ function setup!(
 
     # # Perform setup
     solver = Ref{Ptr{OSQP.OSQPSolver}}()
-    exitflag = ccall(
-        (:osqp_setup, OSQP.osqp),
+    exitflag = osqp_ccall(
+        :osqp_setup,
+        model.backend,
+
         OSQP.Cc_int,
 
         (Ptr{Ptr{OSQP.OSQPSolver}}, Ptr{OSQP.Ccsc}, Ptr{Cdouble},
@@ -166,15 +170,16 @@ function setup!(
     model.n = n
 end
 
-function solve!(model::OSQP.Model, results::Results = Results())
+function solve!(model::OSQP.Model{B}, results::Results = Results()) where {B <: OSQPBackend}
 
 	model.isempty && throw(
         ErrorException(
             "You are trying to solve an empty model. Please setup the model before calling solve!().",
         ),
     )
-    ccall(
-        (:osqp_solve, OSQP.osqp),
+    osqp_ccall(
+        :osqp_solve,
+        model.backend,
         OSQP.Cc_int,
         (Ref{OSQP.OSQPSolver}, ),
         model.solver
@@ -223,12 +228,13 @@ function solve!(model::OSQP.Model, results::Results = Results())
 end
 
 function version()
-    return unsafe_string(ccall((:osqp_version, OSQP.osqp), Cstring, ()))
+    return unsafe_string(ccall((:osqp_version, OSQP.osqp_builtin), Cstring, ()))
 end
 
-function clean!(model::OSQP.Model)
-    exitflag = ccall(
-        (:osqp_cleanup, OSQP.osqp),
+function clean!(model::OSQP.Model{B}) where {B <: OSQPBackend}
+    exitflag = osqp_ccall(
+        :osqp_cleanup,
+        model.backend,
         Cc_int,
         (Ptr{OSQP.OSQPSolver},),
         model.solver,
@@ -238,13 +244,14 @@ function clean!(model::OSQP.Model)
     end
 end
 
-function update_q!(model::OSQP.Model, q::Vector{Float64})
+function update_q!(model::OSQP.Model{B}, q::Vector{Float64}) where {B <: OSQPBackend}
     (n, m) = OSQP.dimensions(model)
     if length(q) != n
         error("q must have length n = $(n)")
     end
-    exitflag = ccall(
-        (:osqp_update_data_vec, OSQP.osqp),
+    exitflag = osqp_ccall(
+        :osqp_update_data_vec,
+        model.backend,
         Cc_int,
         (Ptr{OSQP.OSQPSolver}, Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Cdouble}),
         model.solver,
@@ -257,14 +264,15 @@ function update_q!(model::OSQP.Model, q::Vector{Float64})
     end
 end
 
-function update_l!(model::OSQP.Model, l::Vector{Float64})
+function update_l!(model::OSQP.Model{B}, l::Vector{Float64}) where {B <: OSQPBackend}
     (n, m) = OSQP.dimensions(model)
     if length(l) != m
         error("l must have length m = $(m)")
     end
     model.lcache .= max.(l, -OSQP_INFTY)
-    exitflag = ccall(
-        (:osqp_update_data_vec, OSQP.osqp),
+    exitflag = osqp_ccall(
+        :osqp_update_data_vec,
+        model.backend,
         Cc_int,
         (Ptr{OSQP.OSQPSolver}, Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Cdouble}),
         model.solver,
@@ -277,14 +285,15 @@ function update_l!(model::OSQP.Model, l::Vector{Float64})
     end
 end
 
-function update_u!(model::OSQP.Model, u::Vector{Float64})
+function update_u!(model::OSQP.Model{B}, u::Vector{Float64}) where {B <: OSQPBackend}
     (n, m) = OSQP.dimensions(model)
     if length(u) != m
         error("u must have length m = $(m)")
     end
     model.ucache .= min.(u, OSQP_INFTY)
-    exitflag = ccall(
-        (:osqp_update_data_vec, OSQP.osqp),
+    exitflag = osqp_ccall(
+        :osqp_update_data_vec,
+        model.backend,
         Cc_int,
         (Ptr{OSQP.OSQPSolver}, Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Cdouble}),
         model.solver,
@@ -298,10 +307,10 @@ function update_u!(model::OSQP.Model, u::Vector{Float64})
 end
 
 function update_bounds!(
-    model::OSQP.Model,
+    model::OSQP.Model{B},
     l::Vector{Float64},
     u::Vector{Float64},
-)
+) where {B <: OSQPBackend}
     (n, m) = OSQP.dimensions(model)
     if length(l) != m
         error("l must have length m = $(m)")
@@ -311,8 +320,9 @@ function update_bounds!(
     end
     model.lcache .= max.(l, -OSQP_INFTY)
     model.ucache .= min.(u, OSQP_INFTY)
-    exitflag = ccall(
-        (:osqp_update_data_vec, OSQP.osqp),
+    exitflag = osqp_ccall(
+        :osqp_update_data_vec,
+        model.backend,
         Cc_int,
         (Ptr{OSQP.OSQPSolver}, Ptr{Cdouble}, Ptr{Cdouble}, Ptr{Cdouble}),
         model.solver,
@@ -341,13 +351,14 @@ function restore_idx_vector_after_ccall!(idx::Vector{Int})
 end
 
 function update_P!(
-    model::OSQP.Model,
+    model::OSQP.Model{B},
     Px::Vector{Float64},
     Px_idx::Union{Vector{Int},Nothing},
-)
+) where {B <: OSQPBackend}
     Px_idx_prepped = prep_idx_vector_for_ccall(Px_idx, length(Px), :P)
-    exitflag = ccall(
-        (:osqp_update_data_mat, OSQP.osqp),
+    exitflag = osqp_ccall(
+        :osqp_update_data_mat,
+        model.backend,
         Cc_int,
         (Ptr{OSQP.OSQPSolver}, Ptr{Cdouble}, Ptr{Cc_int}, Cc_int, Ptr{Cdouble}, Ptr{Cc_int}, Cc_int),
         model.solver,
@@ -365,13 +376,14 @@ function update_P!(
 end
 
 function update_A!(
-    model::OSQP.Model,
+    model::OSQP.Model{B},
     Ax::Vector{Float64},
     Ax_idx::Union{Vector{Int},Nothing},
-)
+) where {B <: OSQPBackend}
     Ax_idx_prepped = prep_idx_vector_for_ccall(Ax_idx, length(Ax), :A)
-    exitflag = ccall(
-        (:osqp_update_data_mat, OSQP.osqp),
+    exitflag = osqp_ccall(
+        :osqp_update_data_mat,
+        model.backend,
         Cc_int,
         (Ptr{OSQP.OSQPSolver}, Ptr{Cdouble}, Ptr{Cc_int}, Cc_int, Ptr{Cdouble}, Ptr{Cc_int}, Cc_int),
         model.solver,
@@ -389,16 +401,17 @@ function update_A!(
 end
 
 function update_P_A!(
-    model::OSQP.Model,
+    model::OSQP.Model{B},
     Px::Vector{Float64},
     Px_idx::Union{Vector{Int},Nothing},
     Ax::Vector{Float64},
     Ax_idx::Union{Vector{Int},Nothing},
-)
+) where {B <: OSQPBackend}
     Px_idx_prepped = prep_idx_vector_for_ccall(Px_idx, length(Px), :P)
     Ax_idx_prepped = prep_idx_vector_for_ccall(Ax_idx, length(Ax), :A)
-    exitflag = ccall(
-        (:osqp_update_data_mat, OSQP.osqp),
+    exitflag = osqp_ccall(
+        :osqp_update_data_mat,
+        model.backend,
         Cc_int,
         (Ptr{OSQP.OSQPSolver}, Ptr{Cdouble}, Ptr{Cc_int}, Cc_int, Ptr{Cdouble}, Ptr{Cc_int}, Cc_int),
         model.solver,
@@ -417,7 +430,7 @@ function update_P_A!(
 end
 
 function update!(
-    model::OSQP.Model;
+    model::OSQP.Model{B};
     q = nothing,
     l = nothing,
     u = nothing,
@@ -425,7 +438,7 @@ function update!(
     Px_idx = nothing,
     Ax = nothing,
     Ax_idx = nothing,
-)
+) where {B <: OSQPBackend}
     # q
     if q !== nothing
         update_q!(model, q)
@@ -450,13 +463,22 @@ function update!(
     end
 end
 
-function update_settings!(model::OSQP.Model; kwargs...)
+function update_settings!(model::OSQP.Model{B}; kwargs...) where {B <: OSQPBackend}
 
     new_settings = Dict(kwargs)
     if :rho in keys(new_settings)
         rho = pop!(new_settings, :rho)
-        exitflag = ccall((:osqp_update_rho, OSQP.osqp), Cc_int, (Ptr{OSQP.OSQPSolver}, Cdouble), model.solver, rho)
-        if exitflag != 0 error("Error updating rho") end
+        exitflag = osqp_ccall(
+            :osqp_update_rho,
+            model.backend,
+            Cc_int,
+            (Ptr{OSQP.OSQPSolver}, Cdouble),
+            model.solver,
+            rho
+        )
+        if exitflag != 0
+            error("Error updating rho")
+        end
     end
 
     if !isempty(new_settings)
@@ -474,8 +496,9 @@ function update_settings!(model::OSQP.Model; kwargs...)
         data = merge(data, new_settings)
 
         settings = OSQPSettings(data)
-        exitflag = ccall(
-            (:osqp_update_settings, OSQP.osqp),
+        exitflag = osqp_ccall(
+            :osqp_update_settings,
+            model.backend,
             Cc_int,
             (Ptr{OSQP.OSQPSolver}, Ptr{OSQP.OSQPSettings}),
             model.solver,
@@ -489,11 +512,12 @@ function update_settings!(model::OSQP.Model; kwargs...)
     return nothing
 end
 
-function warm_start_x!(model::OSQP.Model, x::Vector{Float64})
+function warm_start_x!(model::OSQP.Model{B}, x::Vector{Float64}) where {B <: OSQPBackend}
     (n, m) = OSQP.dimensions(model)
     length(x) == n || error("Wrong dimension for variable x")
-    exitflag = ccall(
-        (:osqp_warm_start, OSQP.osqp),
+    exitflag = osqp_ccall(
+        :osqp_warm_start,
+        model.backend,
         Cc_int,
         (Ptr{OSQP.OSQPSolver}, Ptr{Cdouble}, Ptr{Cdouble}),
         model.solver,
@@ -504,11 +528,12 @@ function warm_start_x!(model::OSQP.Model, x::Vector{Float64})
     return nothing
 end
 
-function warm_start_y!(model::OSQP.Model, y::Vector{Float64})
+function warm_start_y!(model::OSQP.Model{B}, y::Vector{Float64}) where {B <: OSQPBackend}
     (n, m) = OSQP.dimensions(model)
     length(y) == m || error("Wrong dimension for variable y")
-    exitflag = ccall(
-        (:osqp_warm_start, OSQP.osqp),
+    exitflag = osqp_ccall(
+        :osqp_warm_start,
+        model.backend,
         Cc_int,
         (Ptr{OSQP.OSQPSolver}, Ptr{Cdouble}, Ptr{Cdouble}),
         model.solver,
@@ -520,15 +545,16 @@ function warm_start_y!(model::OSQP.Model, y::Vector{Float64})
 end
 
 function warm_start_x_y!(
-    model::OSQP.Model,
+    model::OSQP.Model{B},
     x::Vector{Float64},
     y::Vector{Float64},
-)
+) where {B <: OSQPBackend}
     (n, m) = OSQP.dimensions(model)
     length(x) == n || error("Wrong dimension for variable x")
     length(y) == m || error("Wrong dimension for variable y")
-    exitflag = ccall(
-        (:osqp_warm_start, OSQP.osqp),
+    exitflag = osqp_ccall(
+        :osqp_warm_start,
+        model.backend,
         Cc_int,
         (Ptr{OSQP.OSQPSolver}, Ptr{Cdouble}, Ptr{Cdouble}),
         model.solver,
@@ -540,10 +566,10 @@ function warm_start_x_y!(
 end
 
 function warm_start!(
-    model::OSQP.Model;
+    model::OSQP.Model{B};
     x::Union{Vector{Float64},Nothing} = nothing,
     y::Union{Vector{Float64},Nothing} = nothing,
-)
+) where {B <: OSQPBackend}
     if x isa Vector{Float64} && y isa Vector{Float64}
         warm_start_x_y!(model, x, y)
     elseif x isa Vector{Float64}

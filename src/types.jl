@@ -114,9 +114,11 @@ end
 const UPDATABLE_SETTINGS = fieldnames(OSQPSettings)
 
 function OSQPSettings()
+    # Just use the default library here. The only difference in the settings initialization
+    # between the variants is the default linear system solver.
     s = Ref{OSQP.OSQPSettings}()
     ccall(
-        (:osqp_set_default_settings, OSQP.osqp),
+        (:osqp_set_default_settings, OSQP.osqp_builtin),
         Nothing,
         (Ref{OSQP.OSQPSettings},),
         s,
