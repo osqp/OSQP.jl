@@ -1,0 +1,11 @@
+name = "OSQPMKL"
+uuid = "0044c96c-2e09-41b9-9693-4e8253359701"
+authors = ["Ian McInerney <ian.s.mcinerney@ieee.org>"]
+version = "1.0.0"
+
+[deps]
+OSQP_MKL_jll = "99cd48a0-e5ef-5127-87b5-832340e95dc5"
+
+[compat]
+OSQP_MKL_jll = "^100"
+julia = "1.6"
