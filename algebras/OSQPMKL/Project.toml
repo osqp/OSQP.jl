@@ -4,8 +4,11 @@ authors = ["Ian McInerney <ian.s.mcinerney@ieee.org>"]
 version = "1.0.0"
 
 [deps]
+OSQP = "ab2f91bb-94b4-55e3-9ba0-7f65df51de79"
 OSQP_MKL_jll = "99cd48a0-e5ef-5127-87b5-832340e95dc5"
+OSQP_jll = "9c4f68bf-6205-5545-a508-2878b064d984"
 
 [compat]
 OSQP_MKL_jll = "^100"
+OSQP = "^1.0"
 julia = "1.6"
