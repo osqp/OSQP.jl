@@ -1,9 +1,9 @@
 using OSQP_jll
 
-export OSQPBuiltin
+export OSQPBuiltinAlgebra
 
 """
-    OSQPBuiltin{FT} <: OSQPAlgebra where {FT <: Union{Float32, Float64}}
+    OSQPBuiltinAlgebra{FT} <: OSQPAlgebra where {FT <: Union{Float32, Float64}}
 
 Use the builtin OSQP linear algebra functions and linear system solvers.
 
@@ -11,16 +11,16 @@ This algebra backend supports either single or double precision, which can
 be chosen by specifying either `Float32` or `Float64`, respectively, as the
 type parameter.
 """
-struct OSQPBuiltin{FT} <: OSQPAlgebra where {FT <: Union{Float32, Float64}}
+struct OSQPBuiltinAlgebra{FT} <: OSQPAlgebra where {FT <: Union{Float32, Float64}}
 end
 
 """
-    OSQPBuiltin()
+    OSQPBuiltinAlgebra()
 
 Use the builtin double precision linear algebra functions and linear system solvers.
 """
-function OSQPBuiltin()
-    return OSQPBuiltin{Float64}()
+function OSQPBuiltinAlgebra()
+    return OSQPBuiltinAlgebra{Float64}()
 end
 
 # The integer type is defined by the C library based on the size of ints on the
@@ -34,49 +34,39 @@ end
 ###############################################
 # Define the double precision library         #
 ###############################################
-
-# Helper functions to wrap the library handles
-library(::Type{OSQPBuiltin{Float64}}) = OSQP_jll.osqp_builtin_double
-librarysym(::Type{OSQPBuiltin{Float64}}) = :(OSQP_jll.osqp_builtin_double)
-
 # Create a definition for all the functions present in the double precision library
-@cdefinition OSQPBuiltin{Float64} Float64 Cc_int osqp_capabilities
-@cdefinition OSQPBuiltin{Float64} Float64 Cc_int osqp_version
-@cdefinition OSQPBuiltin{Float64} Float64 Cc_int osqp_error_message
-@cdefinition OSQPBuiltin{Float64} Float64 Cc_int osqp_get_dimensions
-@cdefinition OSQPBuiltin{Float64} Float64 Cc_int osqp_set_default_settings
-@cdefinition OSQPBuiltin{Float64} Float64 Cc_int osqp_setup
-@cdefinition OSQPBuiltin{Float64} Float64 Cc_int osqp_solve
-@cdefinition OSQPBuiltin{Float64} Float64 Cc_int osqp_cleanup
-@cdefinition OSQPBuiltin{Float64} Float64 Cc_int osqp_warm_start
-@cdefinition OSQPBuiltin{Float64} Float64 Cc_int osqp_cold_start
-@cdefinition OSQPBuiltin{Float64} Float64 Cc_int osqp_update_data_vec
-@cdefinition OSQPBuiltin{Float64} Float64 Cc_int osqp_update_data_mat
-@cdefinition OSQPBuiltin{Float64} Float64 Cc_int osqp_update_settings
-@cdefinition OSQPBuiltin{Float64} Float64 Cc_int osqp_update_rho
+@cdefinition OSQPBuiltinAlgebra{Float64} osqp_builtin_double Float64 Cc_int osqp_capabilities
+@cdefinition OSQPBuiltinAlgebra{Float64} osqp_builtin_double Float64 Cc_int osqp_version
+@cdefinition OSQPBuiltinAlgebra{Float64} osqp_builtin_double Float64 Cc_int osqp_error_message
+@cdefinition OSQPBuiltinAlgebra{Float64} osqp_builtin_double Float64 Cc_int osqp_get_dimensions
+@cdefinition OSQPBuiltinAlgebra{Float64} osqp_builtin_double Float64 Cc_int osqp_set_default_settings
+@cdefinition OSQPBuiltinAlgebra{Float64} osqp_builtin_double Float64 Cc_int osqp_setup
+@cdefinition OSQPBuiltinAlgebra{Float64} osqp_builtin_double Float64 Cc_int osqp_solve
+@cdefinition OSQPBuiltinAlgebra{Float64} osqp_builtin_double Float64 Cc_int osqp_cleanup
+@cdefinition OSQPBuiltinAlgebra{Float64} osqp_builtin_double Float64 Cc_int osqp_warm_start
+@cdefinition OSQPBuiltinAlgebra{Float64} osqp_builtin_double Float64 Cc_int osqp_cold_start
+@cdefinition OSQPBuiltinAlgebra{Float64} osqp_builtin_double Float64 Cc_int osqp_update_data_vec
+@cdefinition OSQPBuiltinAlgebra{Float64} osqp_builtin_double Float64 Cc_int osqp_update_data_mat
+@cdefinition OSQPBuiltinAlgebra{Float64} osqp_builtin_double Float64 Cc_int osqp_update_settings
+@cdefinition OSQPBuiltinAlgebra{Float64} osqp_builtin_double Float64 Cc_int osqp_update_rho
 
 
 
 ###############################################
 # Define the single precision library         #
 ###############################################
-
-# Helper functions to wrap the library handles
-library(::Type{OSQPBuiltin{Float32}}) = OSQP_jll.osqp_builtin_single
-librarysym(::Type{OSQPBuiltin{Float32}}) = :(OSQP_jll.osqp_builtin_single)
-
 # Create a definition for all the functions present in the double precision library
-@cdefinition OSQPBuiltin{Float32} Float32 Cc_int osqp_capabilities
-@cdefinition OSQPBuiltin{Float32} Float32 Cc_int osqp_version
-@cdefinition OSQPBuiltin{Float32} Float32 Cc_int osqp_error_message
-@cdefinition OSQPBuiltin{Float32} Float32 Cc_int osqp_get_dimensions
-@cdefinition OSQPBuiltin{Float32} Float32 Cc_int osqp_set_default_settings
-@cdefinition OSQPBuiltin{Float32} Float32 Cc_int osqp_setup
-@cdefinition OSQPBuiltin{Float32} Float32 Cc_int osqp_solve
-@cdefinition OSQPBuiltin{Float32} Float32 Cc_int osqp_cleanup
-@cdefinition OSQPBuiltin{Float32} Float32 Cc_int osqp_warm_start
-@cdefinition OSQPBuiltin{Float32} Float32 Cc_int osqp_cold_start
-@cdefinition OSQPBuiltin{Float32} Float32 Cc_int osqp_update_data_vec
-@cdefinition OSQPBuiltin{Float32} Float32 Cc_int osqp_update_data_mat
-@cdefinition OSQPBuiltin{Float32} Float32 Cc_int osqp_update_settings
-@cdefinition OSQPBuiltin{Float32} Float32 Cc_int osqp_update_rho
+@cdefinition OSQPBuiltinAlgebra{Float32} osqp_builtin_single Float32 Cc_int osqp_capabilities
+@cdefinition OSQPBuiltinAlgebra{Float32} osqp_builtin_single Float32 Cc_int osqp_version
+@cdefinition OSQPBuiltinAlgebra{Float32} osqp_builtin_single Float32 Cc_int osqp_error_message
+@cdefinition OSQPBuiltinAlgebra{Float32} osqp_builtin_single Float32 Cc_int osqp_get_dimensions
+@cdefinition OSQPBuiltinAlgebra{Float32} osqp_builtin_single Float32 Cc_int osqp_set_default_settings
+@cdefinition OSQPBuiltinAlgebra{Float32} osqp_builtin_single Float32 Cc_int osqp_setup
+@cdefinition OSQPBuiltinAlgebra{Float32} osqp_builtin_single Float32 Cc_int osqp_solve
+@cdefinition OSQPBuiltinAlgebra{Float32} osqp_builtin_single Float32 Cc_int osqp_cleanup
+@cdefinition OSQPBuiltinAlgebra{Float32} osqp_builtin_single Float32 Cc_int osqp_warm_start
+@cdefinition OSQPBuiltinAlgebra{Float32} osqp_builtin_single Float32 Cc_int osqp_cold_start
+@cdefinition OSQPBuiltinAlgebra{Float32} osqp_builtin_single Float32 Cc_int osqp_update_data_vec
+@cdefinition OSQPBuiltinAlgebra{Float32} osqp_builtin_single Float32 Cc_int osqp_update_data_mat
+@cdefinition OSQPBuiltinAlgebra{Float32} osqp_builtin_single Float32 Cc_int osqp_update_settings
+@cdefinition OSQPBuiltinAlgebra{Float32} osqp_builtin_single Float32 Cc_int osqp_update_rho

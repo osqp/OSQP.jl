@@ -11,7 +11,7 @@ else
 end
 
 """
-    Model(; algebra::alg = OSQPBuiltin()) where {alg <: OSQPAlgebra}
+    Model(; algebra::alg = OSQPBuiltinAlgebra()) where {alg <: OSQPAlgebra}
 
 Initialize OSQP model. A linear algebra backend can be specified using the `algebra`
 argument. By default, OSQP will use its internal linear algebra routines.
@@ -25,7 +25,7 @@ mutable struct Model{alg<:OSQPAlgebra}
     ucache::Vector{Float64}  # to facilitate converting u to use OSQP_INFTY
     isempty::Bool            # a flag to keep track of the model's setup status
 
-    function Model(; algebra::alge = OSQPBuiltin()) where {alge <: OSQPAlgebra}
+    function Model(; algebra::alge = OSQPBuiltinAlgebra()) where {alge <: OSQPAlgebra}
         model = new{alge}(algebra, C_NULL, 0, 0, Float64[], Float64[], true)
         finalizer(OSQP.clean!, model)
         return model
@@ -221,7 +221,7 @@ function solve!(model::OSQP.Model{alg}, results::Results = Results()) where {alg
 end
 
 function version()
-    return unsafe_string(@osqp_ccall(:osqp_version, OSQPBuiltin()))
+    return unsafe_string(@osqp_ccall(:osqp_version, OSQPBuiltinAlgebra()))
 end
 
 function clean!(model::OSQP.Model{alg}) where {alg <: OSQPAlgebra}

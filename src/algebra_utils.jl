@@ -11,15 +11,6 @@ abstract type OSQPAlgebra end
 
 
 """
-    library(a::algebra) where {algebra <: OSQPAlgebra}
-
-Get the library handle for the underlying C library associated with the algebra
-backend `a`.
-"""
-library(a::algebra) where {algebra <: OSQPAlgebra} = library(typeof(a))
-
-
-"""
     _osqp_jlfunc_name(func)
 
 Create the name that will be given to the Julia function to wrap the ccall of `func`.
@@ -108,21 +99,21 @@ function _cprototype(__module__, __source__, sig::Expr)
 end
 
 """
-    @cdefinition backend, Tfloat, Tint, funcname
+    @cdefinition backend, library, Tfloat, Tint, funcname
 
 Define a method that will call the C function `funcname` (which was previously defined
-by [`@cprototype`](@ref) in the main OSQP package) inside the library associated with the
-linear algebra backend `backend`.
+by [`@cprototype`](@ref) in the main OSQP package) inside the library with the handle
+given by `library` and associated it with the linear algebra backend `backend`.
 
 The symbols specified in `Tfloat` and `Tint` will be substituted into the API in place of
 the `Tfloat` and `Tint` placeholders, respectively.
 """
-macro cdefinition(backend, Tfloat, Tint, funcname)
-    expr = _cdefinition(__module__, __source__, backend, Tfloat, Tint, funcname)
+macro cdefinition(backend, library, Tfloat, Tint, funcname)
+    expr = _cdefinition(__module__, __source__, backend, library, Tfloat, Tint, funcname)
     return esc(expr)
 end
 
-function _cdefinition(__module__, __source__, backend, Tfloat, Tint, funcname)
+function _cdefinition(__module__, __source__, backend, library, Tfloat, Tint, funcname)
     sfname = String(funcname)
 
     # Modify the stored API definitions to have the proper types for the backend library
@@ -140,8 +131,7 @@ function _cdefinition(__module__, __source__, backend, Tfloat, Tint, funcname)
     repfunc = cfunc(rawfunc.name, rep_rettype, rawfunc.args, rep_argt)
 
     # Build the ccall itself
-    lib = eval(:(librarysym($(backend))))
-    cfunclib = Expr(:tuple, quot(repfunc.name), lib)
+    cfunclib = Expr(:tuple, quot(repfunc.name), library)
     ccallexpr = :(ccall($(cfunclib), $(repfunc.rettype), ($(repfunc.argt...),), $(repfunc.args...)))
 
     # Assemble the full function
