@@ -557,6 +557,21 @@ function dimensions(model::OSQP.Model)
     return model.n, model.m
 end
 
+"""
+    supports(backend::alg) where {alg<:OSQPAlgebra}
+
+Obtain a list of the capabilties for the linear algebra backend `backend`.
+"""
+function supports(backend::alg) where {alg<:OSQPAlgebra}
+    capabilities = @osqp_ccall(:osqp_capabilities, backend)
+
+    supported = Dict{Symbol, Bool}()
+    for (key, cap) in capabilities_map
+        supported[cap] = ((capabilities & key) > 0)
+    end
+
+    return supported
+end
 
 function linsys_solver_str_to_int!(settings_dict::Dict{Symbol,Any})
     linsys_str = get(settings_dict, :linsys_solver, nothing)

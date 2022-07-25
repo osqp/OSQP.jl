@@ -21,6 +21,14 @@ const status_map = Dict{Int,Symbol}(
     11 => :Unsolved,
 )
 
+# These are bit flags used to represent the capabilities of a backend library
+const capabilities_map = Dict{Int, Symbol}(
+    1 => :Direct_solver,
+    2 => :Indirect_solver,
+    4 => :Codegen,
+    8 => :Update_matrices
+)
+
 const SOLUTION_PRESENT = [:Solved_inaccurate, :Solved, :Max_iter_reached]
 
 # UPDATABLE_DATA
