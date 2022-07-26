@@ -113,22 +113,12 @@ end
 # all fields of the OSQPSettings struct are updatable.
 const UPDATABLE_SETTINGS = fieldnames(OSQPSettings)
 
-function OSQPSettings()
-    # Just use the default library here. The only difference in the settings initialization
-    # between the variants is the default linear system solver.
-    s = Ref{OSQP.OSQPSettings}()
-    ccall(
-        (:osqp_set_default_settings, OSQP.osqp_builtin),
-        Nothing,
-        (Ref{OSQP.OSQPSettings},),
-        s,
-    )
-    return s[]
+function OSQPSettings(algebra::alg) where {alg<:OSQPAlgebra}
+    return get_default_settings(algebra)
 end
 
-function OSQPSettings(settings_dict::Dict{Symbol,Any})
-    default_settings = OSQP.OSQPSettings()
-
+function OSQPSettings(settings_dict::Dict{Symbol,Any}, algebra::alg = OSQPBuiltinAlgebra()) where {alg<:OSQPAlgebra}
+    default_settings = get_default_settings(algebra)
 
     # Convert linsys_solver string to number
     linsys_solver_str_to_int!(settings_dict)

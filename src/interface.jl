@@ -132,7 +132,7 @@ function setup!(
         end
     end
 
-    stgs = OSQP.OSQPSettings(settings_dict)
+    stgs = OSQP.OSQPSettings(settings_dict, model.algebra)
 
     @preserve managedP Pdata managedA Adata q l u begin
 
@@ -483,6 +483,13 @@ function update_settings!(model::OSQP.Model{alg}; kwargs...) where {alg <: OSQPA
     end
 
     return nothing
+end
+
+# This must be here instead of interface.jl to define it before its use below
+function get_default_settings(algebra::alg) where {alg<:OSQPAlgebra}
+    s = Ref{OSQP.OSQPSettings}()
+    @osqp_ccall(:osqp_set_default_settings, algebra, s)
+    return s[]
 end
 
 function warm_start_x!(model::OSQP.Model{alg}, x::Vector{Float64}) where {alg <: OSQPAlgebra}
