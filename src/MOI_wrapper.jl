@@ -51,6 +51,7 @@ end
 
 mutable struct Optimizer <: MOI.AbstractOptimizer
     inner::OSQP.Model
+    algebra::OSQP.OSQPAlgebra
     hasresults::Bool
     results::OSQP.Results
     is_empty::Bool
@@ -63,8 +64,10 @@ mutable struct Optimizer <: MOI.AbstractOptimizer
     warmstartcache::WarmStartCache{Float64}
     rowranges::Dict{Int,UnitRange{Int}}
 
-    function Optimizer(; kwargs...)
-        inner = OSQP.Model()
+    function Optimizer(alg=OSQP.OSQPBuiltinAlgebra(); kwargs...)
+        alg isa OSQP.OSQPAlgebra || error("Invalid algebra backend provided")
+
+        inner = OSQP.Model(algebra=alg)
         hasresults = false
         results = OSQP.Results()
         is_empty = true
@@ -76,6 +79,7 @@ mutable struct Optimizer <: MOI.AbstractOptimizer
         rowranges = Dict{Int,UnitRange{Int}}()
         optimizer = new(
             inner,
+            alg,
             hasresults,
             results,
             is_empty,
@@ -134,7 +138,7 @@ end
 hasresults(optimizer::Optimizer) = optimizer.hasresults
 
 function MOI.empty!(optimizer::Optimizer)
-    optimizer.inner = OSQP.Model()
+    optimizer.inner = OSQP.Model(algebra=optimizer.algebra)
     optimizer.hasresults = false
     optimizer.results = OSQP.Results()
     optimizer.sense = MOI.MIN_SENSE # model parameter, so needs to be reset
