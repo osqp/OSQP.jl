@@ -1,0 +1,14 @@
+name = "OSQPCUDA"
+uuid = "79a81d15-21d1-4c27-a4c4-89d95b26f5ae"
+authors = ["Ian McInerney <ian.mcinerney@manchester.ac.uk>"]
+version = "1.0.0"
+
+[deps]
+OSQP = "ab2f91bb-94b4-55e3-9ba0-7f65df51de79"
+OSQP_jll = "9c4f68bf-6205-5545-a508-2878b064d984"
+OSQP_CUDA_jll = "b459e1a6-6d3c-5e93-937e-e2fbd6fad489"
+
+[compat]
+OSQP = "^1.0"
+OSQP_CUDA_jll = "^100"
+julia = "1.6"
