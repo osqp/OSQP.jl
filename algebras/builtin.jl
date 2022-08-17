@@ -2,8 +2,16 @@ using OSQP_jll
 
 export OSQPBuiltinAlgebra
 
+# The integer type is defined by the C library based on the size of ints on the
+# platform being used, so we do the same here.
+if Sys.WORD_SIZE == 64   # 64bit system
+    const Cc_int = Clonglong
+else  # 32bit system
+    const Cc_int = Cint
+end
+
 """
-    OSQPBuiltinAlgebra{FT} <: OSQPAlgebra where {FT <: Union{Float32, Float64}}
+    OSQPBuiltinAlgebra{FT<:Union{Float32, Float64}} <: OSQPAlgebra{FT, Cc_int}
 
 Use the builtin OSQP linear algebra functions and linear system solvers.
 
@@ -11,7 +19,7 @@ This algebra backend supports either single or double precision, which can
 be chosen by specifying either `Float32` or `Float64`, respectively, as the
 type parameter.
 """
-struct OSQPBuiltinAlgebra{FT} <: OSQPAlgebra where {FT <: Union{Float32, Float64}}
+struct OSQPBuiltinAlgebra{FT<:Union{Float32, Float64}} <: OSQPAlgebra{FT, Cc_int}
 end
 
 """
@@ -21,14 +29,6 @@ Use the builtin double precision linear algebra functions and linear system solv
 """
 function OSQPBuiltinAlgebra()
     return OSQPBuiltinAlgebra{Float64}()
-end
-
-# The integer type is defined by the C library based on the size of ints on the
-# platform being used, so we do the same here.
-if Sys.WORD_SIZE == 64   # 64bit system
-    const Cc_int = Clonglong
-else  # 32bit system
-    const Cc_int = Cint
 end
 
 ###############################################
