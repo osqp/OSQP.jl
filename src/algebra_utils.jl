@@ -2,12 +2,14 @@ using Base.Meta: isexpr, quot
 using MacroTools: postwalk
 
 """
-    OSQPAlgebra
+    OSQPAlgebra{FT,IT}
 
 The supertype for all backend algebra library implementations of OSQP to implement
-a library pointer type underneath.
+a library pointer type underneath. The type parameters `FT` and `IT` refer to the
+types for the floating-point numbers and integers the underlying library uses,
+respectively.
 """
-abstract type OSQPAlgebra end
+abstract type OSQPAlgebra{FT,IT} end
 
 
 """

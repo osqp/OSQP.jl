@@ -16,17 +16,17 @@ end
 Initialize OSQP model. A linear algebra backend can be specified using the `algebra`
 argument. By default, OSQP will use its internal linear algebra routines.
 """
-mutable struct Model{alg<:OSQPAlgebra}
+mutable struct Model{alg<:OSQPAlgebra, FT, IT}
     algebra::alg
-    solver::Ptr{OSQP.OSQPSolver}
-    m::Cc_int
-    n::Cc_int
-    lcache::Vector{Float64}  # to facilitate converting l to use OSQP_INFTY
-    ucache::Vector{Float64}  # to facilitate converting u to use OSQP_INFTY
+    solver::Ptr{OSQP.OSQPSolver{FT,IT}}
+    m::IT
+    n::IT
+    lcache::Vector{FT}  # to facilitate converting l to use OSQP_INFTY
+    ucache::Vector{FT}  # to facilitate converting u to use OSQP_INFTY
     isempty::Bool            # a flag to keep track of the model's setup status
 
-    function Model(; algebra::alge = OSQPBuiltinAlgebra()) where {alge <: OSQPAlgebra}
-        model = new{alge}(algebra, C_NULL, 0, 0, Float64[], Float64[], true)
+    function Model(; algebra::alge = OSQPBuiltinAlgebra()) where {alge <: OSQPAlgebra{FT,IT}} where {FT,IT}
+        model = new{alge, FT, IT}(algebra, C_NULL, 0, 0, FT[], FT[], true)
         finalizer(OSQP.clean!, model)
         return model
     end
@@ -40,13 +40,12 @@ Perform OSQP solver setup of model `model`, using the inputs `P`, `q`, `A`, `l`,
 function setup!(
     model::OSQP.Model{alg};
     P::Union{SparseMatrixCSC,Nothing} = nothing,
-    q::Union{Vector{Float64},Nothing} = nothing,
+    q::Union{Vector{FT},Nothing} = nothing,
     A::Union{SparseMatrixCSC,Nothing} = nothing,
-    l::Union{Vector{Float64},Nothing} = nothing,
-    u::Union{Vector{Float64},Nothing} = nothing,
+    l::Union{Vector{FT},Nothing} = nothing,
+    u::Union{Vector{FT},Nothing} = nothing,
     settings...,
-) where {alg <: OSQPAlgebra}
-
+) where {alg <: OSQPAlgebra{FT,IT}} where {IT,FT <: AbstractFloat}
     # Check problem dimensions
     if P === nothing
         if q !== nothing
@@ -74,22 +73,22 @@ function setup!(
     end
 
     if (A !== nothing) & (l === nothing)
-        l = -Inf * ones(m)
+        l = -FT(Inf) * ones(FT, m)
     end
     if (A !== nothing) & (u === nothing)
-        u = Inf * ones(m)
+        u = FT(Inf) * ones(FT, m)
     end
 
     if P === nothing
         P = sparse([], [], [], n, n)
     end
     if q === nothing
-        q = zeros(n)
+        q = zeros(FT, n)
     end
     if A === nothing
         A = sparse([], [], [], m, n)
-        l = zeros(m)
-        u = zeros(m)
+        l = zeros(FT, m)
+        u = zeros(FT, m)
     end
 
     # Check if dimensions are correct
@@ -109,16 +108,16 @@ function setup!(
     end
 
     # Convert lower and upper bounds from Julia infinity to OSQP infinity
-    u = min.(u, OSQP_INFTY)
-    l = max.(l, -OSQP_INFTY)
+    u = min.(u, FT(OSQP_INFTY))
+    l = max.(l, FT(-OSQP_INFTY))
 
     # Resize caches
     resize!(model.lcache, m)
     resize!(model.ucache, m)
 
     # Create managed matrices to avoid segfaults (See SCS.jl)
-    managedP = OSQP.ManagedCcsc(P)
-    managedA = OSQP.ManagedCcsc(A)
+    managedP = OSQP.ManagedCcsc(P, FT, IT)
+    managedA = OSQP.ManagedCcsc(A, FT, IT)
 
     # Get managed pointers (Ref) Pdata and Adata
     Pdata = Ref(OSQP.Ccsc(managedP))
@@ -137,15 +136,15 @@ function setup!(
     @preserve managedP Pdata managedA Adata q l u begin
 
     # # Perform setup
-    solver = Ref{Ptr{OSQP.OSQPSolver}}()
+    solver = Ref{Ptr{OSQP.OSQPSolver{FT,IT}}}()
     exitflag = @osqp_ccall(
         :osqp_setup,
         model.algebra,
 
         solver,
-        Base.unsafe_convert(Ptr{OSQP.Ccsc}, Pdata),
+        Base.unsafe_convert(Ptr{OSQP.Ccsc{FT,IT}}, Pdata),
         pointer(q),
-        Base.unsafe_convert(Ptr{OSQP.Ccsc}, Adata),
+        Base.unsafe_convert(Ptr{OSQP.Ccsc{FT,IT}}, Adata),
         pointer(l),
         pointer(u),
         m,
@@ -165,7 +164,7 @@ function setup!(
     model.n = n
 end
 
-function solve!(model::OSQP.Model{alg}, results::Results = Results()) where {alg <: OSQPAlgebra}
+function solve!(model::OSQP.Model{alg}, results::Results = Results{FT,IT}()) where {alg <: OSQPAlgebra{FT,IT}} where{FT,IT}
 
 	model.isempty && throw(
         ErrorException(
@@ -486,10 +485,11 @@ function update_settings!(model::OSQP.Model{alg}; kwargs...) where {alg <: OSQPA
 end
 
 # This must be here instead of interface.jl to define it before its use below
-function get_default_settings(algebra::alg) where {alg<:OSQPAlgebra}
-    s = Ref{OSQP.OSQPSettings}()
+function get_default_settings(algebra::alg) where {alg<:OSQPAlgebra{FT,IT}} where {FT,IT}
+    s = OSQP.OSQPSettings{FT,IT}()
     @osqp_ccall(:osqp_set_default_settings, algebra, s)
-    return s[]
+
+    return s
 end
 
 function warm_start_x!(model::OSQP.Model{alg}, x::Vector{Float64}) where {alg <: OSQPAlgebra}
