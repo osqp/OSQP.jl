@@ -33,36 +33,45 @@ end
 # Define the library functions                #
 ###############################################
 # Create a definition for all the functions present in the double precision library
-@cdefinition OSQPCUDAAlgebra{Float64} osqp_cuda_double Float64 Cint osqp_capabilities
-@cdefinition OSQPCUDAAlgebra{Float64} osqp_cuda_double Float64 Cint osqp_version
-@cdefinition OSQPCUDAAlgebra{Float64} osqp_cuda_double Float64 Cint osqp_error_message
-@cdefinition OSQPCUDAAlgebra{Float64} osqp_cuda_double Float64 Cint osqp_get_dimensions
-@cdefinition OSQPCUDAAlgebra{Float64} osqp_cuda_double Float64 Cint osqp_set_default_settings
-@cdefinition OSQPCUDAAlgebra{Float64} osqp_cuda_double Float64 Cint osqp_setup
-@cdefinition OSQPCUDAAlgebra{Float64} osqp_cuda_double Float64 Cint osqp_solve
-@cdefinition OSQPCUDAAlgebra{Float64} osqp_cuda_double Float64 Cint osqp_cleanup
-@cdefinition OSQPCUDAAlgebra{Float64} osqp_cuda_double Float64 Cint osqp_warm_start
-@cdefinition OSQPCUDAAlgebra{Float64} osqp_cuda_double Float64 Cint osqp_cold_start
-@cdefinition OSQPCUDAAlgebra{Float64} osqp_cuda_double Float64 Cint osqp_update_data_vec
-@cdefinition OSQPCUDAAlgebra{Float64} osqp_cuda_double Float64 Cint osqp_update_data_mat
-@cdefinition OSQPCUDAAlgebra{Float64} osqp_cuda_double Float64 Cint osqp_update_settings
-@cdefinition OSQPCUDAAlgebra{Float64} osqp_cuda_double Float64 Cint osqp_update_rho
+Tdoubledict = Dict(
+    :Tfloat => :Float64,
+    :Tint => :Cint
+)
+@cdefinition OSQPCUDAAlgebra{Float64} osqp_cuda_double osqp_capabilities          Tdoubledict
+@cdefinition OSQPCUDAAlgebra{Float64} osqp_cuda_double osqp_version               Tdoubledict
+@cdefinition OSQPCUDAAlgebra{Float64} osqp_cuda_double osqp_error_message         Tdoubledict
+@cdefinition OSQPCUDAAlgebra{Float64} osqp_cuda_double osqp_get_dimensions        Tdoubledict
+@cdefinition OSQPCUDAAlgebra{Float64} osqp_cuda_double osqp_set_default_settings  Tdoubledict
+@cdefinition OSQPCUDAAlgebra{Float64} osqp_cuda_double osqp_setup                 Tdoubledict
+@cdefinition OSQPCUDAAlgebra{Float64} osqp_cuda_double osqp_solve                 Tdoubledict
+@cdefinition OSQPCUDAAlgebra{Float64} osqp_cuda_double osqp_cleanup               Tdoubledict
+@cdefinition OSQPCUDAAlgebra{Float64} osqp_cuda_double osqp_warm_start            Tdoubledict
+@cdefinition OSQPCUDAAlgebra{Float64} osqp_cuda_double osqp_cold_start            Tdoubledict
+@cdefinition OSQPCUDAAlgebra{Float64} osqp_cuda_double osqp_update_data_vec       Tdoubledict
+@cdefinition OSQPCUDAAlgebra{Float64} osqp_cuda_double osqp_update_data_mat       Tdoubledict
+@cdefinition OSQPCUDAAlgebra{Float64} osqp_cuda_double osqp_update_settings       Tdoubledict
+@cdefinition OSQPCUDAAlgebra{Float64} osqp_cuda_double osqp_update_rho            Tdoubledict
+
 
 # Create a definition for all the functions present in the single precision library
-@cdefinition OSQPCUDAAlgebra{Float32} osqp_cuda_single Float32 Cint osqp_capabilities
-@cdefinition OSQPCUDAAlgebra{Float32} osqp_cuda_single Float32 Cint osqp_version
-@cdefinition OSQPCUDAAlgebra{Float32} osqp_cuda_single Float32 Cint osqp_error_message
-@cdefinition OSQPCUDAAlgebra{Float32} osqp_cuda_single Float32 Cint osqp_get_dimensions
-@cdefinition OSQPCUDAAlgebra{Float32} osqp_cuda_single Float32 Cint osqp_set_default_settings
-@cdefinition OSQPCUDAAlgebra{Float32} osqp_cuda_single Float32 Cint osqp_setup
-@cdefinition OSQPCUDAAlgebra{Float32} osqp_cuda_single Float32 Cint osqp_solve
-@cdefinition OSQPCUDAAlgebra{Float32} osqp_cuda_single Float32 Cint osqp_cleanup
-@cdefinition OSQPCUDAAlgebra{Float32} osqp_cuda_single Float32 Cint osqp_warm_start
-@cdefinition OSQPCUDAAlgebra{Float32} osqp_cuda_single Float32 Cint osqp_cold_start
-@cdefinition OSQPCUDAAlgebra{Float32} osqp_cuda_single Float32 Cint osqp_update_data_vec
-@cdefinition OSQPCUDAAlgebra{Float32} osqp_cuda_single Float32 Cint osqp_update_data_mat
-@cdefinition OSQPCUDAAlgebra{Float32} osqp_cuda_single Float32 Cint osqp_update_settings
-@cdefinition OSQPCUDAAlgebra{Float32} osqp_cuda_single Float32 Cint osqp_update_rho
+Tsingledict = Dict(
+    :Tfloat => :Float32,
+    :Tint => :Cint
+)
+@cdefinition OSQPCUDAAlgebra{Float32} osqp_cuda_single osqp_capabilities          Tsingledict
+@cdefinition OSQPCUDAAlgebra{Float32} osqp_cuda_single osqp_version               Tsingledict
+@cdefinition OSQPCUDAAlgebra{Float32} osqp_cuda_single osqp_error_message         Tsingledict
+@cdefinition OSQPCUDAAlgebra{Float32} osqp_cuda_single osqp_get_dimensions        Tsingledict
+@cdefinition OSQPCUDAAlgebra{Float32} osqp_cuda_single osqp_set_default_settings  Tsingledict
+@cdefinition OSQPCUDAAlgebra{Float32} osqp_cuda_single osqp_setup                 Tsingledict
+@cdefinition OSQPCUDAAlgebra{Float32} osqp_cuda_single osqp_solve                 Tsingledict
+@cdefinition OSQPCUDAAlgebra{Float32} osqp_cuda_single osqp_cleanup               Tsingledict
+@cdefinition OSQPCUDAAlgebra{Float32} osqp_cuda_single osqp_warm_start            Tsingledict
+@cdefinition OSQPCUDAAlgebra{Float32} osqp_cuda_single osqp_cold_start            Tsingledict
+@cdefinition OSQPCUDAAlgebra{Float32} osqp_cuda_single osqp_update_data_vec       Tsingledict
+@cdefinition OSQPCUDAAlgebra{Float32} osqp_cuda_single osqp_update_data_mat       Tsingledict
+@cdefinition OSQPCUDAAlgebra{Float32} osqp_cuda_single osqp_update_settings       Tsingledict
+@cdefinition OSQPCUDAAlgebra{Float32} osqp_cuda_single osqp_update_rho            Tsingledict
 
 
 end # module

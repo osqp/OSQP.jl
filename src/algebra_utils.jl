@@ -107,16 +107,18 @@ Define a method that will call the C function `funcname` (which was previously d
 by [`@cprototype`](@ref) in the main OSQP package) inside the library with the handle
 given by `library` and associated it with the linear algebra backend `backend`.
 
-The symbols specified in `Tfloat` and `Tint` will be substituted into the API in place of
-the `Tfloat` and `Tint` placeholders, respectively.
+The Tsub dictionary specified a mapping from symbol => symbol for the types specified in the
+prototype to be replaced with a given concrete type.
 """
-macro cdefinition(backend, library, Tfloat, Tint, funcname)
-    expr = _cdefinition(__module__, __source__, backend, library, Tfloat, Tint, funcname)
+macro cdefinition(backend, library, funcname, Tsub)
+    expr = _cdefinition(__module__, __source__, backend, library, funcname, Tsub)
     return esc(expr)
 end
 
-function _cdefinition(__module__, __source__, backend, library, Tfloat, Tint, funcname)
+function _cdefinition(__module__, __source__, backend, library, funcname, Tsub)
     sfname = String(funcname)
+
+    Tdict = __module__.eval(Tsub)
 
     # Modify the stored API definitions to have the proper types for the backend library
     # by replacing Tint and Tfloat.
@@ -124,11 +126,13 @@ function _cdefinition(__module__, __source__, backend, library, Tfloat, Tint, fu
 
     # The types can get pretty complicated, so we need to ensure we recurse into all expressions
     # to get all the uses of Tfloat and Tint, hence the use of the postwalk function.
-    rep_rettype = postwalk(x -> x == :Tfloat ? Symbol(Tfloat) : x, rawfunc.rettype)
-    rep_rettype = postwalk(x -> x == :Tint ? Symbol(Tint) : x, rep_rettype)
+    rep_argt    = rawfunc.argt
+    rep_rettype = rawfunc.rettype
 
-    rep_argt = map(x -> postwalk(x -> x == :Tfloat ? Symbol(Tfloat) : x, x), rawfunc.argt)
-    rep_argt = map(x -> postwalk(x -> x == :Tint ? Symbol(Tint) : x, x), rep_argt)
+    for (Tholder, Tactual) in Tdict
+        rep_argt    = map(x -> postwalk(x -> x == Tholder ? Tactual : x, x), rep_argt)
+        rep_rettype = postwalk(x -> x == Tholder ? Tactual : x, rep_rettype)
+    end
 
     repfunc = cfunc(rawfunc.name, rep_rettype, rawfunc.args, rep_argt)
 

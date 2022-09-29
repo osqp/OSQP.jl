@@ -27,20 +27,23 @@ end
 ###############################################
 # Define the library functions                #
 ###############################################
-# Create a definition for all the functions present in the double precision library
-@cdefinition OSQPMKLAlgebra osqp_mkl Float64 Cc_int osqp_capabilities
-@cdefinition OSQPMKLAlgebra osqp_mkl Float64 Cc_int osqp_version
-@cdefinition OSQPMKLAlgebra osqp_mkl Float64 Cc_int osqp_error_message
-@cdefinition OSQPMKLAlgebra osqp_mkl Float64 Cc_int osqp_get_dimensions
-@cdefinition OSQPMKLAlgebra osqp_mkl Float64 Cc_int osqp_set_default_settings
-@cdefinition OSQPMKLAlgebra osqp_mkl Float64 Cc_int osqp_setup
-@cdefinition OSQPMKLAlgebra osqp_mkl Float64 Cc_int osqp_solve
-@cdefinition OSQPMKLAlgebra osqp_mkl Float64 Cc_int osqp_cleanup
-@cdefinition OSQPMKLAlgebra osqp_mkl Float64 Cc_int osqp_warm_start
-@cdefinition OSQPMKLAlgebra osqp_mkl Float64 Cc_int osqp_cold_start
-@cdefinition OSQPMKLAlgebra osqp_mkl Float64 Cc_int osqp_update_data_vec
-@cdefinition OSQPMKLAlgebra osqp_mkl Float64 Cc_int osqp_update_data_mat
-@cdefinition OSQPMKLAlgebra osqp_mkl Float64 Cc_int osqp_update_settings
-@cdefinition OSQPMKLAlgebra osqp_mkl Float64 Cc_int osqp_update_rho
+Tdoubledict = Dict(
+    :Tfloat => :Float64,
+    :Tint => :Cc_int
+)
+@cdefinition OSQPMKLAlgebra osqp_mkl osqp_capabilities          Tdoubledict
+@cdefinition OSQPMKLAlgebra osqp_mkl osqp_version               Tdoubledict
+@cdefinition OSQPMKLAlgebra osqp_mkl osqp_error_message         Tdoubledict
+@cdefinition OSQPMKLAlgebra osqp_mkl osqp_get_dimensions        Tdoubledict
+@cdefinition OSQPMKLAlgebra osqp_mkl osqp_set_default_settings  Tdoubledict
+@cdefinition OSQPMKLAlgebra osqp_mkl osqp_setup                 Tdoubledict
+@cdefinition OSQPMKLAlgebra osqp_mkl osqp_solve                 Tdoubledict
+@cdefinition OSQPMKLAlgebra osqp_mkl osqp_cleanup               Tdoubledict
+@cdefinition OSQPMKLAlgebra osqp_mkl osqp_warm_start            Tdoubledict
+@cdefinition OSQPMKLAlgebra osqp_mkl osqp_cold_start            Tdoubledict
+@cdefinition OSQPMKLAlgebra osqp_mkl osqp_update_data_vec       Tdoubledict
+@cdefinition OSQPMKLAlgebra osqp_mkl osqp_update_data_mat       Tdoubledict
+@cdefinition OSQPMKLAlgebra osqp_mkl osqp_update_settings       Tdoubledict
+@cdefinition OSQPMKLAlgebra osqp_mkl osqp_update_rho            Tdoubledict
 
 end # module
