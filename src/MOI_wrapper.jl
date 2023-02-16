@@ -89,7 +89,7 @@ mutable struct Optimizer <: MOI.AbstractOptimizer
             rowranges,
         )
         for (key, value) in kwargs
-            MOI.set(optimizer, MOI.RawOptimizerAttribute(key), value)
+            MOI.set(optimizer, MOI.RawOptimizerAttribute(String(key)), value)
         end
         return optimizer
     end
