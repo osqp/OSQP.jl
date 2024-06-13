@@ -738,10 +738,10 @@ end
 Obtain problem dimensions from OSQP model
 """
 function dimensions(model::OSQP.Model)
-    workspace = unsafe_load(model.workspace)
-    if workspace == C_NULL
+    if model.workspace == C_NULL
         error("Workspace has not been setup yet")
     end
+    workspace = unsafe_load(model.workspace)
     data = unsafe_load(workspace.data)
     return data.n, data.m
 end
