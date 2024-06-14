@@ -4,7 +4,7 @@ keywords = ["numerical-optimization", "solver"]
 license = "Apache 2.0"
 desc = "The Operator Splitting QP Solver."
 repo = "https://github.com/oxfordcontrol/OSQP.jl.git"
-version = "0.8.0"
+version = "0.8.1"
 
 [deps]
 Libdl = "8f399da3-3557-5675-b5ff-fb832c97cbdb"
