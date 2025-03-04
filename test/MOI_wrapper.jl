@@ -61,7 +61,7 @@ function test_runtests()
     MOI.Test.runtests(
         model,
         config,
-        exclude = String[
+        exclude = Union{String, Regex}[
             "test_attribute_SolverVersion",
             # Expected test failures:
             #   MathOptInterface.jl issue #1431
@@ -69,20 +69,20 @@ function test_runtests()
             "test_model_UpperBoundAlreadySet",
             # FIXME
             # See https://github.com/jump-dev/MathOptInterface.jl/issues/1773
-            "test_infeasible_MAX_SENSE",
-            "test_infeasible_MAX_SENSE_offset",
-            "test_infeasible_MIN_SENSE",
-            "test_infeasible_MIN_SENSE_offset",
-            "test_infeasible_affine_MAX_SENSE",
-            "test_infeasible_affine_MAX_SENSE_offset",
-            "test_infeasible_affine_MIN_SENSE",
-            "test_infeasible_affine_MIN_SENSE_offset",
+            r"^test_infeasible_MAX_SENSE$",
+            r"test_infeasible_MAX_SENSE_offset$",
+            r"^test_infeasible_MIN_SENSE$",
+            r"test_infeasible_MIN_SENSE_offset$",
+            r"^test_infeasible_affine_MAX_SENSE$",
+            r"test_infeasible_affine_MAX_SENSE_offset$",
+            r"^test_infeasible_affine_MIN_SENSE$",
+            r"test_infeasible_affine_MIN_SENSE_offset$",
             # FIXME
             # See https://github.com/jump-dev/MathOptInterface.jl/issues/1759
-            "test_unbounded_MAX_SENSE",
-            "test_unbounded_MAX_SENSE_offset",
-            "test_unbounded_MIN_SENSE",
-            "test_unbounded_MIN_SENSE_offset",
+            r"test_unbounded_MAX_SENSE$",
+            r"test_unbounded_MAX_SENSE_offset$",
+            r"^test_unbounded_MIN_SENSE$",
+            r"test_unbounded_MIN_SENSE_offset$",
             # FIXME
             "test_model_copy_to_UnsupportedAttribute",
             # Segfault
