@@ -96,6 +96,7 @@ mutable struct Optimizer <: MOI.AbstractOptimizer
 end
 
 MOI.get(::Optimizer, ::MOI.SolverName) = "OSQP"
+MOI.get(::Optimizer, ::MOI.SolverVersion) = OSQP.version()
 
 MOI.supports(::Optimizer, ::MOI.Silent) = true
 function MOI.set(optimizer::Optimizer, ::MOI.Silent, value::Bool)
@@ -149,6 +150,11 @@ end
 MOI.is_empty(optimizer::Optimizer) = optimizer.inner.isempty
 
 function MOI.copy_to(dest::Optimizer, src::MOI.ModelLike)
+
+    #check all model/variable/constraint attributes to
+    #ensure that everything passed is handled by the solver
+    copy_to_check_attributes(dest, src)
+
     MOI.empty!(dest)
     idxmap = MOIU.IndexMap(dest, src)
     assign_constraint_row_ranges!(dest.rowranges, idxmap, src)
@@ -165,6 +171,43 @@ function MOI.copy_to(dest::Optimizer, src::MOI.ModelLike)
     processprimalstart!(dest.warmstartcache.x, src, idxmap)
     processdualstart!(dest.warmstartcache.y, src, idxmap, dest.rowranges)
     return idxmap
+end
+
+function copy_to_check_attributes(dest, src)
+
+    #allowable model attributes
+    for attr in MOI.get(src, MOI.ListOfModelAttributesSet())
+        if attr == MOI.Name() ||
+           attr == MOI.ObjectiveSense() ||
+           attr isa MOI.ObjectiveFunction
+            continue
+        end
+        throw(MOI.UnsupportedAttribute(attr))
+    end
+
+    #allowable variable attributes
+    for attr in MOI.get(src, MOI.ListOfVariableAttributesSet())
+        if attr == MOI.VariableName() ||
+           attr == MathOptInterface.VariablePrimalStart()
+            continue
+        end
+        throw(MOI.UnsupportedAttribute(attr))
+    end
+
+    #allowable constraint types and attributes
+    for (F, S) in MOI.get(src, MOI.ListOfConstraintTypesPresent())
+        if !MOI.supports_constraint(dest, F, S)
+            throw(MOI.UnsupportedConstraint{F,S}())
+        end
+        for attr in MOI.get(src, MOI.ListOfConstraintAttributesSet{F,S}())
+            if attr == MOI.ConstraintName() || attr == MOI.ConstraintDualStart()
+                continue
+            end
+            throw(MOI.UnsupportedAttribute(attr))
+        end
+    end
+
+    return nothing
 end
 
 """
