@@ -96,6 +96,7 @@ mutable struct Optimizer <: MOI.AbstractOptimizer
 end
 
 MOI.get(::Optimizer, ::MOI.SolverName) = "OSQP"
+MOI.get(::Optimizer, ::MOI.SolverVersion) = OSQP.version()
 
 MOI.supports(::Optimizer, ::MOI.Silent) = true
 function MOI.set(optimizer::Optimizer, ::MOI.Silent, value::Bool)
