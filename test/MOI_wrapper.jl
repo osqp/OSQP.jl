@@ -61,7 +61,7 @@ function test_runtests()
     MOI.Test.runtests(
         model,
         config,
-        exclude = Union{String, Regex}[
+        exclude = Union{String,Regex}[
             "test_attribute_SolverVersion",
             # Expected test failures:
             # FIXME
